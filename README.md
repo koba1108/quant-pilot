@@ -14,11 +14,19 @@ bun install
 bun test
 ```
 
-## Codex / Handoff
+## Codex Project / Handoff
 
-Codexで作業を引き継ぐ場合は、まずルートの [`AGENTS.md`](./AGENTS.md) と [`docs/handoff/README.md`](./docs/handoff/README.md) を読んでください。
+Codex Projectへ移行する場合は、最初に次を読んでください。
 
-引き継ぎディレクトリには、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状況、未確定事項、開始用プロンプトを整理しています。現在の内容は `feat/market-data-backtest` とPR #1の状態を基準にしています。
+1. [`AGENTS.md`](./AGENTS.md)
+2. [`docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`](./docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md)
+3. [`docs/handoff/DECISIONS.md`](./docs/handoff/DECISIONS.md)
+4. [`docs/handoff/CURRENT_STATUS.md`](./docs/handoff/CURRENT_STATUS.md)
+5. [`docs/handoff/OPEN_DECISIONS.md`](./docs/handoff/OPEN_DECISIONS.md)
+
+引き継ぎ資料には、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状態、未確定事項、実行手順を整理しています。
+
+PR #1はすでに `main` へマージ済みです。マージされた市場データ・バックテスト実装は、Codex Projectで最初にローカル検証してください。
 
 ## Backtest quick start
 
@@ -57,7 +65,7 @@ Point-in-Time制約として、設定された上場日前・上場廃止日後�
 - `src/portfolio/` — allocation / risk / costs
 - `src/backtest/` — frame builder / simulator / metrics / CLI runner
 - `src/ai/` — Strategy C AI investment committee
-- `docs/handoff/` — Codex向け引き継ぎ資料
+- `docs/handoff/` — Codex Project向け引き継ぎ資料
 - `investment_policy.md` — 投資方針とガードレール
 - `universe_master.csv` — Universe初版
 - `strategy_spec.md` — Strategy A/B/C
