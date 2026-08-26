@@ -1,0 +1,16 @@
+{
+  "strategy": "trend",
+  "start": "2020-01-01",
+  "end": "2026-08-25",
+  "initialEquity": 1000000,
+  "maxAssets": 3,
+  "ddLimit": -0.3,
+  "costRate": 0.001,
+  "provider": "csv",
+  "csvRoot": "data/raw",
+  "assets": [
+    { "code": "1540", "symbol": "1540.jp", "listingDate": "2010-07-02" },
+    { "code": "2510", "symbol": "2510.jp", "listingDate": "2017-12-11" },
+    { "code": "1597", "symbol": "1597.jp", "listingDate": "2014-03-07" }
+  ]
+}
