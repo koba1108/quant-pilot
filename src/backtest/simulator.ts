@@ -1,7 +1,7 @@
 import type { AssetSnapshot } from "../strategies/types.ts";
 import { rankTrend } from "../strategies/trend.ts";
 import { rankRotation } from "../strategies/rotation.ts";
-import { inverseVolWeights, type Weights } from "../portfolio/allocator.ts";
+import { inverseVolWeights, MAX_PORTFOLIO_ASSETS, type Weights } from "../portfolio/allocator.ts";
 import { turnoverCost } from "../portfolio/costs.ts";
 import { hardStopTriggered } from "../portfolio/risk.ts";
 
@@ -17,8 +17,30 @@ export interface SimulationResult {
   equityCurve: number[];
   monthlyReturns: number[];
   weightsHistory: Weights[];
+  endingWeights: Weights;
   totalCostRate: number;
   stopped: boolean;
+  stopLabel?: string;
+}
+
+function assertSimulationParameters(maxAssets: number, ddLimit: number): void {
+  if (!Number.isInteger(maxAssets) || maxAssets < 1 || maxAssets > MAX_PORTFOLIO_ASSETS) {
+    throw new Error(`maxAssets must be an integer from 1 to ${MAX_PORTFOLIO_ASSETS}; received ${maxAssets}.`);
+  }
+  if (!Number.isFinite(ddLimit) || ddLimit >= 0 || ddLimit < -0.3) {
+    throw new Error(`ddLimit cannot be looser than the approved -0.3 hard stop; received ${ddLimit}.`);
+  }
+}
+
+function requiredRate(rates: Record<string, number>, asset: string, label: string): number {
+  if (!Object.hasOwn(rates, asset)) {
+    throw new Error(`Missing transaction cost rate for ${asset} in frame ${label}.`);
+  }
+  const rate = rates[asset]!;
+  if (!Number.isFinite(rate) || rate < 0 || rate >= 1) {
+    throw new Error(`Invalid transaction cost rate for ${asset} in frame ${label}: ${rate}.`);
+  }
+  return rate;
 }
 
 export function runMonthlyStrategy(
@@ -28,6 +50,7 @@ export function runMonthlyStrategy(
   maxAssets = 3,
   ddLimit = -0.3,
 ): SimulationResult {
+  assertSimulationParameters(maxAssets, ddLimit);
   const ranker = strategy === "trend" ? rankTrend : rankRotation;
   let equity = initialEquity;
   const equityCurve = [equity];
@@ -36,30 +59,73 @@ export function runMonthlyStrategy(
   let oldWeights: Weights = { CASH: 1 };
   let totalCostRate = 0;
   let stopped = false;
+  let stopLabel: string | undefined;
 
   for (const frame of frames) {
+    const equityAtStart = equity;
     const newWeights = stopped ? { CASH: 1 } : inverseVolWeights(ranker(frame.snapshots), maxAssets);
+    const tradedAssets = new Set([...Object.keys(oldWeights), ...Object.keys(newWeights)]);
+    tradedAssets.delete("CASH");
+    for (const asset of tradedAssets) {
+      if (Math.abs((newWeights[asset] ?? 0) - (oldWeights[asset] ?? 0)) > 0) {
+        requiredRate(frame.costRates, asset, frame.label);
+      }
+    }
     const cost = turnoverCost(oldWeights, newWeights, frame.costRates);
     totalCostRate += cost;
 
-    let gross = (newWeights.CASH ?? 0) * (frame.cashReturn ?? 0);
+    const cashReturn = frame.cashReturn ?? 0;
+    if (!Number.isFinite(cashReturn) || cashReturn < -1) {
+      throw new Error(`Invalid cash return in frame ${frame.label}: ${cashReturn}.`);
+    }
+    let gross = (newWeights.CASH ?? 0) * cashReturn;
     for (const [asset, weight] of Object.entries(newWeights)) {
       if (asset === "CASH") continue;
-      gross += weight * (frame.nextMonthReturns[asset] ?? 0);
+      if (!Object.hasOwn(frame.nextMonthReturns, asset)) {
+        throw new Error(`Missing next-month return for held asset ${asset} in frame ${frame.label}.`);
+      }
+      const assetReturn = frame.nextMonthReturns[asset]!;
+      if (!Number.isFinite(assetReturn) || assetReturn < -1) {
+        throw new Error(`Invalid next-month return for ${asset} in frame ${frame.label}: ${assetReturn}.`);
+      }
+      gross += weight * assetReturn;
     }
 
-    const net = gross - cost;
+    let net = gross - cost;
+    if (net <= -1) throw new Error(`Frame ${frame.label} would reduce equity to zero or below.`);
     equity *= 1 + net;
+    weightsHistory.push(newWeights);
+
+    if (!stopped && hardStopTriggered([...equityCurve, equity], ddLimit)) {
+      const liquidationRates: Record<string, number> = {};
+      for (const asset of Object.keys(newWeights)) {
+        if (asset !== "CASH") liquidationRates[asset] = requiredRate(frame.costRates, asset, frame.label);
+      }
+      const liquidationCost = turnoverCost(newWeights, { CASH: 1 }, liquidationRates);
+      if (liquidationCost >= 1) {
+        throw new Error(`Liquidation cost is invalid in frame ${frame.label}: ${liquidationCost}.`);
+      }
+      equity *= 1 - liquidationCost;
+      totalCostRate += liquidationCost;
+      net = equity / equityAtStart - 1;
+      stopped = true;
+      stopLabel = frame.label;
+      oldWeights = { CASH: 1 };
+    } else {
+      oldWeights = newWeights;
+    }
+
     monthlyReturns.push(net);
     equityCurve.push(equity);
-    weightsHistory.push(newWeights);
-    oldWeights = newWeights;
-
-    if (!stopped && hardStopTriggered(equityCurve, ddLimit)) {
-      stopped = true;
-      oldWeights = { CASH: 1 };
-    }
   }
 
-  return { equityCurve, monthlyReturns, weightsHistory, totalCostRate, stopped };
+  return {
+    equityCurve,
+    monthlyReturns,
+    weightsHistory,
+    endingWeights: oldWeights,
+    totalCostRate,
+    stopped,
+    stopLabel,
+  };
 }

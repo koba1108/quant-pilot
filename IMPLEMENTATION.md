@@ -65,23 +65,32 @@ Stooq is a research plumbing provider only. Do not interpret Stooq-only OHLCV re
 
 ## Verification state
 
-PR #1 was merged into `main` before local verification was completed. The first Codex Project task is to validate the merged implementation.
+PR #1 was merged before local verification. The merged code was subsequently validated on `fix/validate-market-data-backtest`, based on `main` after PR #2.
 
-```bash
-cd /Users/ykoba/IdeaProjects/quant-pilot
-git switch main
-git pull --ff-only origin main
-bun install
-bun test
-```
+- Runtime: Node.js `v26.7.0`, Bun `1.3.14`
+- `bun install`: success, no dependency changes
+- `bun test`: 22 pass / 0 fail
+- `bunx tsc --noEmit`: success
+- Trend fixture CLI: success
+- Rotation fixture CLI: success
+- Repeated fixture execution: byte-for-byte deterministic output
 
-Then run both `trend` and `rotation` using controlled, commit-safe CSV fixtures. Verify Point-in-Time boundaries, insufficient-history behavior, transaction costs, maximum holdings, reproducibility, and the -30% drawdown stop.
+The validation branch adds commit-safe synthetic CSV fixtures and integration coverage for listing/delisting bounds, decision-date-only signals, explicit insufficient-history exclusion, transaction costs, the three-holding cap, and the -30% high-water-mark stop.
 
-Any defects must be fixed on a new branch and reviewed in a new PR. Do not represent the merged implementation as verified until those checks pass.
+Defects found and fixed on the branch:
+
+- `maxAssets` could exceed the approved limit of three.
+- A missing held-asset forward return could be silently treated as zero.
+- Insufficient history was silently omitted from CLI output.
+- Hard-stop liquidation did not charge its exit transaction cost.
+- A missing calendar month could stretch a forward return across multiple months.
+- Missing optional CSV fields were represented as numeric zero, and malformed in-range prices could be skipped.
+
+The fixture is synthetic Price Return data. It does not validate distributions, Corporate Actions, JPY FX conversion, final data-provider quality, or investable historical performance. Until the validation PR is reviewed and merged, these fixes are not part of `main`.
 
 ## Next blocks
 
-1. Validate merged main and fix defects
+1. Review and merge the Phase 0 validation PR only with explicit user approval
 2. Distribution / total-return normalization
 3. JPY FX normalization for overseas assets
 4. Point-in-time ETF master loader from `universe_master.csv`

@@ -1,0 +1,20 @@
+{
+  "strategy": "rotation",
+  "start": "2023-01-02",
+  "end": "2025-06-30",
+  "initialEquity": 1000000,
+  "maxAssets": 3,
+  "ddLimit": -0.3,
+  "costRate": 0.001,
+  "provider": "csv",
+  "csvRoot": "tests/fixtures/market-data",
+  "assets": [
+    { "code": "ALPHA", "symbol": "synthetic", "listingDate": "2023-01-02" },
+    { "code": "BETA", "symbol": "synthetic", "listingDate": "2023-01-02" },
+    { "code": "GAMMA", "symbol": "synthetic", "listingDate": "2023-01-02" },
+    { "code": "DELTA", "symbol": "synthetic", "listingDate": "2023-01-02" },
+    { "code": "ENDED", "symbol": "synthetic", "listingDate": "2023-01-02", "delistingDate": "2025-01-15" },
+    { "code": "LATE", "symbol": "synthetic", "listingDate": "2025-04-01" },
+    { "code": "FUTURE", "symbol": "synthetic", "listingDate": "2026-01-01" }
+  ]
+}

@@ -22,6 +22,16 @@ test("rotation and inverse-vol weights", () => {
   assert.ok((weights.B ?? 0) > (weights.C ?? 0));
 });
 
+test("allocator rejects more than three holdings", () => {
+  const ranked = rankRotation([
+    snap("A", .03, .10, .20, .10),
+    snap("B", .02, .08, .15, .20),
+    snap("C", .01, .06, .12, .30),
+    snap("D", .04, .11, .21, .12),
+  ]);
+  assert.throws(() => inverseVolWeights(ranked, 4), /maxAssets.*1 to 3/);
+});
+
 test("drawdown hard stop", () => {
   const curve = [100, 120, 100, 84];
   assert.ok(Math.abs(maxDrawdown(curve) - (-.30)) < 1e-12);

@@ -60,18 +60,16 @@ Decision Package / Monthly Report
 - example backtest configuration
 - frame-builder test
 
-## Important current caveat
+## Phase 0 validation
 
-PR #1 was merged before local verification was completed. The code is not assumed broken, but the first Codex Project task is to validate the merged `main` rather than continue from an obsolete feature branch.
+PR #1 was merged before local verification. Validation was completed afterward on `fix/validate-market-data-backtest`, based on `main` after PR #2.
 
-Required first actions:
+- `bun install`: success
+- `bun test`: 22 pass / 0 fail
+- Trend and Rotation fixture CLI runs: success
+- Point-in-Time boundaries, future-data isolation, explicit missing-history handling, costs, maximum three holdings, reproducibility, and the -30% stop: covered
 
-1. Update local `main` with `git pull --ff-only origin main`.
-2. Run `bun install` and `bun test`.
-3. Run reproducible CSV-fixture CLI tests for both Trend and Rotation.
-4. Verify point-in-time boundaries, missing-history behavior, costs, and the -30% drawdown stop.
-5. Fix defects on a new branch and open a new PR if needed.
-6. Update `CURRENT_STATUS.md` with actual results.
+The validation found defects in holding-limit enforcement, missing-return handling, exclusion visibility, stop-liquidation costs, consecutive-month handling, and CSV missing-value handling. Fixes and commit-safe synthetic fixtures are on the validation branch and require review before merge. See `CURRENT_STATUS.md` for exact commands, results, and limitations.
 
 ## Next implementation sequence
 

@@ -14,8 +14,8 @@ export interface DailyBar {
   tradingDate: string;
   close: number;
   adjustedClose: number;
-  volume: number;
-  tradingValue: number;
+  volume?: number;
+  tradingValue?: number;
 }
 
 export interface QuoteQuality {
