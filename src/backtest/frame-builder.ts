@@ -7,8 +7,28 @@ export interface FrameBuilderOptions {
   minHistoryDays?: number;
 }
 
+export interface AssetFrameDiagnostic {
+  code: string;
+  barCount: number;
+  firstDate?: string;
+  lastDate?: string;
+  eligibleFrameCount: number;
+  exclusionReason?: string;
+}
+
+export interface FrameBuildResult {
+  frames: MonthlyFrame[];
+  assetDiagnostics: AssetFrameDiagnostic[];
+}
+
 function monthKey(date: string): string {
   return date.slice(0, 7);
+}
+
+function followingMonth(label: string): string {
+  const [year, month] = label.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month!, 1));
+  return date.toISOString().slice(0, 7);
 }
 
 function annualizedVolatility(prices: number[]): number {
@@ -30,28 +50,51 @@ function monthEnds(bars: DailyBar[]): DailyBar[] {
   return [...byMonth.values()];
 }
 
-export function buildMonthlyFrames(
+function lastIndexInMonth(bars: DailyBar[], label: string): number {
+  for (let index = bars.length - 1; index >= 0; index--) {
+    if (monthKey(bars[index]!.tradingDate) === label) return index;
+  }
+  return -1;
+}
+
+export function buildMonthlyFramesWithDiagnostics(
   series: Record<string, DailyBar[]>,
   options: FrameBuilderOptions = {},
-): MonthlyFrame[] {
+): FrameBuildResult {
   const costRate = options.costRate ?? 0.001;
   const minHistoryDays = options.minHistoryDays ?? 252;
-  const monthly = new Map(Object.entries(series).map(([code, bars]) => [code, monthEnds(bars)]));
+  const requiredHistoryBars = Math.max(minHistoryDays, 252) + 1;
+  const sortedSeries = new Map(
+    Object.entries(series).map(([code, bars]) => [
+      code,
+      [...bars].sort((a, b) => a.tradingDate.localeCompare(b.tradingDate)),
+    ]),
+  );
+  const monthly = new Map([...sortedSeries].map(([code, bars]) => [code, monthEnds(bars)]));
   const labels = [...new Set([...monthly.values()].flatMap((bars) => bars.map((b) => monthKey(b.tradingDate))))].sort();
+  const labelSet = new Set(labels);
   const frames: MonthlyFrame[] = [];
+  const assetDiagnostics: AssetFrameDiagnostic[] = [...sortedSeries].map(([code, bars]) => ({
+    code,
+    barCount: bars.length,
+    firstDate: bars[0]?.tradingDate,
+    lastDate: bars.at(-1)?.tradingDate,
+    eligibleFrameCount: 0,
+  }));
+  const diagnosticByCode = new Map(assetDiagnostics.map((diagnostic) => [diagnostic.code, diagnostic]));
 
-  for (let li = 0; li < labels.length - 1; li++) {
-    const label = labels[li]!;
-    const nextLabel = labels[li + 1]!;
+  for (const label of labels) {
+    const nextLabel = followingMonth(label);
+    if (!labelSet.has(nextLabel)) continue;
     const snapshots: AssetSnapshot[] = [];
     const nextMonthReturns: Record<string, number> = {};
     const costRates: Record<string, number> = {};
 
-    for (const [code, dailyBars] of Object.entries(series)) {
-      const sorted = [...dailyBars].sort((a, b) => a.tradingDate.localeCompare(b.tradingDate));
-      const currentIndex = sorted.findLastIndex((b) => monthKey(b.tradingDate) === label);
-      const nextIndex = sorted.findLastIndex((b) => monthKey(b.tradingDate) === nextLabel);
-      if (currentIndex < minHistoryDays || nextIndex <= currentIndex) continue;
+    for (const [code, sorted] of sortedSeries) {
+      costRates[code] = costRate;
+      const currentIndex = lastIndexInMonth(sorted, label);
+      const nextIndex = lastIndexInMonth(sorted, nextLabel);
+      if (currentIndex + 1 < requiredHistoryBars || nextIndex <= currentIndex) continue;
 
       const current = sorted[currentIndex]!.adjustedClose;
       const p3 = sorted[currentIndex - 63]?.adjustedClose;
@@ -69,12 +112,27 @@ export function buildMonthlyFrames(
         eligible: true,
       });
       nextMonthReturns[code] = sorted[nextIndex]!.adjustedClose / current - 1;
-      costRates[code] = costRate;
+      diagnosticByCode.get(code)!.eligibleFrameCount += 1;
     }
 
     if (snapshots.length > 0) {
       frames.push({ label, snapshots, nextMonthReturns, costRates, cashReturn: 0 });
     }
   }
-  return frames;
+
+  for (const diagnostic of assetDiagnostics) {
+    if (diagnostic.eligibleFrameCount > 0) continue;
+    diagnostic.exclusionReason = diagnostic.barCount < requiredHistoryBars
+      ? `Insufficient history: ${diagnostic.barCount} bars loaded; at least ${requiredHistoryBars} are required.`
+      : "No consecutive month-end signal/forward-return pair is available after the history requirement.";
+  }
+
+  return { frames, assetDiagnostics };
+}
+
+export function buildMonthlyFrames(
+  series: Record<string, DailyBar[]>,
+  options: FrameBuilderOptions = {},
+): MonthlyFrame[] {
+  return buildMonthlyFramesWithDiagnostics(series, options).frames;
 }

@@ -15,19 +15,31 @@ function parseCsv(text: string, code: string): DailyBar[] {
   const volume = idx("volume");
   if (date < 0 || close < 0) throw new Error("Unexpected Stooq CSV schema");
 
-  return lines.slice(1).flatMap((line) => {
-    const cols = line.split(",");
+  const bars: DailyBar[] = [];
+  for (const [index, line] of lines.slice(1).entries()) {
+    const lineNumber = index + 2;
+    const cols = line.split(",").map((value) => value.trim());
+    if (!cols[date]) throw new Error(`Missing Date in Stooq response at line ${lineNumber}`);
+    if (!cols[close]) throw new Error(`Missing Close in Stooq response at line ${lineNumber}`);
     const price = Number(cols[close]);
-    if (!cols[date] || !Number.isFinite(price) || price <= 0) return [];
-    return [{
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new Error(`Invalid Close in Stooq response at line ${lineNumber}`);
+    }
+    const rawVolume = volume >= 0 ? cols[volume]?.trim() : undefined;
+    const parsedVolume = rawVolume ? Number(rawVolume) : undefined;
+    if (parsedVolume !== undefined && (!Number.isFinite(parsedVolume) || parsedVolume < 0)) {
+      throw new Error(`Invalid Volume in Stooq response at line ${lineNumber}`);
+    }
+    bars.push({
       code,
       tradingDate: cols[date],
       close: price,
       adjustedClose: price,
-      volume: volume >= 0 ? Number(cols[volume]) || 0 : 0,
-      tradingValue: 0,
-    } satisfies DailyBar];
-  });
+      volume: parsedVolume,
+      tradingValue: undefined,
+    });
+  }
+  return bars;
 }
 
 export class StooqMarketDataProvider implements MarketDataProvider {

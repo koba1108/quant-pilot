@@ -52,6 +52,19 @@ bun run backtest --config=backtest.config.json --provider=stooq
 
 Stooqは研究用OHLCV providerとして扱う。分配金込みTotal Returnや公式な実取引検証は、別の調整済みデータ源で再検証する。
 
+### 再現可能なfixture検証
+
+リポジトリ内の小さな合成CSVを使い、外部データやAPIキーなしでStrategy A/BのCLI経路を検証できる。
+
+```bash
+bun run backtest --config=tests/fixtures/configs/trend.json
+bun run backtest --config=tests/fixtures/configs/rotation.json
+```
+
+このfixtureは、履歴不足、上場期間外、最大3本、売買コスト、High-Water Markから-30%の停止を意図的に発生させる。CLIの `assetDiagnostics` には、各資産の実読込期間、使用可能frame数、明示的な除外理由が出力される。
+
+fixtureは合成されたPrice Return系列であり、分配金、Corporate Action、JPY換算、実際のスプレッドや流動性を表現しない。出力は配管と制約の検証専用で、投資成績の根拠には使用しない。
+
 ## Backtest pipeline
 
 `MarketDataProvider -> validation -> monthly frames -> Strategy A/B -> inverse-vol allocation -> cost model -> -30% DD stop`

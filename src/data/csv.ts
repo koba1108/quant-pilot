@@ -21,22 +21,43 @@ export class CsvMarketDataProvider implements MarketDataProvider {
     const tradingValue = pos("tradingvalue");
     if (date < 0 || close < 0) throw new Error(`CSV must contain Date and Close: ${path}`);
 
-    const bars: DailyBar[] = lines.slice(1).flatMap((line) => {
-      const cols = line.split(",");
+    const requiredNumber = (value: string | undefined, field: string, lineNumber: number): number => {
+      if (value === undefined || value.trim() === "") {
+        throw new Error(`Missing ${field} in ${path} at line ${lineNumber}`);
+      }
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(`Invalid ${field} in ${path} at line ${lineNumber}`);
+      }
+      return parsed;
+    };
+    const optionalNumber = (value: string | undefined, field: string, lineNumber: number): number | undefined => {
+      if (value === undefined || value.trim() === "") return undefined;
+      return requiredNumber(value, field, lineNumber);
+    };
+
+    const bars: DailyBar[] = [];
+    for (const [index, line] of lines.slice(1).entries()) {
+      const lineNumber = index + 2;
+      const cols = line.split(",").map((value) => value.trim());
       const tradingDate = cols[date];
-      if (tradingDate < request.start || tradingDate > request.end) return [];
-      const rawClose = Number(cols[close]);
-      const adjustedClose = adjusted >= 0 ? Number(cols[adjusted]) : rawClose;
-      if (!Number.isFinite(rawClose) || !Number.isFinite(adjustedClose)) return [];
-      return [{
+      if (!tradingDate) throw new Error(`Missing Date in ${path} at line ${lineNumber}`);
+      if (tradingDate < request.start || tradingDate > request.end) continue;
+      const rawClose = requiredNumber(cols[close], "Close", lineNumber);
+      const adjustedClose = adjusted >= 0
+        ? requiredNumber(cols[adjusted], "AdjustedClose", lineNumber)
+        : rawClose;
+      bars.push({
         code: request.code,
         tradingDate,
         close: rawClose,
         adjustedClose,
-        volume: volume >= 0 ? Number(cols[volume]) || 0 : 0,
-        tradingValue: tradingValue >= 0 ? Number(cols[tradingValue]) || 0 : 0,
-      }];
-    });
+        volume: volume >= 0 ? optionalNumber(cols[volume], "Volume", lineNumber) : undefined,
+        tradingValue: tradingValue >= 0
+          ? optionalNumber(cols[tradingValue], "TradingValue", lineNumber)
+          : undefined,
+      });
+    }
     return assertDailyBars(bars, request.code);
   }
 }

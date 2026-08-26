@@ -9,7 +9,8 @@ Snapshot date: 2026-08-26
 - Default branch: `main`
 - PR #1: merged
 - Merge commit: `5b161573419bccd83cd82400fb31110d99651fe1`
-- Current documentation branch: `docs/codex-project-migration`
+- PR #2: merged (`docs: add Codex Project migration instructions`)
+- Validation branch: `fix/validate-market-data-backtest`
 
 ## Implemented on main
 
@@ -48,45 +49,66 @@ Snapshot date: 2026-08-26
 - `tests/simulator.test.ts`
 - `tests/frame-builder.test.ts`
 
+## Added on the validation branch
+
+- commit-safe synthetic CSV data and Trend/Rotation configs under `tests/fixtures/`
+- strict runtime validation for backtest configuration and daily bars
+- explicit per-asset CLI diagnostics for loaded date bounds and history exclusion
+- a hard maximum of three holdings at both config and simulator boundaries
+- fail-closed behavior for missing held-asset returns and transaction-cost rates
+- hard-stop liquidation with exit cost and explicit ending cash weights
+- protection against treating a non-consecutive month as the next-month return
+- integration tests in `tests/csv-provider.test.ts` and `tests/runner.test.ts`
+- expanded point-in-time and safety tests in existing suites
+
 ## Verification status
 
-PR #1 was merged before the following local checks were completed. No CI status was attached to the merge commit at the time of handoff.
+The merged PR #1 implementation was checked locally on 2026-08-26. Defects were reproduced on the unmodified implementation, then fixed on `fix/validate-market-data-backtest` rather than on `main`.
 
-The first Codex Project task is therefore validation of the merged `main`.
+- Node.js: `v26.7.0`
+- Bun: `1.3.14`
+- `bun install`: PASS, no changes
+- `bun test`: PASS, 22 tests / 0 failures
+- `bunx tsc --noEmit`: PASS
+- Trend CLI: PASS
+- Rotation CLI: PASS
+- exact repeated-run reproducibility: PASS
 
-```bash
-cd /Users/ykoba/IdeaProjects/quant-pilot
-git status
-git switch main
-git pull --ff-only origin main
-node --version
-bun --version
-bun install
-bun test
-```
-
-Then run reproducible fixture-backed tests for both strategies:
+Fixture commands:
 
 ```bash
-bun run backtest --config=<trend fixture config>
-bun run backtest --config=<rotation fixture config>
+bun run backtest --config=tests/fixtures/configs/trend.json
+bun run backtest --config=tests/fixtures/configs/rotation.json
 ```
 
-Until these checks pass, the market-data/backtest integration must be treated as implemented but unverified.
+Both strategies produced 18 monthly frames from `2023-12` through `2025-05`, held at most three assets, charged a total modeled cost rate of approximately `0.002`, and stopped after frame `2025-01` when the synthetic series crossed the -30% high-water-mark limit. Ending weights were 100% cash.
+
+The synthetic fixture contains 651 weekday rows from `2023-01-02` through `2025-06-30`. It is Price Return data with identical `Close` and `AdjustedClose`; no distribution, Corporate Action, FX, or real liquidity evidence is represented.
+
+Defects found in merged PR #1:
+
+- `maxAssets=4` produced four positions.
+- a missing held-asset next-month return was treated as zero.
+- insufficient-history assets disappeared without an explicit CLI reason.
+- mandatory stop liquidation omitted the sell-side transaction cost.
+- a missing calendar month could be used as though the next available month were the immediate next month.
+- malformed/missing CSV values could be skipped or represented as zero.
+
+All are fixed and covered on the validation branch. `main` remains unchanged until the validation PR is reviewed and explicitly merged.
 
 ## Required validation coverage
 
-- TypeScript/Bun runtime succeeds
-- all unit tests pass
-- Trend CLI succeeds with controlled fixture data
-- Rotation CLI succeeds with controlled fixture data
-- listing and delisting boundaries are enforced
-- signal construction uses only decision-date information
-- insufficient history is visible and deterministic
-- transaction costs reduce returns
-- maximum holdings remain three or fewer
-- -30% high-water-mark stop is covered by an integration test
-- repeated execution is reproducible
+- PASS — TypeScript/Bun runtime succeeds
+- PASS — all unit and integration tests pass
+- PASS — Trend CLI succeeds with controlled fixture data
+- PASS — Rotation CLI succeeds with controlled fixture data
+- PASS — listing and delisting boundaries are enforced
+- PASS — signal construction uses only decision-date information
+- PASS — insufficient history is visible and deterministic
+- PASS — transaction costs reduce returns, including stop liquidation
+- PASS — maximum holdings remain three or fewer
+- PASS — -30% high-water-mark stop is covered by an integration test
+- PASS — repeated execution is reproducible
 
 ## Known limitations and risks
 
@@ -121,12 +143,9 @@ Until these checks pass, the market-data/backtest integration must be treated as
 
 ### P0 — Validate merged main
 
-1. Run all tests locally.
-2. Add controlled CSV fixtures where missing.
-3. Run both `trend` and `rotation` through the CLI.
-4. Verify date boundaries, history requirements, costs, reproducibility, and DD stop.
-5. Fix defects on a new branch and open a new PR.
-6. Record actual results in this file.
+1. Review the validation PR.
+2. Merge only after explicit user approval.
+3. After merge, rerun `bun test` and both fixture CLI commands on updated `main`.
 
 ### P1 — Make data financially correct
 
