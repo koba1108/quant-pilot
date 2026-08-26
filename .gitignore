@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary
+tmp/
+temp/
+.cache/
+
+# Runtime / generated data
+data/raw/
+data/cache/
+data/generated/
+reports/generated/

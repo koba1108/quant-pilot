@@ -1,0 +1,27 @@
+asset_group,subgroup,code,name,status,role,notes
+Japan Equity,Core,1308,Listed Index Fund TOPIX,candidate,core,TOPIX代表候補。同一指数候補から流動性/コストで代表選定
+Japan Equity,Core,1348,MAXIS TOPIX ETF,candidate,core,TOPIX代表候補
+Japan Equity,Core,1473,One ETF TOPIX,candidate,core,TOPIX代表候補
+China Equity,Country,1322,NEXT FUNDS China A-share CSI300 ETF,candidate,core,中国主要国枠
+India Equity,Country,233A,iFreeETF Nifty50,candidate,core,インド主要国枠
+UK Equity,Country,363A,FTSE100-linked ETF,candidate,core,英国主要国枠。商品詳細は実装時再照合
+Saudi Equity,Country,295A,Saudi Arabia equity ETF,candidate,core,中東主要国枠。商品詳細は実装時再照合
+Taiwan Equity,Country,412A,Taiwan innovation/tech ETF,candidate,satellite,台湾テーマ性が強いためコアではなく衛星候補
+Japan Bond,Aggregate,2510,NEXT FUNDS Japan Bond NOMURA-BPI,candidate,core,国内総合債券
+Japan Bond,JGB,2561,iShares Core Japan Government Bond ETF,candidate,core,日本国債
+Japan Bond,JGB 7-10Y,236A,iShares 7-10 Year Japan Government Bond ETF,candidate,core,デュレーション要因
+Japan Bond,JGB 0-1Y,570A,iShares 0-1 Year Japan Government Bond ETF,candidate,cash_proxy,現金代替候補
+Europe Cash,Bill 0-3M,613A,iFreeETF German Government 0-3 Month Bill,candidate,cash_proxy,2026-08-03上場。運用期間短いため履歴不足
+Asia Bond,Government,1349,ABF Pan Asia Bond Index Fund,candidate,core,アジア国債
+Global ex-Japan Bond,Government,2511,NEXT FUNDS FTSE WGBI ex Japan unhedged,candidate,core,米国債も含むため補完性評価必須
+J-REIT,Core,1597,MAXIS J-REIT ETF,candidate,core,J-REITコア
+Commodity,Gold,1540,Japan Physical Gold ETF,candidate,core,現物型優先候補
+Commodity,Gold,314A,iShares Gold ETF,candidate,core,新規低コスト候補。運用期間短
+Commodity,Gold,447A,State Street SPDR Gold ETF JPY unhedged,candidate,core,低コスト候補。運用期間短
+Commodity,Silver,1542,Japan Physical Silver ETF,candidate,satellite,現物型
+Commodity,Crude Oil,1699,NEXT FUNDS NOMURA Crude Oil Long Index ETF,candidate,satellite,先物型。ロールコスト監視必須
+Commodity,Crude Oil,1671,Simplex WTI ETF,candidate,satellite,先物型。ロールコスト監視必須
+Japan Sector,Bank,315A,Japan bank sector ETF,candidate,satellite,商品詳細/流動性を実装時再照合
+Japan Theme,Robot AI,2638,Global X Japan Robotics & AI ETF,candidate,satellite,テーマETF審査対象
+Japan Theme,CleanTech,2637,Global X CleanTech-Japan ETF,candidate,satellite,テーマETF審査対象
+Global Theme,Space ex-Japan,610A,Global X Space Tech Top 10 ETF ex-Japan,candidate,satellite,2026-07-30上場。履歴不足でBacktest本体には直接使わない
