@@ -1,16 +1,17 @@
 # Quant Pilot Handoff
 
-このディレクトリは、ChatGPTで行った企画・方針決定・初期実装をCodexへ引き継ぐための正規化されたコンテキストです。
+このディレクトリは、ChatGPTで行った企画・方針決定・初期実装をCodex Projectへ引き継ぐための正規化されたコンテキストです。
 
-大量の質問文や選択肢そのものは保存していません。ここでは、ユーザーが最終的に選択した内容、現在の実装状態、未確定事項、次の作業だけを管理します。
+大量の質問文や選択肢そのものは保存していません。ユーザーが最終的に選択した内容、現在の実装状態、未確定事項、次の作業だけを管理します。
 
 ## Read order
 
-1. [`CODEX_HANDOFF.md`](./CODEX_HANDOFF.md) — プロジェクト目的、現在地、次に進める作業
+1. [`CODEX_PROJECT_INSTRUCTIONS.md`](./CODEX_PROJECT_INSTRUCTIONS.md) — Codex Project移行後の統合指示書
 2. [`DECISIONS.md`](./DECISIONS.md) — 承認済みの方針と理由
-3. [`CURRENT_STATUS.md`](./CURRENT_STATUS.md) — ブランチ、PR、実装済み範囲、検証状況
+3. [`CURRENT_STATUS.md`](./CURRENT_STATUS.md) — main、実装済み範囲、検証状況
 4. [`OPEN_DECISIONS.md`](./OPEN_DECISIONS.md) — バックテストや調査で決める未確定事項
-5. [`CODEX_START_PROMPT.md`](./CODEX_START_PROMPT.md) — 新しいCodexセッションへ貼る開始指示
+5. [`CODEX_HANDOFF.md`](./CODEX_HANDOFF.md) — プロジェクト目的と設計の要約
+6. [`CODEX_START_PROMPT.md`](./CODEX_START_PROMPT.md) — Codex Projectの初回タスクとして貼る開始指示
 
 関連する詳細仕様:
 
