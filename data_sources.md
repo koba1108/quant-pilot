@@ -36,4 +36,4 @@ Do not run a fake 20-year LLM backtest using today's web. Historical AI tests re
 - Every event records availability time and source provenance.
 - Foreign-currency distributions stop before normalization until the Point-in-Time FX layer is available.
 
-See `docs/return-normalization.md` for the current experimental contract. O-001 and O-002 remain open.
+See `docs/return-normalization.md` and `docs/distribution-accounting.md`. O-002 is resolved by D-018; O-001 remains open.

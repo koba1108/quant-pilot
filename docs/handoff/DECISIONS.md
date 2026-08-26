@@ -157,6 +157,18 @@ This file records the user's final decisions. Earlier recommendations, alternati
 - Decision: Do not connect to a brokerage or automate real orders during the research and forward-test phases.
 - Reason: A single-language implementation is easier to audit and integrate with the later AI and dashboard layers.
 
+## D-018 — Distribution and total-return accounting
+
+- Status: Active
+- Decision: Keep research/index Total Return and executable virtual-portfolio accounting as separate layers.
+- Decision: The approved research Total Return policy recognizes distributions on ex-date and theoretically reinvests them at that date's close. The policy remains an explicit, versioned input rather than a silent default.
+- Decision: The virtual portfolio recognizes a distribution receivable on ex-date, converts it to spendable cash only on pay-date, and may reinvest that cash only at the next scheduled rebalance or another independently approved trade event.
+- Decision: Point-in-Time backtests use only the amount known on each date. An ex-date estimate may be revised when the new amount becomes available, but later data must never overwrite an earlier snapshot retroactively.
+- Decision: Positive ETF forecast scoring includes accrued distribution income and subtracts modeled transaction and FX-conversion costs. A payment moves value from receivable to cash and must not create income a second time.
+- Decision: Trust or management fees already reflected in ETF NAV and market prices are not deducted a second time. The disclosed fee rate remains product metadata and a tracking-quality input.
+- Decision: Investor-tax treatment remains outside this decision and must be labeled separately until O-016 is resolved.
+- Reason: Index providers use ex-date theoretical reinvestment, while an ETF holder cannot spend a distribution before payment. Separating the two preserves comparable research signals without overstating executable cash or double-counting returns and fees.
+
 ## Explicitly superseded or rejected approaches
 
 The following are not active requirements:

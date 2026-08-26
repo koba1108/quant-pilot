@@ -60,9 +60,15 @@ export interface ReturnEventCoverage {
 }
 
 export interface TotalReturnPolicy {
-  distributionRecognition: DistributionRecognition;
-  reinvestment: ReinvestmentConvention;
+  readonly distributionRecognition: DistributionRecognition;
+  readonly reinvestment: ReinvestmentConvention;
 }
+
+export const APPROVED_RESEARCH_TOTAL_RETURN_POLICY_ID = "research-total-return-d018-v1" as const;
+export const APPROVED_RESEARCH_TOTAL_RETURN_POLICY: TotalReturnPolicy = Object.freeze({
+  distributionRecognition: "ex_date",
+  reinvestment: "same_day_close",
+});
 
 export interface NormalizeReturnSeriesRequest {
   code: string;
