@@ -27,3 +27,13 @@ Do not run a fake 20-year LLM backtest using today's web. Historical AI tests re
 6. Spread is sourced from historical quote statistics where available; otherwise use a conservative fallback and label it estimated.
 7. Duplicate exposures are resolved before ranking.
 8. Any source disagreement above tolerance stops the affected instrument for that rebalance.
+
+## Return-basis contract
+
+- Raw or provider-adjusted prices must be labeled; `AdjustedClose` alone is never proof of Total Return coverage.
+- Normalized Price Return requires complete Point-in-Time Corporate Action coverage.
+- Normalized Total Return additionally requires complete distribution coverage and an explicit accounting policy.
+- Every event records availability time and source provenance.
+- Foreign-currency distributions stop before normalization until the Point-in-Time FX layer is available.
+
+See `docs/return-normalization.md` for the current experimental contract. O-001 and O-002 remain open.

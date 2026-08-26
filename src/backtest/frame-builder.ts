@@ -5,6 +5,7 @@ import type { MonthlyFrame } from "./simulator.ts";
 export interface FrameBuilderOptions {
   costRate?: number;
   minHistoryDays?: number;
+  priceField?: "close" | "adjustedClose";
 }
 
 export interface AssetFrameDiagnostic {
@@ -63,6 +64,7 @@ export function buildMonthlyFramesWithDiagnostics(
 ): FrameBuildResult {
   const costRate = options.costRate ?? 0.001;
   const minHistoryDays = options.minHistoryDays ?? 252;
+  const priceField = options.priceField ?? "adjustedClose";
   const requiredHistoryBars = Math.max(minHistoryDays, 252) + 1;
   const sortedSeries = new Map(
     Object.entries(series).map(([code, bars]) => [
@@ -96,13 +98,13 @@ export function buildMonthlyFramesWithDiagnostics(
       const nextIndex = lastIndexInMonth(sorted, nextLabel);
       if (currentIndex + 1 < requiredHistoryBars || nextIndex <= currentIndex) continue;
 
-      const current = sorted[currentIndex]!.adjustedClose;
-      const p3 = sorted[currentIndex - 63]?.adjustedClose;
-      const p6 = sorted[currentIndex - 126]?.adjustedClose;
-      const p12 = sorted[currentIndex - 252]?.adjustedClose;
+      const current = sorted[currentIndex]![priceField];
+      const p3 = sorted[currentIndex - 63]?.[priceField];
+      const p6 = sorted[currentIndex - 126]?.[priceField];
+      const p12 = sorted[currentIndex - 252]?.[priceField];
       if (!p3 || !p6 || !p12 || current <= 0) continue;
 
-      const volWindow = sorted.slice(Math.max(0, currentIndex - 63), currentIndex + 1).map((b) => b.adjustedClose);
+      const volWindow = sorted.slice(Math.max(0, currentIndex - 63), currentIndex + 1).map((bar) => bar[priceField]);
       snapshots.push({
         code,
         r3m: current / p3 - 1,
@@ -111,7 +113,7 @@ export function buildMonthlyFramesWithDiagnostics(
         volatility: annualizedVolatility(volWindow),
         eligible: true,
       });
-      nextMonthReturns[code] = sorted[nextIndex]!.adjustedClose / current - 1;
+      nextMonthReturns[code] = sorted[nextIndex]![priceField] / current - 1;
       diagnosticByCode.get(code)!.eligibleFrameCount += 1;
     }
 

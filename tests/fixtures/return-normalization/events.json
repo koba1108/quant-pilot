@@ -1,0 +1,73 @@
+{
+  "bars": [
+    { "code": "ETF", "tradingDate": "2025-01-02", "close": 100, "adjustedClose": 100, "volume": 1000, "tradingValue": 100000 },
+    { "code": "ETF", "tradingDate": "2025-01-03", "close": 50, "adjustedClose": 50, "volume": 2000, "tradingValue": 100000 },
+    { "code": "ETF", "tradingDate": "2025-01-06", "close": 49, "adjustedClose": 49, "volume": 2000, "tradingValue": 98000 },
+    { "code": "ETF", "tradingDate": "2025-01-07", "close": 50, "adjustedClose": 50, "volume": 2100, "tradingValue": 105000 },
+    { "code": "ETF", "tradingDate": "2025-01-08", "close": 999, "adjustedClose": 999, "volume": 1, "tradingValue": 999 }
+  ],
+  "events": [
+    {
+      "type": "split",
+      "eventId": "split-2-for-1",
+      "code": "ETF",
+      "effectiveDate": "2025-01-03",
+      "newUnitsPerOldUnit": 2,
+      "availableAt": "2025-01-02T00:00:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-return-events",
+        "retrievedAt": "2025-01-10T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "split-2-for-1"
+      }
+    },
+    {
+      "type": "cash_distribution",
+      "eventId": "distribution-1",
+      "code": "ETF",
+      "exDate": "2025-01-06",
+      "payDate": "2025-01-07",
+      "amountPerUnit": 1,
+      "currency": "JPY",
+      "availableAt": "2025-01-05T00:00:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-return-events",
+        "retrievedAt": "2025-01-10T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "distribution-1"
+      }
+    },
+    {
+      "type": "cash_distribution",
+      "eventId": "future-distribution",
+      "code": "ETF",
+      "exDate": "2025-01-08",
+      "payDate": "2025-01-08",
+      "amountPerUnit": 500,
+      "currency": "JPY",
+      "availableAt": "2025-01-02T00:00:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-return-events",
+        "retrievedAt": "2025-01-10T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "future-distribution"
+      }
+    }
+  ],
+  "coverage": {
+    "code": "ETF",
+    "startDate": "2025-01-02",
+    "endDate": "2025-01-08",
+    "corporateActions": "complete",
+    "distributions": "complete",
+    "provenance": {
+      "source": "fixture",
+      "dataset": "synthetic-return-events",
+      "retrievedAt": "2025-01-10T00:00:00Z",
+      "sourceVersion": "1"
+    }
+  }
+}

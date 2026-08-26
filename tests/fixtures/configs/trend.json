@@ -6,6 +6,7 @@
   "maxAssets": 3,
   "ddLimit": -0.3,
   "costRate": 0.001,
+  "returnBasis": "unadjusted_price",
   "provider": "csv",
   "csvRoot": "tests/fixtures/market-data",
   "assets": [

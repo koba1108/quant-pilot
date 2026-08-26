@@ -8,6 +8,8 @@ import { buildMonthlyFramesWithDiagnostics } from "./frame-builder.ts";
 import { runMonthlyStrategy } from "./simulator.ts";
 
 type ProviderName = "csv" | "stooq";
+export type BacktestReturnBasis = "unadjusted_price" | "provider_adjusted";
+export const BACKTEST_SUMMARY_SCHEMA_VERSION = "backtest-summary-v2" as const;
 
 export interface BacktestAssetConfig {
   code: string;
@@ -24,6 +26,7 @@ export interface BacktestConfig {
   maxAssets?: number;
   ddLimit?: number;
   costRate?: number;
+  returnBasis?: BacktestReturnBasis;
   provider?: ProviderName;
   csvRoot?: string;
   assets: BacktestAssetConfig[];
@@ -43,14 +46,20 @@ export interface BacktestAssetDiagnostic {
 }
 
 export interface BacktestSummary {
+  outputSchemaVersion: typeof BACKTEST_SUMMARY_SCHEMA_VERSION;
   provider: string;
+  returnBasis: BacktestReturnBasis;
+  returnNormalization: {
+    status: "not_normalized";
+    warning: string;
+  };
   strategy: "trend" | "rotation";
   start: string;
   end: string;
   months: number;
   initialEquity: number;
   finalEquity: number;
-  totalReturn: number;
+  cumulativePortfolioReturn: number;
   maxDrawdown: number;
   totalCostRate: number;
   stopped: boolean;
@@ -100,6 +109,18 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
   }
   if (value.provider !== undefined && value.provider !== "csv" && value.provider !== "stooq") {
     throw new Error(`provider must be "csv" or "stooq"; received ${String(value.provider)}.`);
+  }
+  if (
+    value.returnBasis !== undefined
+    && value.returnBasis !== "unadjusted_price"
+    && value.returnBasis !== "provider_adjusted"
+  ) {
+    throw new Error(
+      `returnBasis must be "unadjusted_price" or "provider_adjusted"; received ${String(value.returnBasis)}.`,
+    );
+  }
+  if (value.provider === "stooq" && value.returnBasis === "provider_adjusted") {
+    throw new Error("Stooq currently supports only unadjusted_price returnBasis.");
   }
   if (value.csvRoot !== undefined && (typeof value.csvRoot !== "string" || value.csvRoot.trim() === "")) {
     throw new Error("csvRoot must be a non-empty string when provided.");
@@ -161,6 +182,7 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
     maxAssets,
     ddLimit,
     costRate,
+    returnBasis: value.returnBasis as BacktestReturnBasis | undefined,
     provider: value.provider as ProviderName | undefined,
     csvRoot: value.csvRoot as string | undefined,
     assets,
@@ -178,9 +200,16 @@ function resolveProviderName(value: string | undefined): ProviderName | undefine
 export async function runBacktest(configPath: string, providerOverride?: string): Promise<BacktestSummary> {
   const config = validateBacktestConfig(JSON.parse(await readFile(configPath, "utf8")));
   const providerName = resolveProviderName(providerOverride) ?? config.provider ?? "csv";
+  const returnBasis = config.returnBasis ?? "provider_adjusted";
+  if (providerName === "stooq" && returnBasis !== "unadjusted_price") {
+    throw new Error("Stooq currently supports only unadjusted_price returnBasis.");
+  }
   const provider: MarketDataProvider = providerName === "stooq"
     ? new StooqMarketDataProvider()
-    : new CsvMarketDataProvider(config.csvRoot ?? "data/raw");
+    : new CsvMarketDataProvider(
+        config.csvRoot ?? "data/raw",
+        returnBasis === "provider_adjusted",
+      );
 
   const series: Record<string, Awaited<ReturnType<MarketDataProvider["loadDailyBars"]>>> = {};
   const diagnostics = new Map<string, BacktestAssetDiagnostic>();
@@ -215,7 +244,10 @@ export async function runBacktest(configPath: string, providerOverride?: string)
     });
   }
 
-  const built = buildMonthlyFramesWithDiagnostics(series, { costRate: config.costRate });
+  const built = buildMonthlyFramesWithDiagnostics(series, {
+    costRate: config.costRate,
+    priceField: returnBasis === "unadjusted_price" ? "close" : "adjustedClose",
+  });
   for (const frameDiagnostic of built.assetDiagnostics) {
     const diagnostic = diagnostics.get(frameDiagnostic.code)!;
     diagnostic.eligibleFrameCount = frameDiagnostic.eligibleFrameCount;
@@ -245,14 +277,22 @@ export async function runBacktest(configPath: string, providerOverride?: string)
   }, 0);
 
   return {
+    outputSchemaVersion: BACKTEST_SUMMARY_SCHEMA_VERSION,
     provider: provider.name,
+    returnBasis,
+    returnNormalization: {
+      status: "not_normalized",
+      warning: returnBasis === "unadjusted_price"
+        ? "Corporate Actions and distributions are not normalized."
+        : "Provider adjustment semantics and Point-in-Time safety are unverified.",
+    },
     strategy: config.strategy,
     start: built.frames[0]!.label,
     end: built.frames.at(-1)!.label,
     months: built.frames.length,
     initialEquity: initial,
     finalEquity: Math.round(finalEquityExact),
-    totalReturn: finalEquityExact / initial - 1,
+    cumulativePortfolioReturn: finalEquityExact / initial - 1,
     maxDrawdown: maxDrawdown(result.equityCurve),
     totalCostRate: result.totalCostRate,
     stopped: result.stopped,

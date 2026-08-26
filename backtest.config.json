@@ -6,6 +6,7 @@
   "maxAssets": 3,
   "ddLimit": -0.3,
   "costRate": 0.001,
+  "returnBasis": "provider_adjusted",
   "provider": "csv",
   "csvRoot": "data/raw",
   "assets": [

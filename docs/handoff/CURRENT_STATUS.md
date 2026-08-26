@@ -10,7 +10,8 @@ Snapshot date: 2026-08-26
 - PR #1: merged
 - Merge commit: `5b161573419bccd83cd82400fb31110d99651fe1`
 - PR #2: merged (`docs: add Codex Project migration instructions`)
-- Validation branch: `fix/validate-market-data-backtest`
+- PR #3: merged (`fix: validate market data backtests`)
+- Active branch: `ykoba/total-return-normalization`
 
 ## Implemented on main
 
@@ -48,8 +49,10 @@ Snapshot date: 2026-08-26
 - `tests/data-costs.test.ts`
 - `tests/simulator.test.ts`
 - `tests/frame-builder.test.ts`
+- `tests/csv-provider.test.ts`
+- `tests/runner.test.ts`
 
-## Added on the validation branch
+## Added by merged PR #3
 
 - commit-safe synthetic CSV data and Trend/Rotation configs under `tests/fixtures/`
 - strict runtime validation for backtest configuration and daily bars
@@ -61,9 +64,23 @@ Snapshot date: 2026-08-26
 - integration tests in `tests/csv-provider.test.ts` and `tests/runner.test.ts`
 - expanded point-in-time and safety tests in existing suites
 
+## Added on the Total Return foundation branch
+
+- `src/data/return-normalization.ts` — versioned Price Return / Total Return normalization
+- explicit cash-distribution, split/reverse-split, unsupported-action, coverage, and provenance contracts
+- mandatory `ex_date` or `pay_date` policy selection for Total Return; no default policy
+- Point-in-Time exclusion of future bars/events and rejection of events unavailable at recognition time
+- fail-closed handling for incomplete coverage, foreign-currency distributions, and unsupported actions
+- `unadjusted_price` / `provider_adjusted` labels in the existing CLI
+- `provider_adjusted` requires an `AdjustedClose` column; Stooq is restricted to `unadjusted_price`
+- ordinary provider CLI runs emit `returnNormalization.status=not_normalized` and a basis-specific warning
+- portfolio output rename from ambiguous `totalReturn` to `cumulativePortfolioReturn`
+- reusable normalization fixture and `tests/return-normalization.test.ts`
+- `docs/return-normalization.md` defining semantics and unresolved boundaries
+
 ## Verification status
 
-The merged PR #1 implementation was checked locally on 2026-08-26. Defects were reproduced on the unmodified implementation, then fixed on `fix/validate-market-data-backtest` rather than on `main`.
+The merged PR #1 implementation was checked locally on 2026-08-26. Defects were fixed and merged through PR #3.
 
 - Node.js: `v26.7.0`
 - Bun: `1.3.14`
@@ -83,7 +100,7 @@ bun run backtest --config=tests/fixtures/configs/rotation.json
 
 Both strategies produced 18 monthly frames from `2023-12` through `2025-05`, held at most three assets, charged a total modeled cost rate of approximately `0.002`, and stopped after frame `2025-01` when the synthetic series crossed the -30% high-water-mark limit. Ending weights were 100% cash.
 
-The synthetic fixture contains 651 weekday rows from `2023-01-02` through `2025-06-30`. It is Price Return data with identical `Close` and `AdjustedClose`; no distribution, Corporate Action, FX, or real liquidity evidence is represented.
+The synthetic fixture contains 651 weekday rows from `2023-01-02` through `2025-06-30`. It is labeled `unadjusted_price`, with identical `Close` and `AdjustedClose`; no distribution, Corporate Action, FX, or real liquidity evidence is represented.
 
 Defects found in merged PR #1:
 
@@ -94,12 +111,24 @@ Defects found in merged PR #1:
 - a missing calendar month could be used as though the next available month were the immediate next month.
 - malformed/missing CSV values could be skipped or represented as zero.
 
-All are fixed and covered on the validation branch. `main` remains unchanged until the validation PR is reviewed and explicitly merged.
+All are fixed and covered on `main`.
+
+Total Return foundation branch verification:
+
+- `bun test`: PASS, 38 tests / 0 failures
+- `bunx tsc --noEmit`: PASS
+- `bun run test:node`: FAIL due to pre-existing Bun-only imports and Node strip-only TypeScript limitations; not the required test path
+- split discontinuity normalization: PASS
+- explicit ex-date/pay-date path comparison: PASS
+- incomplete coverage and missing policy rejection: PASS
+- future bar/event isolation: PASS
+- event-availability Point-in-Time validation: PASS
+- foreign-currency and unsupported-action rejection: PASS
 
 ## Required validation coverage
 
 - PASS — TypeScript/Bun runtime succeeds
-- PASS — all unit and integration tests pass
+- PASS — all required Bun unit and integration tests pass
 - PASS — Trend CLI succeeds with controlled fixture data
 - PASS — Rotation CLI succeeds with controlled fixture data
 - PASS — listing and delisting boundaries are enforced
@@ -115,7 +144,7 @@ All are fixed and covered on the validation branch. `main` remains unchanged unt
 ### Data correctness
 
 - Stooq is a research OHLCV source, not approved final total-return evidence.
-- Distribution and ex-dividend normalization are not complete.
+- Distribution and split normalization foundation exists, but no production event provider or approved O-002 accounting policy exists.
 - JPY conversion for overseas assets is not implemented.
 - Cross-source reconciliation is not implemented.
 - Data licensing, retention, and reproducibility for the final provider remain unresolved.
@@ -143,17 +172,16 @@ All are fixed and covered on the validation branch. `main` remains unchanged unt
 
 ### P0 — Validate merged main
 
-1. Review the validation PR.
-2. Merge only after explicit user approval.
-3. After merge, rerun `bun test` and both fixture CLI commands on updated `main`.
+Complete through merged PR #3.
 
 ### P1 — Make data financially correct
 
-1. Define and implement total-return/distribution normalization.
-2. Add Point-in-Time JPY FX normalization for non-JPY assets.
-3. Implement a `universe_master.csv` loader with point-in-time filtering.
-4. Add data-quality reports and cross-source comparison hooks.
-5. Preserve raw input provenance and normalized-output versioning.
+1. Review the Total Return normalization foundation.
+2. Research and approve the final O-002 distribution-accounting policy.
+3. Add Point-in-Time JPY FX normalization for non-JPY assets.
+4. Implement a `universe_master.csv` loader with point-in-time filtering.
+5. Add data-quality reports and cross-source comparison hooks.
+6. Preserve raw input provenance and normalized-output versioning.
 
 ### P2 — Make research robust
 

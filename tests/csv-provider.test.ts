@@ -40,3 +40,16 @@ test("CSV provider preserves unavailable optional fields instead of substituting
   assert.equal(bars[0]!.volume, undefined);
   assert.equal(bars[0]!.tradingValue, undefined);
 });
+
+test("provider_adjusted mode requires an AdjustedClose column", async () => {
+  const adjustedProvider = new CsvMarketDataProvider("tests/fixtures/market-data", true);
+  await assert.rejects(
+    adjustedProvider.loadDailyBars({
+      code: "MINIMAL",
+      symbol: "minimal",
+      start: "2025-01-01",
+      end: "2025-01-31",
+    }),
+    /must contain AdjustedClose for provider_adjusted/,
+  );
+});

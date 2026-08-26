@@ -26,6 +26,11 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 - `src/data/csv.ts`: CSV fallback provider
 - `src/data/stooq.ts`: Stooq research provider
 
+On `ykoba/total-return-normalization`:
+
+- `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
+- `docs/return-normalization.md`: normalization semantics and unresolved policy boundaries
+
 ### Backtest
 
 - `src/backtest/simulator.ts`: monthly compounding simulator
@@ -40,6 +45,13 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 - `tests/data-costs.test.ts`
 - `tests/simulator.test.ts`
 - `tests/frame-builder.test.ts`
+- `tests/csv-provider.test.ts`
+- `tests/runner.test.ts`
+
+On `ykoba/total-return-normalization`:
+
+- `tests/return-normalization.test.ts`
+- `tests/fixtures/return-normalization/events.json`
 
 ### AI
 
@@ -65,7 +77,7 @@ Stooq is a research plumbing provider only. Do not interpret Stooq-only OHLCV re
 
 ## Verification state
 
-PR #1 was merged before local verification. The merged code was subsequently validated on `fix/validate-market-data-backtest`, based on `main` after PR #2.
+PR #1 was merged before local verification. The merged code was subsequently validated and fixed by PR #3, now merged into `main`.
 
 - Runtime: Node.js `v26.7.0`, Bun `1.3.14`
 - `bun install`: success, no dependency changes
@@ -75,7 +87,7 @@ PR #1 was merged before local verification. The merged code was subsequently val
 - Rotation fixture CLI: success
 - Repeated fixture execution: byte-for-byte deterministic output
 
-The validation branch adds commit-safe synthetic CSV fixtures and integration coverage for listing/delisting bounds, decision-date-only signals, explicit insufficient-history exclusion, transaction costs, the three-holding cap, and the -30% high-water-mark stop.
+PR #3 added commit-safe synthetic CSV fixtures and integration coverage for listing/delisting bounds, decision-date-only signals, explicit insufficient-history exclusion, transaction costs, the three-holding cap, and the -30% high-water-mark stop.
 
 Defects found and fixed on the branch:
 
@@ -86,12 +98,16 @@ Defects found and fixed on the branch:
 - A missing calendar month could stretch a forward return across multiple months.
 - Missing optional CSV fields were represented as numeric zero, and malformed in-range prices could be skipped.
 
-The fixture is synthetic Price Return data. It does not validate distributions, Corporate Actions, JPY FX conversion, final data-provider quality, or investable historical performance. Until the validation PR is reviewed and merged, these fixes are not part of `main`.
+The fixture is synthetic unadjusted Price data. It does not validate JPY FX conversion, final data-provider quality, or investable historical performance.
+
+The Total Return foundation branch currently verifies 38 tests / 0 failures and passes `bunx tsc --noEmit`. It distinguishes unadjusted/provider-adjusted CLI inputs from normalized Price Return and Total Return. Total Return requires complete event coverage and an explicit policy; O-002 remains open.
+
+The optional `bun run test:node` script remains incompatible with the pre-existing Bun-specific tests and TypeScript parameter properties under Node's strip-only loader. Bun is the required test path; this branch does not broaden scope to convert the test suite.
 
 ## Next blocks
 
-1. Review and merge the Phase 0 validation PR only with explicit user approval
-2. Distribution / total-return normalization
+1. Review and merge the Total Return normalization foundation only with explicit user approval
+2. Research and approve the final O-002 distribution-accounting policy
 3. JPY FX normalization for overseas assets
 4. Point-in-time ETF master loader from `universe_master.csv`
 5. Data-quality and cross-source reconciliation reports

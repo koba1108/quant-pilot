@@ -14,6 +14,14 @@
 - 長期研究ではETFではなく指数/原資産系列を利用可。ただしETF-realisticと区別
 - 現在のニュースを過去時点AI判断に混入させない
 
+## Return Basis
+
+- 入力系列を `unadjusted_price`、`provider_adjusted`、正規化済み `price_return`、正規化済み `total_return` として明示する
+- `AdjustedClose` だけを根拠にTotal Returnと認定しない
+- Price Return正規化には完全なCorporate Action coverageを要求する
+- Total Return正規化には完全な分配金coverageと明示的な会計ポリシーを要求する
+- ポートフォリオ累積損益と入力データのTotal Return basisを同じ名称で表現しない
+
 ## コスト
 - 売買手数料
 - Bid/Ask spread

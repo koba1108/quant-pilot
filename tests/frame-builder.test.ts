@@ -72,4 +72,15 @@ describe("buildMonthlyFrames", () => {
     });
     expect(result.assetDiagnostics[0]!.exclusionReason).toContain("Insufficient history");
   });
+
+  test("uses the explicitly selected price field", () => {
+    const bars = makeBars("AAA").map((bar, index) => ({
+      ...bar,
+      adjustedClose: 100 + index * .4,
+    }));
+    const rawPrice = buildMonthlyFrames({ AAA: bars }, { priceField: "close" });
+    const providerAdjusted = buildMonthlyFrames({ AAA: bars }, { priceField: "adjustedClose" });
+
+    expect(rawPrice[0]!.snapshots[0]!.r12m).not.toBe(providerAdjusted[0]!.snapshots[0]!.r12m);
+  });
 });

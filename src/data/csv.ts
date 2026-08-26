@@ -5,7 +5,10 @@ import { assertDailyBars, type MarketDataProvider, type MarketDataRequest } from
 export class CsvMarketDataProvider implements MarketDataProvider {
   readonly name = "csv";
 
-  constructor(private readonly rootDir = "data/raw") {}
+  constructor(
+    private readonly rootDir = "data/raw",
+    private readonly requireAdjustedClose = false,
+  ) {}
 
   async loadDailyBars(request: MarketDataRequest): Promise<DailyBar[]> {
     const path = `${this.rootDir}/${request.symbol}.csv`;
@@ -20,6 +23,9 @@ export class CsvMarketDataProvider implements MarketDataProvider {
     const volume = pos("volume");
     const tradingValue = pos("tradingvalue");
     if (date < 0 || close < 0) throw new Error(`CSV must contain Date and Close: ${path}`);
+    if (this.requireAdjustedClose && adjusted < 0) {
+      throw new Error(`CSV must contain AdjustedClose for provider_adjusted returnBasis: ${path}`);
+    }
 
     const requiredNumber = (value: string | undefined, field: string, lineNumber: number): number => {
       if (value === undefined || value.trim() === "") {
