@@ -5,9 +5,9 @@
 - Repository: `koba1108/quant-pilot`
 - Local path: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Active implementation branch: `feat/market-data-backtest`
-- Active pull request: `#1 feat: add market data providers and runnable backtests`
+- PR #1: merged into `main`
 - Handoff date: 2026-08-26
+- Primary migration instructions: `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 
 ## Mission
 
@@ -41,70 +41,55 @@ JPY 1,000,000 × 3 strategies
 Decision Package / Monthly Report
 ```
 
-## What is already implemented
+## What is implemented
 
-The base branch contains deterministic TypeScript implementations for Strategy A/B ranking, inverse-volatility allocation, transaction-cost calculation, drawdown handling, point-in-time universe primitives, monthly simulation, and performance metrics.
+`main` contains deterministic TypeScript implementations for:
 
-PR #1 adds:
-
+- Strategy A/B ranking
+- inverse-volatility allocation
+- transaction-cost calculation
+- drawdown handling
+- point-in-time universe primitives
+- monthly simulation
+- performance metrics
 - `MarketDataProvider` abstraction
 - CSV market-data provider
 - Stooq research provider
 - daily-bar to monthly-frame construction
-- runnable Strategy A/B CLI
+- Strategy A/B CLI runner
 - example backtest configuration
-- additional frame-builder test
-- package rename to `quant-pilot`
-- updated README usage instructions
+- frame-builder test
 
-See `CURRENT_STATUS.md` for exact verification gaps.
+## Important current caveat
 
-## Immediate objective
+PR #1 was merged before local verification was completed. The code is not assumed broken, but the first Codex Project task is to validate the merged `main` rather than continue from an obsolete feature branch.
 
-Complete and validate PR #1 locally, then continue the data-correctness layer required before any result is treated as investment evidence.
+Required first actions:
 
-Priority order:
-
-1. Check out `feat/market-data-backtest` and inspect `git status`.
+1. Update local `main` with `git pull --ff-only origin main`.
 2. Run `bun install` and `bun test`.
-3. Run a fixture-backed Strategy A and Strategy B backtest through the CLI.
-4. Fix any TypeScript, runtime, date-boundary, or CSV parsing defects found.
-5. Implement total-return/distribution normalization.
-6. Implement JPY conversion for non-JPY assets without introducing future information.
-7. Load the point-in-time ETF universe from `universe_master.csv` rather than duplicating assets manually in config.
-8. Add data-quality checks and cross-source reconciliation hooks.
-9. Add robustness-grid execution for strategy parameters, rebalancing dates, and turnover rules.
-10. Update the PR description and handoff status with verified results.
+3. Run reproducible CSV-fixture CLI tests for both Trend and Rotation.
+4. Verify point-in-time boundaries, missing-history behavior, costs, and the -30% drawdown stop.
+5. Fix defects on a new branch and open a new PR if needed.
+6. Update `CURRENT_STATUS.md` with actual results.
 
-## Definition of done for the current phase
+## Next implementation sequence
 
-The current data/backtest phase is complete only when:
+After the merged implementation is verified:
 
-- `bun test` passes locally.
-- Strategy A and B can run from a documented config and reproducible fixture dataset.
-- Listing and delisting bounds are enforced.
-- Signals use only information available at the decision date.
-- Costs are deducted from results.
-- The -30% high-water-mark stop works in an integration test.
-- Missing or insufficient data fails loudly instead of silently substituting values.
-- Research OHLCV results are clearly distinguished from dividend-aware total-return validation.
-- README, `IMPLEMENTATION.md`, and this handoff reflect the actual state.
-
-## Non-goals for this phase
-
-Do not yet:
-
-- connect a brokerage account or place real orders;
-- implement shorting, leverage, inverse ETFs, or crypto assets;
-- claim that Stooq-only results are production-grade investment evidence;
-- complete Strategy C by allowing an LLM to select assets from unvalidated inputs;
-- optimize parameters solely for the highest historical return;
-- merge PR #1 without local verification and explicit user direction.
+1. Total-return/distribution normalization
+2. JPY conversion for non-JPY assets
+3. point-in-time loader for `universe_master.csv`
+4. data-quality reports and cross-source reconciliation hooks
+5. robustness-grid execution for Strategy A/B
+6. Strategy C decision-package schema
+7. forward-test persistence, scheduling, reporting, and notifications
 
 ## Working rules
 
-- Read `AGENTS.md` and `DECISIONS.md` before changing behavior.
+- Read `AGENTS.md`, `CODEX_PROJECT_INSTRUCTIONS.md`, and `DECISIONS.md` before changing behavior.
 - Do not reinterpret the original interview questions. Only approved decisions in this repository are binding.
 - Keep deterministic finance logic and hard safety constraints in TypeScript.
 - Log assumptions and limitations whenever market data is incomplete.
-- When a material financial-policy decision is required, present the evidence and request human approval rather than silently choosing.
+- When a material financial-policy decision is required, present evidence and request human approval rather than silently choosing.
+- Do not connect a brokerage account or place real orders in the current phase.

@@ -4,8 +4,8 @@
 
 Before changing code or documentation:
 
-1. Read `docs/handoff/README.md`.
-2. Read `docs/handoff/CODEX_HANDOFF.md`, `docs/handoff/DECISIONS.md`, `docs/handoff/CURRENT_STATUS.md`, and `docs/handoff/OPEN_DECISIONS.md`.
+1. Read `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`.
+2. Read `docs/handoff/DECISIONS.md`, `docs/handoff/CURRENT_STATUS.md`, and `docs/handoff/OPEN_DECISIONS.md`.
 3. Read `investment_policy.md`, `strategy_spec.md`, `backtest_spec.md`, and `IMPLEMENTATION.md` as relevant to the task.
 4. Inspect the current Git branch, worktree, and related pull request before editing.
 
@@ -22,7 +22,7 @@ The original ChatGPT question sequence is not a specification. Do not restore ab
 
 ## Engineering constraints
 
-- Use TypeScript and Bun. The repository currently requires Node.js 26.7.0 or later.
+- Use TypeScript and Bun. Use the Node.js version required by the repository.
 - Keep Python out of the project unless the user explicitly changes this decision.
 - Put deterministic calculations, validation, portfolio constraints, and safety controls in code.
 - AI may interpret macro/news/policy/consensus inputs, but must not silently override hard portfolio or risk constraints.

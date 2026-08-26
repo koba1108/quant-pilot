@@ -7,11 +7,11 @@ Snapshot date: 2026-08-26
 - Repository: `koba1108/quant-pilot`
 - Local checkout: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Active branch: `feat/market-data-backtest`
-- Pull request: `#1 feat: add market data providers and runnable backtests`
-- PR state at handoff: open, draft, mergeable
+- PR #1: merged
+- Merge commit: `5b161573419bccd83cd82400fb31110d99651fe1`
+- Current documentation branch: `docs/codex-project-migration`
 
-## Implemented on the base project
+## Implemented on main
 
 ### Strategy
 
@@ -25,62 +25,74 @@ Snapshot date: 2026-08-26
 - `src/portfolio/costs.ts` — turnover-aware execution-cost model
 - `src/portfolio/risk.ts` — maximum drawdown and hard-stop logic
 
-### Data primitives
+### Data
 
 - `src/data/models.ts` — normalized bars, universe members, quote quality, and eligibility policy
 - `src/data/universe.ts` — point-in-time universe eligibility primitives
+- `src/data/provider.ts` — `MarketDataProvider` interface and bar validation
+- `src/data/csv.ts` — CSV fallback provider
+- `src/data/stooq.ts` — Stooq research provider
 
-### Backtest core
+### Backtest
 
 - `src/backtest/simulator.ts` — monthly compounding simulation
 - `src/backtest/metrics.ts` — cumulative return, CAGR, volatility, Sharpe, and Sortino calculations
+- `src/backtest/frame-builder.ts` — daily bars to monthly snapshots and forward returns
+- `src/backtest/runner.ts` — config-driven CLI for Strategy A/B
+- `backtest.config.example.json` — example configuration
 
-### Existing tests
+### Tests present in repository
 
 - `tests/core.test.ts`
 - `tests/data-costs.test.ts`
 - `tests/simulator.test.ts`
-
-## Added in PR #1
-
-- `src/data/provider.ts` — `MarketDataProvider` interface and bar validation
-- `src/data/csv.ts` — CSV fallback provider
-- `src/data/stooq.ts` — Stooq research provider
-- `src/backtest/frame-builder.ts` — daily bars to monthly snapshots/forward returns
-- `src/backtest/runner.ts` — config-driven CLI for Strategy A/B
-- `backtest.config.example.json` — example configuration
-- `tests/frame-builder.test.ts` — frame construction coverage
-- `README.md` — backtest usage and data caveats
-- `package.json` — package name corrected to `quant-pilot`
+- `tests/frame-builder.test.ts`
 
 ## Verification status
 
-The PR branch has not been executed inside the ChatGPT environment. The PR description explicitly requires local verification before merge.
+PR #1 was merged before the following local checks were completed. No CI status was attached to the merge commit at the time of handoff.
 
-Required local checks:
+The first Codex Project task is therefore validation of the merged `main`.
 
 ```bash
 cd /Users/ykoba/IdeaProjects/quant-pilot
-git fetch origin
-git switch feat/market-data-backtest
+git status
+git switch main
+git pull --ff-only origin main
+node --version
+bun --version
 bun install
 bun test
 ```
 
-Then run a reproducible fixture-backed backtest:
+Then run reproducible fixture-backed tests for both strategies:
 
 ```bash
-cp backtest.config.example.json backtest.config.json
-bun run backtest --config=backtest.config.json
+bun run backtest --config=<trend fixture config>
+bun run backtest --config=<rotation fixture config>
 ```
 
-Do not merge PR #1 until the tests and at least one Strategy A and Strategy B CLI run have been verified locally.
+Until these checks pass, the market-data/backtest integration must be treated as implemented but unverified.
+
+## Required validation coverage
+
+- TypeScript/Bun runtime succeeds
+- all unit tests pass
+- Trend CLI succeeds with controlled fixture data
+- Rotation CLI succeeds with controlled fixture data
+- listing and delisting boundaries are enforced
+- signal construction uses only decision-date information
+- insufficient history is visible and deterministic
+- transaction costs reduce returns
+- maximum holdings remain three or fewer
+- -30% high-water-mark stop is covered by an integration test
+- repeated execution is reproducible
 
 ## Known limitations and risks
 
 ### Data correctness
 
-- Stooq is currently a research OHLCV source, not approved final total-return evidence.
+- Stooq is a research OHLCV source, not approved final total-return evidence.
 - Distribution and ex-dividend normalization are not complete.
 - JPY conversion for overseas assets is not implemented.
 - Cross-source reconciliation is not implemented.
@@ -89,15 +101,15 @@ Do not merge PR #1 until the tests and at least one Strategy A and Strategy B CL
 ### Universe correctness
 
 - The runner currently accepts assets from config rather than loading `universe_master.csv` as the source of truth.
-- Listing/delisting bounds are applied from config, but the complete historical ETF master is not yet wired into the runner.
+- Listing/delisting bounds may be supplied from config, but the complete historical ETF master is not yet wired into the runner.
 - Survivorship-bias controls require a maintained point-in-time universe and delisting history.
 
 ### Backtest completeness
 
 - Robustness-grid execution is not implemented.
 - Rebalance-date and replacement/hysteresis comparisons are not implemented.
-- Cash return is currently simplified.
-- Exact total-return cost treatment and management-fee handling require final data decisions.
+- Cash return is simplified.
+- Exact total-return and management-fee handling require final data decisions.
 - Strategy C is specified but not implemented.
 
 ### Operations
@@ -107,18 +119,19 @@ Do not merge PR #1 until the tests and at least one Strategy A and Strategy B CL
 
 ## Next implementation sequence
 
-### P0 — Validate PR #1
+### P0 — Validate merged main
 
 1. Run all tests locally.
-2. Run the CSV path with a controlled fixture.
-3. Run both `trend` and `rotation` strategies.
-4. Check date boundaries, insufficient-history behavior, error messages, and output reproducibility.
-5. Fix defects and update PR verification notes.
+2. Add controlled CSV fixtures where missing.
+3. Run both `trend` and `rotation` through the CLI.
+4. Verify date boundaries, history requirements, costs, reproducibility, and DD stop.
+5. Fix defects on a new branch and open a new PR.
+6. Record actual results in this file.
 
 ### P1 — Make data financially correct
 
 1. Define and implement total-return/distribution normalization.
-2. Add JPY FX normalization for non-JPY assets.
+2. Add Point-in-Time JPY FX normalization for non-JPY assets.
 3. Implement a `universe_master.csv` loader with point-in-time filtering.
 4. Add data-quality reports and cross-source comparison hooks.
 5. Preserve raw input provenance and normalized-output versioning.

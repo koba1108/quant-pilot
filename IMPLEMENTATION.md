@@ -2,9 +2,9 @@
 
 Pythonで作っていた初期骨格はTypeScriptへ全面移行した。Python依存はない。
 
-現在の詳細な引き継ぎ状態は `docs/handoff/CURRENT_STATUS.md` を参照すること。
+Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`、現在の詳細状態は `docs/handoff/CURRENT_STATUS.md` を参照すること。
 
-## Implemented
+## Implemented on main
 
 ### Strategy
 
@@ -34,7 +34,7 @@ Pythonで作っていた初期骨格はTypeScriptへ全面移行した。Python�
 - `src/backtest/runner.ts`: config-driven Strategy A/B CLI
 - `backtest.config.example.json`: runnable configuration example
 
-### Tests
+### Tests present
 
 - `tests/core.test.ts`
 - `tests/data-costs.test.ts`
@@ -55,7 +55,7 @@ bun test
 bun run backtest --config=backtest.config.json
 ```
 
-The repository currently requires Node.js 26.7.0 or later. Core tests may also be invoked through the Node script defined in `package.json`, but Bun is the primary workflow.
+The repository currently requires Node.js 26.7.0 or later. Bun is the primary workflow.
 
 ## Design boundary
 
@@ -63,22 +63,25 @@ Deterministic calculations, data validation, execution costs, portfolio constrai
 
 Stooq is a research plumbing provider only. Do not interpret Stooq-only OHLCV results as final dividend-aware or production-grade investment evidence.
 
-## Verification required before PR #1 merge
+## Verification state
+
+PR #1 was merged into `main` before local verification was completed. The first Codex Project task is to validate the merged implementation.
 
 ```bash
 cd /Users/ykoba/IdeaProjects/quant-pilot
-git switch feat/market-data-backtest
+git switch main
+git pull --ff-only origin main
 bun install
 bun test
-cp backtest.config.example.json backtest.config.json
-bun run backtest --config=backtest.config.json
 ```
 
-Run both `trend` and `rotation` with controlled CSV fixtures and document the results in the pull request.
+Then run both `trend` and `rotation` using controlled, commit-safe CSV fixtures. Verify Point-in-Time boundaries, insufficient-history behavior, transaction costs, maximum holdings, reproducibility, and the -30% drawdown stop.
+
+Any defects must be fixed on a new branch and reviewed in a new PR. Do not represent the merged implementation as verified until those checks pass.
 
 ## Next blocks
 
-1. Local verification and defect fixing for PR #1
+1. Validate merged main and fix defects
 2. Distribution / total-return normalization
 3. JPY FX normalization for overseas assets
 4. Point-in-time ETF master loader from `universe_master.csv`
