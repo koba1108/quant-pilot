@@ -14,6 +14,12 @@ bun install
 bun test
 ```
 
+## Codex / Handoff
+
+Codexで作業を引き継ぐ場合は、まずルートの [`AGENTS.md`](./AGENTS.md) と [`docs/handoff/README.md`](./docs/handoff/README.md) を読んでください。
+
+引き継ぎディレクトリには、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状況、未確定事項、開始用プロンプトを整理しています。
+
 ## Backtest quick start
 
 1. 設定ファイルをコピーする。
@@ -51,6 +57,7 @@ Point-in-Time制約として、設定された上場日前・上場廃止日後�
 - `src/portfolio/` — allocation / risk / costs
 - `src/backtest/` — frame builder / simulator / metrics / CLI runner
 - `src/ai/` — Strategy C AI investment committee
+- `docs/handoff/` — Codex向け引き継ぎ資料
 - `investment_policy.md` — 投資方針とガードレール
 - `universe_master.csv` — Universe初版
 - `strategy_spec.md` — Strategy A/B/C
