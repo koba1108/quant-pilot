@@ -26,6 +26,8 @@ The virtual portfolio compounds, but the exact accounting remains open:
 
 This is the unanswered item that followed the original policy interview; do not assume a final rule.
 
+Implementation note: `src/data/return-normalization.ts` supports explicit `ex_date` and `pay_date` comparison with `same_day_close` reinvestment, but has no default. This is an experimental comparison surface, not an approved accounting policy. Final selection still requires evidence and human approval.
+
 ## O-003 — Exact ETF eligibility thresholds
 
 Need evidence-backed thresholds for core and theme ETFs, including:

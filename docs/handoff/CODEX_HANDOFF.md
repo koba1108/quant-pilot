@@ -62,26 +62,31 @@ Decision Package / Monthly Report
 
 ## Phase 0 validation
 
-PR #1 was merged before local verification. Validation was completed afterward on `fix/validate-market-data-backtest`, based on `main` after PR #2.
+PR #1 was merged before local verification. Validation and defect fixes were completed afterward and merged through PR #3.
 
 - `bun install`: success
 - `bun test`: 22 pass / 0 fail
 - Trend and Rotation fixture CLI runs: success
 - Point-in-Time boundaries, future-data isolation, explicit missing-history handling, costs, maximum three holdings, reproducibility, and the -30% stop: covered
 
-The validation found defects in holding-limit enforcement, missing-return handling, exclusion visibility, stop-liquidation costs, consecutive-month handling, and CSV missing-value handling. Fixes and commit-safe synthetic fixtures are on the validation branch and require review before merge. See `CURRENT_STATUS.md` for exact commands, results, and limitations.
+The validation found defects in holding-limit enforcement, missing-return handling, exclusion visibility, stop-liquidation costs, consecutive-month handling, and CSV missing-value handling. Fixes and commit-safe synthetic fixtures are now on `main`. See `CURRENT_STATUS.md` for exact commands, results, and limitations.
+
+## Total Return foundation
+
+`ykoba/total-return-normalization` adds versioned Price Return / Total Return normalization with explicit event coverage, source provenance, Point-in-Time availability checks, and no default distribution policy. Existing CLI inputs are labeled `unadjusted_price` or `provider_adjusted`; neither is silently promoted to Total Return.
+
+O-002 remains open. Supporting ex-date and pay-date comparison does not approve either convention.
 
 ## Next implementation sequence
 
-After the merged implementation is verified:
-
-1. Total-return/distribution normalization
-2. JPY conversion for non-JPY assets
-3. point-in-time loader for `universe_master.csv`
-4. data-quality reports and cross-source reconciliation hooks
-5. robustness-grid execution for Strategy A/B
-6. Strategy C decision-package schema
-7. forward-test persistence, scheduling, reporting, and notifications
+1. Review the Total Return normalization foundation.
+2. Research and approve the final O-002 accounting policy.
+3. Add Point-in-Time JPY conversion for non-JPY assets.
+4. Add a point-in-time loader for `universe_master.csv`.
+5. Add data-quality reports and cross-source reconciliation hooks.
+6. Add robustness-grid execution for Strategy A/B.
+7. Define the Strategy C decision-package schema.
+8. Add forward-test persistence, scheduling, reporting, and notifications.
 
 ## Working rules
 

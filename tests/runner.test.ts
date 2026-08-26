@@ -12,6 +12,12 @@ test("Trend and Rotation fixture runs enforce integration guardrails", async () 
   ]);
 
   for (const result of [trend, rotation]) {
+    assert.equal(result.outputSchemaVersion, "backtest-summary-v2");
+    assert.equal(result.returnBasis, "unadjusted_price");
+    assert.equal(result.returnNormalization.status, "not_normalized");
+    assert.match(result.returnNormalization.warning, /not normalized/);
+    assert.equal(typeof result.cumulativePortfolioReturn, "number");
+    assert.equal("totalReturn" in result, false);
     assert.ok(result.months > 0);
     assert.equal(result.stopped, true);
     assert.equal(result.stopLabel, "2025-01");
@@ -51,4 +57,12 @@ test("CLI config validation rejects relaxed hard constraints", () => {
 
   assert.throws(() => validateBacktestConfig({ ...base, maxAssets: 4 }), /Invalid maxAssets/);
   assert.throws(() => validateBacktestConfig({ ...base, ddLimit: -.31 }), /Invalid ddLimit/);
+  assert.throws(
+    () => validateBacktestConfig({ ...base, returnBasis: "total_return" }),
+    /returnBasis must be/,
+  );
+  assert.throws(
+    () => validateBacktestConfig({ ...base, provider: "stooq", returnBasis: "provider_adjusted" }),
+    /Stooq currently supports only unadjusted_price/,
+  );
 });
