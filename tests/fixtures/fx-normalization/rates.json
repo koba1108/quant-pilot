@@ -1,0 +1,157 @@
+{
+  "coverage": {
+    "sourceCurrency": "USD",
+    "targetCurrency": "JPY",
+    "startDate": "2025-01-02",
+    "endDate": "2025-01-31",
+    "status": "complete",
+    "availableAt": "2025-01-01T00:00:00Z",
+    "provenance": {
+      "source": "fixture",
+      "dataset": "synthetic-usd-jpy-coverage",
+      "retrievedAt": "2025-02-20T00:00:00Z",
+      "sourceVersion": "1",
+      "recordId": "usd-jpy-coverage-2025-01"
+    }
+  },
+  "observations": [
+    {
+      "observationId": "usd-jpy-2025-01-02",
+      "rateDate": "2025-01-02",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 150,
+      "observedAt": "2025-01-02T08:00:00Z",
+      "availableAt": "2025-01-02T08:05:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "usd-jpy-2025-01-02"
+      }
+    },
+    {
+      "observationId": "usd-jpy-2025-01-03",
+      "rateDate": "2025-01-03",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 151,
+      "observedAt": "2025-01-03T08:00:00Z",
+      "availableAt": "2025-01-03T08:05:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "usd-jpy-2025-01-03"
+      }
+    },
+    {
+      "observationId": "usd-jpy-2025-01-03-revision-1",
+      "rateDate": "2025-01-03",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 151.5,
+      "observedAt": "2025-01-07T00:00:00Z",
+      "availableAt": "2025-01-07T01:00:00Z",
+      "supersedesObservationId": "usd-jpy-2025-01-03",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "2",
+        "recordId": "usd-jpy-2025-01-03-revision-1"
+      }
+    },
+    {
+      "observationId": "usd-jpy-2025-01-03-revision-2",
+      "rateDate": "2025-01-03",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 151.7,
+      "observedAt": "2025-01-08T00:00:00Z",
+      "availableAt": "2025-01-08T01:00:00Z",
+      "supersedesObservationId": "usd-jpy-2025-01-03-revision-1",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "3",
+        "recordId": "usd-jpy-2025-01-03-revision-2"
+      }
+    },
+    {
+      "observationId": "usd-jpy-2025-01-06",
+      "rateDate": "2025-01-06",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 149,
+      "observedAt": "2025-01-06T08:00:00Z",
+      "availableAt": "2025-01-06T08:05:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "usd-jpy-2025-01-06"
+      }
+    },
+    {
+      "observationId": "usd-jpy-2025-01-07",
+      "rateDate": "2025-01-07",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 152,
+      "observedAt": "2025-01-07T08:00:00Z",
+      "availableAt": "2025-01-07T08:05:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "usd-jpy-2025-01-07"
+      }
+    },
+    {
+      "observationId": "usd-jpy-2025-01-08",
+      "rateDate": "2025-01-08",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 153,
+      "observedAt": "2025-01-08T08:00:00Z",
+      "availableAt": "2025-01-08T08:05:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "usd-jpy-2025-01-08"
+      }
+    },
+    {
+      "observationId": "usd-jpy-2025-01-10",
+      "rateDate": "2025-01-10",
+      "sourceCurrency": "USD",
+      "targetCurrency": "JPY",
+      "quoteConvention": "target_currency_per_source_currency",
+      "targetCurrencyPerSourceUnit": 154,
+      "observedAt": "2025-01-10T08:00:00Z",
+      "availableAt": "2025-01-10T08:05:00Z",
+      "provenance": {
+        "source": "fixture",
+        "dataset": "synthetic-usd-jpy",
+        "retrievedAt": "2025-02-20T00:00:00Z",
+        "sourceVersion": "1",
+        "recordId": "usd-jpy-2025-01-10"
+      }
+    }
+  ]
+}

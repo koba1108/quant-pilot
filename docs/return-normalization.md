@@ -85,7 +85,7 @@ Total Return still has no silent default. Callers must record `APPROVED_RESEARCH
 - distributionRecognition: ex_date;
 - reinvestment: same_day_close.
 
-The implementation retains pay-date recognition for reproducible robustness comparison, but it is not the primary research policy. Neither path represents spendable portfolio cash; that state is handled by `src/portfolio/distribution-ledger.ts` under D-018.
+The implementation retains pay-date recognition for reproducible robustness comparison, but it is not the primary research policy. Neither path represents spendable portfolio cash; that state is handled by `src/portfolio/distribution-ledger.ts` under D-018. A completed non-JPY local-currency series may then be converted by the separate Point-in-Time layer in `src/data/fx-normalization.ts`.
 
 ## Known limitations
 
@@ -93,7 +93,7 @@ The implementation retains pay-date recognition for reproducible robustness comp
 - Distribution amount availability before ex-date may be unavailable for some sources; strict Point-in-Time validation will reject those cases.
 - Trust/management fees embedded in NAV are not separated or added again.
 - Taxes are not modeled.
-- FX conversion is not implemented.
+- JPY FX conversion is a separate post-normalization layer; the final provider and exchange-calendar alignment policy remain unresolved.
 - Stock distributions, mergers, tender offers, spin-offs, and other non-split actions are unsupported.
 - Multiple-source reconciliation and production-provider coverage verification are not implemented.
 - Current Trend/Rotation CLI fixtures remain synthetic unadjusted Price data and are not investment evidence.

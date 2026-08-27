@@ -29,4 +29,4 @@
 - 未確定事項を実装・検証で確定した場合は、`OPEN_DECISIONS.md` から `DECISIONS.md` へ移します。
 - ChatGPTの会話全文は仕様の一次情報として扱いません。
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27

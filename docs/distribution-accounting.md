@@ -39,7 +39,7 @@ Positive ETF forecasts use:
 
 A positive forecast is a hit only when the resulting net P&L is greater than zero. Moving a distribution from receivable to cash does not change forecast income.
 
-Foreign-currency distribution income cannot enter JPY scoring until the Point-in-Time FX layer converts each dated entry.
+Foreign-currency distribution income enters JPY scoring only when an explicit Point-in-Time FX book provides the exact recognition-date rate for every dated entry. The score records the applied FX observation IDs. Missing rates still fail closed.
 
 ## Fees and taxes
 
@@ -67,4 +67,4 @@ This version records gross distribution income before investor-specific tax. Sou
 - Entitled units are currently supplied to the ledger; deriving them from Point-in-Time orders, positions, and settlement is not implemented.
 - Partial payments, payment reversals, stock distributions, and post-payment corrections are unsupported and fail closed.
 - Production event sources and cross-source reconciliation are not implemented.
-- Point-in-Time JPY FX conversion is the next data-correctness block.
+- Event-level Point-in-Time JPY conversion is implemented, but foreign receivable/cash revaluation between events is not integrated into the full position simulator.

@@ -1,4 +1,8 @@
 import type { DataProvenance } from "../data/return-normalization.ts";
+import {
+  convertCurrencyAmountAtExactRate,
+  type PointInTimeFxRateBook,
+} from "../data/fx-normalization.ts";
 
 export const DISTRIBUTION_LEDGER_VERSION = "distribution-ledger-v1" as const;
 
@@ -120,6 +124,7 @@ export interface PositiveForecastScoreRequest {
   transactionCosts: number;
   fxConversionCosts: number;
   distributionLedger: DistributionLedgerResult;
+  fxRateBooks?: PointInTimeFxRateBook[];
 }
 
 export interface PositiveForecastScore {
@@ -132,6 +137,7 @@ export interface PositiveForecastScore {
   transactionCosts: number;
   fxConversionCosts: number;
   totalModeledCosts: number;
+  appliedFxObservationIds: string[];
   netPnl: number;
   netReturn: number;
   outcome: "hit" | "miss";
@@ -558,9 +564,10 @@ function distributionIncomeInHorizon(
   currency: string,
   startExclusive: string,
   endInclusive: string,
-): number {
+  fxRateBooks: PointInTimeFxRateBook[],
+): { income: number; appliedFxObservationIds: string[] } {
   let income = 0;
-  const foreignCurrencies = new Set<string>();
+  const appliedFxObservationIds = new Set<string>();
   for (const entry of ledger.entries) {
     if (entry.code !== code) continue;
     if (
@@ -571,17 +578,36 @@ function distributionIncomeInHorizon(
       continue;
     }
     if (entry.currency !== currency) {
-      foreignCurrencies.add(entry.currency);
+      const matchingBooks = fxRateBooks.filter((rateBook) => (
+        rateBook.sourceCurrency === entry.currency
+        && rateBook.targetCurrency === currency
+      ));
+      if (matchingBooks.length === 0) {
+        throw new Error(
+          `Point-in-Time FX conversion is required for forecast distributions in: ${entry.currency}.`,
+        );
+      }
+      if (matchingBooks.length > 1) {
+        throw new Error(`More than one FX rate book was supplied for ${entry.currency}/${currency}.`);
+      }
+      const rateBook = matchingBooks[0]!;
+      if (rateBook.decisionDate !== ledger.decisionDate) {
+        throw new Error(
+          `FX rate-book decisionDate ${rateBook.decisionDate} must match distribution-ledger decisionDate ${ledger.decisionDate}.`,
+        );
+      }
+      const converted = convertCurrencyAmountAtExactRate(
+        rateBook,
+        entry.economicIncomeDelta,
+        entry.recognitionDate,
+      );
+      income += converted.targetAmount;
+      appliedFxObservationIds.add(converted.fxObservationId);
       continue;
     }
     income += entry.economicIncomeDelta;
   }
-  if (foreignCurrencies.size > 0) {
-    throw new Error(
-      `Point-in-Time FX conversion is required for forecast distributions in: ${[...foreignCurrencies].sort().join(", ")}.`,
-    );
-  }
-  return income;
+  return { income, appliedFxObservationIds: [...appliedFxObservationIds] };
 }
 
 export function scorePositiveEtfForecast(
@@ -608,13 +634,15 @@ export function scorePositiveEtfForecast(
   assertNonNegative(request.transactionCosts, "transactionCosts");
   assertNonNegative(request.fxConversionCosts, "fxConversionCosts");
 
-  const distributionIncome = distributionIncomeInHorizon(
+  const distributionResult = distributionIncomeInHorizon(
     request.distributionLedger,
     request.code,
     request.currency,
     request.horizonStartExclusive,
     request.horizonEndInclusive,
+    request.fxRateBooks ?? [],
   );
+  const distributionIncome = distributionResult.income;
   const grossPnlBeforeCosts = request.pricePnl + distributionIncome + cashReturnPnl;
   const totalModeledCosts = request.transactionCosts + request.fxConversionCosts;
   const netPnl = grossPnlBeforeCosts - totalModeledCosts;
@@ -628,6 +656,7 @@ export function scorePositiveEtfForecast(
     transactionCosts: request.transactionCosts,
     fxConversionCosts: request.fxConversionCosts,
     totalModeledCosts,
+    appliedFxObservationIds: distributionResult.appliedFxObservationIds,
     netPnl,
     netReturn: netPnl / request.startingEquity,
     outcome: netPnl > 0 ? "hit" : "miss",

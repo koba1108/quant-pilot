@@ -18,8 +18,6 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 - `src/portfolio/risk.ts`: maximum drawdown / -30% hard stop
 - `src/portfolio/costs.ts`: turnover-aware execution costs
 
-On `ykoba/distribution-ledger-accounting`:
-
 - `src/portfolio/distribution-ledger.ts`: Point-in-Time distribution receivable, revision, payment, rebalance-cash, and forecast-scoring ledger
 
 ### Data
@@ -30,7 +28,9 @@ On `ykoba/distribution-ledger-accounting`:
 - `src/data/csv.ts`: CSV fallback provider
 - `src/data/stooq.ts`: Stooq research provider
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
+- `src/data/fx-normalization.ts`: Point-in-Time FX observations, revisions, exact-date amount conversion, and unhedged JPY return normalization
 - `docs/return-normalization.md`: normalization semantics and explicit policy boundaries
+- `docs/fx-normalization.md`: JPY FX calculation, audit contract, official evidence, and limitations
 
 ### Backtest
 
@@ -51,10 +51,13 @@ On `ykoba/distribution-ledger-accounting`:
 - `tests/return-normalization.test.ts`
 - `tests/fixtures/return-normalization/events.json`
 
-On `ykoba/distribution-ledger-accounting`:
-
 - `tests/distribution-ledger.test.ts`
 - `tests/fixtures/distribution-ledger/events.json`
+
+On `ykoba/point-in-time-jpy-fx`:
+
+- `tests/fx-normalization.test.ts`
+- `tests/fixtures/fx-normalization/rates.json`
 
 ### AI
 
@@ -101,20 +104,21 @@ Defects found and fixed on the branch:
 - A missing calendar month could stretch a forward return across multiple months.
 - Missing optional CSV fields were represented as numeric zero, and malformed in-range prices could be skipped.
 
-The fixture is synthetic unadjusted Price data. It does not validate JPY FX conversion, final data-provider quality, or investable historical performance.
+The Trend/Rotation CLI fixture is synthetic unadjusted Price data. It does not validate JPY FX conversion, final data-provider quality, or investable historical performance. JPY conversion is covered separately by the synthetic FX fixture and is not yet connected to that CLI path.
 
 PR #4 merged the Total Return foundation into `main`. Post-merge verification passed 38 tests / 0 failures, `bunx tsc --noEmit`, and both fixture CLIs.
 
-O-002 is resolved by active decision D-018. The distribution-ledger branch currently verifies 53 tests / 0 failures and passes `bunx tsc --noEmit`. It separates ex-date research Total Return from executable receivable/pay-date cash accounting, includes selected-ETF distributions in forecast scoring, and never automatically reinvests unpaid cash.
+PR #5 merged the D-018 distribution ledger. Post-merge `main` verifies 53 tests / 0 failures, passes `bunx tsc --noEmit`, and preserves both fixture CLI results.
+
+The Point-in-Time JPY FX branch verifies 67 tests / 0 failures and passes `bunx tsc --noEmit`. It converts normalized non-JPY returns using explicit exact-date rates, supports availability-timestamped corrections, and converts selected-ETF distribution income while rejecting missing or ambiguous FX inputs.
 
 The optional `bun run test:node` script remains incompatible with the pre-existing Bun-specific tests and TypeScript parameter properties under Node's strip-only loader. Bun is the required test path; this branch does not broaden scope to convert the test suite.
 
 ## Next blocks
 
-1. Review and merge the D-018 distribution ledger only with explicit user approval
-2. JPY FX normalization for overseas assets
-3. Point-in-time ETF master loader from `universe_master.csv`
-4. Data-quality and cross-source reconciliation reports
-5. Robustness grid runner for Strategy A/B
-6. Decision-package schema for Strategy C
-7. Forward-test persistence, scheduling, notifications, and monthly dashboard
+1. Review and merge the Point-in-Time JPY FX foundation only with explicit user approval
+2. Point-in-time ETF master loader from `universe_master.csv`
+3. Data-quality and cross-source reconciliation reports
+4. Robustness grid runner for Strategy A/B
+5. Decision-package schema for Strategy C
+6. Forward-test persistence, scheduling, notifications, and monthly dashboard

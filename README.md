@@ -82,6 +82,12 @@ fixtureはCorporate Actionのない合成 `unadjusted_price` 系列であり、�
 
 D-018により、研究用Total Returnはex-date終値での理論再投資に決定した。方針は `APPROVED_RESEARCH_TOTAL_RETURN_POLICY` として明示的に渡し、暗黙のデフォルトにはしない。仮想口座ではex-dateに未収金、pay-dateに現金化し、次回リバランスまで自動再投資しない。詳細は [`docs/return-normalization.md`](./docs/return-normalization.md) と [`docs/distribution-accounting.md`](./docs/distribution-accounting.md) を参照する。
 
+## Point-in-Time JPY FX normalization
+
+`src/data/fx-normalization.ts` は、正規化済みの非円Price Return／Total Returnを、為替変動込みの無ヘッジJPY系列へ変換する。レートは「1 source currencyあたりのJPY」を明示し、各取引日・分配金認識日に完全一致するPoint-in-Time観測を要求する。欠損時の前方補完、前月値利用、暗黙の逆数・クロスレートは禁止する。
+
+評価用reference rateと実売買のFXコストは分離する。最終providerはO-001として未決定で、現在のCLIには未接続。詳細は [`docs/fx-normalization.md`](./docs/fx-normalization.md) を参照する。
+
 ## Backtest pipeline
 
 `MarketDataProvider -> validation -> monthly frames -> Strategy A/B -> inverse-vol allocation -> cost model -> -30% DD stop`
