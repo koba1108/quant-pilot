@@ -17,6 +17,8 @@ Need to choose the production-quality source for:
 
 Stooq may be used for research plumbing, but is not yet approved as final evidence.
 
+Implementation note: `src/data/fx-normalization.ts` defines a provider-neutral Point-in-Time JPY conversion contract and synthetic regression fixture. It does not approve an FX source, fixing time, holiday alignment rule, license, or production adapter.
+
 ## O-003 — Exact ETF eligibility thresholds
 
 Need evidence-backed thresholds for core and theme ETFs, including:

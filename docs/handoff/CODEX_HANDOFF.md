@@ -79,17 +79,22 @@ PR #4 merged versioned Price Return / Total Return normalization with explicit e
 
 O-002 is resolved by active decision D-018. Research Total Return uses explicit ex-date, same-day-close theoretical reinvestment. The virtual portfolio separately recognizes an ex-date receivable, pay-date cash, and eligibility for reinvestment only at the next scheduled rebalance.
 
-`ykoba/distribution-ledger-accounting` implements the versioned ledger, Point-in-Time estimate revisions, payment validation, rebalance-cash extraction, distribution-aware forecast scoring, synthetic fixtures, and documentation. It does not connect a production event source or perform foreign-currency conversion.
+PR #5 merged the versioned ledger, Point-in-Time estimate revisions, payment validation, rebalance-cash extraction, distribution-aware forecast scoring, synthetic fixtures, and documentation.
+
+## Point-in-Time JPY FX normalization
+
+`ykoba/point-in-time-jpy-fx` adds a provider-neutral FX rate book and converts normalized local-currency returns into unhedged JPY returns. It requires exact-date `JPY per source-currency unit` observations, availability timestamps, explicit correction chains, and provenance. It also converts foreign distribution-income entries for forecast scoring while keeping reference valuation separate from executable FX costs.
+
+The branch does not choose the O-001 provider, fill holidays, connect the path to the ordinary CLI, or complete multicurrency cash/receivable revaluation in the simulator.
 
 ## Next implementation sequence
 
-1. Review and merge the D-018 distribution ledger only with explicit user approval.
-2. Add Point-in-Time JPY conversion for non-JPY assets.
-3. Add a point-in-time loader for `universe_master.csv`.
-4. Add data-quality reports and cross-source reconciliation hooks.
-5. Add robustness-grid execution for Strategy A/B.
-6. Define the Strategy C decision-package schema.
-7. Add forward-test persistence, scheduling, reporting, and notifications.
+1. Review and merge the Point-in-Time JPY FX foundation only with explicit user approval.
+2. Add a point-in-time loader for `universe_master.csv`.
+3. Add data-quality reports and cross-source reconciliation hooks.
+4. Add robustness-grid execution for Strategy A/B.
+5. Define the Strategy C decision-package schema.
+6. Add forward-test persistence, scheduling, reporting, and notifications.
 
 ## Working rules
 

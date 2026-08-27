@@ -34,6 +34,7 @@ Do not run a fake 20-year LLM backtest using today's web. Historical AI tests re
 - Normalized Price Return requires complete Point-in-Time Corporate Action coverage.
 - Normalized Total Return additionally requires complete distribution coverage and an explicit accounting policy.
 - Every event records availability time and source provenance.
-- Foreign-currency distributions stop before normalization until the Point-in-Time FX layer is available.
+- Foreign-currency prices and distribution income require an exact-date Point-in-Time FX observation with explicit quote direction, availability time, and provenance. Missing observations fail closed.
+- Reference-rate valuation does not replace executable FX spread, fee, or broker-conversion assumptions.
 
-See `docs/return-normalization.md` and `docs/distribution-accounting.md`. O-002 is resolved by D-018; O-001 remains open.
+See `docs/return-normalization.md`, `docs/distribution-accounting.md`, and `docs/fx-normalization.md`. O-002 is resolved by D-018; final market-data and FX provider selection remains open under O-001.

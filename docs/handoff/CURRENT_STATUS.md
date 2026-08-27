@@ -1,6 +1,6 @@
 # Current Status
 
-Snapshot date: 2026-08-26
+Snapshot date: 2026-08-27
 
 ## Repository state
 
@@ -13,7 +13,9 @@ Snapshot date: 2026-08-26
 - PR #3: merged (`fix: validate market data backtests`)
 - PR #4: merged (`feat: add return normalization foundation`)
 - Merge commit: `0e7402dbc2fba822111cc486f65498d16c0967fd`
-- Active branch: `ykoba/distribution-ledger-accounting`
+- PR #5: merged (`feat: add distribution accounting ledger`)
+- Merge commit: `dbc4f40eefe9c6c8e16b14d8283a7033ba91e6e4`
+- Active branch: `ykoba/point-in-time-jpy-fx`
 
 ## Implemented on main
 
@@ -28,6 +30,7 @@ Snapshot date: 2026-08-26
 - `src/portfolio/allocator.ts` — inverse-volatility allocation
 - `src/portfolio/costs.ts` — turnover-aware execution-cost model
 - `src/portfolio/risk.ts` — maximum drawdown and hard-stop logic
+- `src/portfolio/distribution-ledger.ts` — Point-in-Time distribution receivable, payment, and forecast-scoring ledger
 
 ### Data
 
@@ -55,6 +58,7 @@ Snapshot date: 2026-08-26
 - `tests/csv-provider.test.ts`
 - `tests/runner.test.ts`
 - `tests/return-normalization.test.ts`
+- `tests/distribution-ledger.test.ts`
 
 ## Added by merged PR #3
 
@@ -82,7 +86,7 @@ Snapshot date: 2026-08-26
 - reusable normalization fixture and `tests/return-normalization.test.ts`
 - `docs/return-normalization.md` defining semantics and policy boundaries
 
-## Added on the D-018 distribution-ledger branch
+## Added by merged PR #5
 
 - approved D-018 two-layer accounting decision and O-002 resolution
 - explicit approved research policy: ex-date recognition and same-day-close theoretical reinvestment
@@ -95,14 +99,28 @@ Snapshot date: 2026-08-26
 - `tests/fixtures/distribution-ledger/events.json` and `tests/distribution-ledger.test.ts`
 - `docs/distribution-accounting.md` — approved semantics, evidence, implementation, and limitations
 
+## Added on the Point-in-Time JPY FX branch
+
+- `src/data/fx-normalization.ts` — versioned provider-neutral FX rate book and JPY conversion
+- explicit `target_currency_per_source_currency` quote direction; JPY 150 per USD 1 is represented as `150`
+- unhedged JPY return compounds local return and FX return multiplicatively
+- exact-date matching for prices, trading value, and distribution-income entries
+- `rateDate`, `observedAt`, `availableAt`, coverage, and provenance validation
+- explicit supersession chains for corrected historical FX observations
+- no implicit forward-fill, backfill, prior-month value, quote inversion, or cross-rate construction
+- valuation/reference rates remain separate from executable FX conversion costs
+- foreign distributions can enter selected-ETF JPY forecast scoring with applied observation IDs
+- `tests/fixtures/fx-normalization/rates.json` and `tests/fx-normalization.test.ts`
+- `docs/fx-normalization.md` — calculation, Point-in-Time rules, official evidence, and limitations
+
 ## Verification status
 
-The merged implementation was checked locally on 2026-08-26. Validation fixes are on `main` through PR #3, and the Return normalization foundation is on `main` through PR #4.
+The merged implementation was checked locally on 2026-08-27. Validation fixes, Return normalization, and distribution accounting are on `main` through PR #5.
 
 - Node.js: `v26.7.0`
 - Bun: `1.3.14`
 - `bun install`: PASS, no changes
-- `bun test`: PASS, 38 tests / 0 failures on post-PR #4 `main`
+- `bun test`: PASS, 53 tests / 0 failures on post-PR #5 `main`
 - `bunx tsc --noEmit`: PASS
 - Trend CLI: PASS
 - Rotation CLI: PASS
@@ -130,9 +148,9 @@ Defects found in merged PR #1:
 
 All are fixed and covered on `main`.
 
-Current D-018 distribution-ledger branch verification:
+Current Point-in-Time JPY FX branch verification:
 
-- `bun test`: PASS, 53 tests / 0 failures
+- `bun test`: PASS, 67 tests / 0 failures
 - `bunx tsc --noEmit`: PASS
 - `bun run test:node`: FAIL due to pre-existing Bun-only imports and Node strip-only TypeScript limitations; not the required test path
 - split discontinuity normalization: PASS
@@ -144,6 +162,10 @@ Current D-018 distribution-ledger branch verification:
 - ex-date entitlement, later revision, and pay-date cash transition: PASS
 - scheduled-rebalance cash availability and forecast scoring: PASS
 - missing/mismatched payment and foreign-currency forecast rejection: PASS
+- multiplicative local-return and FX-return conversion: PASS
+- exact-date trading-value and distribution-income conversion: PASS
+- Point-in-Time FX revisions and future-data isolation: PASS
+- missing rates, inverted quotes, implicit cross rates, and ambiguous revision chains: REJECTED as required
 
 ## Required validation coverage
 
@@ -165,7 +187,8 @@ Current D-018 distribution-ledger branch verification:
 
 - Stooq is a research OHLCV source, not approved final total-return evidence.
 - D-018 accounting is approved and implemented as a deterministic ledger, but no production event provider is connected.
-- JPY conversion for overseas assets is not implemented.
+- Provider-neutral Point-in-Time JPY conversion is implemented, but no production FX provider is connected.
+- Exchange-calendar/holiday alignment has no fallback; missing exact-date rates stop conversion.
 - Cross-source reconciliation is not implemented.
 - Data licensing, retention, and reproducibility for the final provider remain unresolved.
 
@@ -180,8 +203,9 @@ Current D-018 distribution-ledger branch verification:
 - Robustness-grid execution is not implemented.
 - Rebalance-date and replacement/hysteresis comparisons are not implemented.
 - Cash return is simplified.
-- Research Total Return and embedded-fee treatment are defined; integration with production events and the full position simulator remains incomplete.
+- Research Total Return, embedded-fee treatment, and JPY return conversion are defined; integration with production events and the full position simulator remains incomplete.
 - Distribution entitlement units are supplied to the ledger; derivation from Point-in-Time orders, positions, and settlement remains unimplemented.
+- Foreign receivable/cash FX revaluation between ledger events is not integrated into the full simulator.
 - Strategy C is specified but not implemented.
 
 ### Operations
@@ -197,11 +221,10 @@ Complete through merged PR #3.
 
 ### P1 — Make data financially correct
 
-1. Review and merge the D-018 distribution ledger with explicit user approval.
-2. Add Point-in-Time JPY FX normalization for non-JPY assets.
-3. Implement a `universe_master.csv` loader with point-in-time filtering.
-4. Add data-quality reports and cross-source comparison hooks.
-5. Preserve raw input provenance and normalized-output versioning.
+1. Review and merge the Point-in-Time JPY FX foundation with explicit user approval.
+2. Implement a `universe_master.csv` loader with point-in-time filtering.
+3. Add data-quality reports and cross-source comparison hooks.
+4. Preserve raw input provenance and normalized-output versioning.
 
 ### P2 — Make research robust
 

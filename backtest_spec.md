@@ -32,6 +32,16 @@
 - NAV・市場価格へ反映済みの信託報酬を明示コストとして二重控除しない
 - 投資家固有の税処理は別レイヤーとし、未実装時は税引前と明示する
 
+## JPY FX Normalization
+
+- 非円の正規化済みreturn系列は、現地returnとFX returnを乗算して無ヘッジJPY returnへ変換する
+- 為替レートは `JPY per 1 source-currency unit` の方向を明示する
+- rate date、observed timestamp、availability timestamp、provenanceを保持する
+- 各価格日・分配金認識日の完全一致レートを要求し、前方補完・前月値・暗黙逆数・暗黙cross rateを使用しない
+- 後日の訂正はsupersession eventとしてPoint-in-Time適用し、過去snapshotを遡及上書きしない
+- 評価用reference rateと実売買のFX spread・手数料を分離する
+- 最終FX providerと休日alignment policyはO-001の検証対象とする
+
 ## コスト
 - 売買手数料
 - Bid/Ask spread
