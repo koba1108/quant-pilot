@@ -11,7 +11,9 @@ Snapshot date: 2026-08-26
 - Merge commit: `5b161573419bccd83cd82400fb31110d99651fe1`
 - PR #2: merged (`docs: add Codex Project migration instructions`)
 - PR #3: merged (`fix: validate market data backtests`)
-- Active branch: `ykoba/total-return-normalization`
+- PR #4: merged (`feat: add return normalization foundation`)
+- Merge commit: `0e7402dbc2fba822111cc486f65498d16c0967fd`
+- Active branch: `ykoba/distribution-ledger-accounting`
 
 ## Implemented on main
 
@@ -34,6 +36,7 @@ Snapshot date: 2026-08-26
 - `src/data/provider.ts` — `MarketDataProvider` interface and bar validation
 - `src/data/csv.ts` — CSV fallback provider
 - `src/data/stooq.ts` — Stooq research provider
+- `src/data/return-normalization.ts` — versioned Price Return / Total Return normalization
 
 ### Backtest
 
@@ -51,6 +54,7 @@ Snapshot date: 2026-08-26
 - `tests/frame-builder.test.ts`
 - `tests/csv-provider.test.ts`
 - `tests/runner.test.ts`
+- `tests/return-normalization.test.ts`
 
 ## Added by merged PR #3
 
@@ -64,11 +68,11 @@ Snapshot date: 2026-08-26
 - integration tests in `tests/csv-provider.test.ts` and `tests/runner.test.ts`
 - expanded point-in-time and safety tests in existing suites
 
-## Added on the Total Return foundation branch
+## Added by merged PR #4
 
 - `src/data/return-normalization.ts` — versioned Price Return / Total Return normalization
 - explicit cash-distribution, split/reverse-split, unsupported-action, coverage, and provenance contracts
-- mandatory `ex_date` or `pay_date` policy selection for Total Return; no default policy
+- explicit `ex_date` or `pay_date` policy selection for Total Return
 - Point-in-Time exclusion of future bars/events and rejection of events unavailable at recognition time
 - fail-closed handling for incomplete coverage, foreign-currency distributions, and unsupported actions
 - `unadjusted_price` / `provider_adjusted` labels in the existing CLI
@@ -76,16 +80,29 @@ Snapshot date: 2026-08-26
 - ordinary provider CLI runs emit `returnNormalization.status=not_normalized` and a basis-specific warning
 - portfolio output rename from ambiguous `totalReturn` to `cumulativePortfolioReturn`
 - reusable normalization fixture and `tests/return-normalization.test.ts`
-- `docs/return-normalization.md` defining semantics and unresolved boundaries
+- `docs/return-normalization.md` defining semantics and policy boundaries
+
+## Added on the D-018 distribution-ledger branch
+
+- approved D-018 two-layer accounting decision and O-002 resolution
+- explicit approved research policy: ex-date recognition and same-day-close theoretical reinvestment
+- `src/portfolio/distribution-ledger.ts` — versioned entitlement, revision, payment, and audit entries
+- ex-date receivables remain in economic value but are unavailable for orders until an explicit pay-date event
+- paid distribution cash becomes eligible only at a scheduled rebalance; no automatic ex-date/pay-date purchase
+- forecast scoring includes dated distribution income and subtracts transaction and FX-conversion costs
+- trust fees embedded in NAV/market prices are documented as non-additive costs
+- missing payments, payment mismatches, late amounts, foreign-currency scoring, and future-data contamination fail closed
+- `tests/fixtures/distribution-ledger/events.json` and `tests/distribution-ledger.test.ts`
+- `docs/distribution-accounting.md` — approved semantics, evidence, implementation, and limitations
 
 ## Verification status
 
-The merged PR #1 implementation was checked locally on 2026-08-26. Defects were fixed and merged through PR #3.
+The merged implementation was checked locally on 2026-08-26. Validation fixes are on `main` through PR #3, and the Return normalization foundation is on `main` through PR #4.
 
 - Node.js: `v26.7.0`
 - Bun: `1.3.14`
 - `bun install`: PASS, no changes
-- `bun test`: PASS, 22 tests / 0 failures
+- `bun test`: PASS, 38 tests / 0 failures on post-PR #4 `main`
 - `bunx tsc --noEmit`: PASS
 - Trend CLI: PASS
 - Rotation CLI: PASS
@@ -113,17 +130,20 @@ Defects found in merged PR #1:
 
 All are fixed and covered on `main`.
 
-Total Return foundation branch verification:
+Current D-018 distribution-ledger branch verification:
 
-- `bun test`: PASS, 38 tests / 0 failures
+- `bun test`: PASS, 53 tests / 0 failures
 - `bunx tsc --noEmit`: PASS
 - `bun run test:node`: FAIL due to pre-existing Bun-only imports and Node strip-only TypeScript limitations; not the required test path
 - split discontinuity normalization: PASS
-- explicit ex-date/pay-date path comparison: PASS
+- approved ex-date research policy and pay-date robustness path: PASS
 - incomplete coverage and missing policy rejection: PASS
 - future bar/event isolation: PASS
 - event-availability Point-in-Time validation: PASS
 - foreign-currency and unsupported-action rejection: PASS
+- ex-date entitlement, later revision, and pay-date cash transition: PASS
+- scheduled-rebalance cash availability and forecast scoring: PASS
+- missing/mismatched payment and foreign-currency forecast rejection: PASS
 
 ## Required validation coverage
 
@@ -144,7 +164,7 @@ Total Return foundation branch verification:
 ### Data correctness
 
 - Stooq is a research OHLCV source, not approved final total-return evidence.
-- Distribution and split normalization foundation exists, but no production event provider or approved O-002 accounting policy exists.
+- D-018 accounting is approved and implemented as a deterministic ledger, but no production event provider is connected.
 - JPY conversion for overseas assets is not implemented.
 - Cross-source reconciliation is not implemented.
 - Data licensing, retention, and reproducibility for the final provider remain unresolved.
@@ -160,7 +180,8 @@ Total Return foundation branch verification:
 - Robustness-grid execution is not implemented.
 - Rebalance-date and replacement/hysteresis comparisons are not implemented.
 - Cash return is simplified.
-- Exact total-return and management-fee handling require final data decisions.
+- Research Total Return and embedded-fee treatment are defined; integration with production events and the full position simulator remains incomplete.
+- Distribution entitlement units are supplied to the ledger; derivation from Point-in-Time orders, positions, and settlement remains unimplemented.
 - Strategy C is specified but not implemented.
 
 ### Operations
@@ -176,12 +197,11 @@ Complete through merged PR #3.
 
 ### P1 — Make data financially correct
 
-1. Review the Total Return normalization foundation.
-2. Research and approve the final O-002 distribution-accounting policy.
-3. Add Point-in-Time JPY FX normalization for non-JPY assets.
-4. Implement a `universe_master.csv` loader with point-in-time filtering.
-5. Add data-quality reports and cross-source comparison hooks.
-6. Preserve raw input provenance and normalized-output versioning.
+1. Review and merge the D-018 distribution ledger with explicit user approval.
+2. Add Point-in-Time JPY FX normalization for non-JPY assets.
+3. Implement a `universe_master.csv` loader with point-in-time filtering.
+4. Add data-quality reports and cross-source comparison hooks.
+5. Preserve raw input provenance and normalized-output versioning.
 
 ### P2 — Make research robust
 

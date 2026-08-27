@@ -73,20 +73,23 @@ The validation found defects in holding-limit enforcement, missing-return handli
 
 ## Total Return foundation
 
-`ykoba/total-return-normalization` adds versioned Price Return / Total Return normalization with explicit event coverage, source provenance, Point-in-Time availability checks, and no default distribution policy. Existing CLI inputs are labeled `unadjusted_price` or `provider_adjusted`; neither is silently promoted to Total Return.
+PR #4 merged versioned Price Return / Total Return normalization with explicit event coverage, source provenance, and Point-in-Time availability checks. Existing CLI inputs are labeled `unadjusted_price` or `provider_adjusted`; neither is silently promoted to Total Return.
 
-O-002 remains open. Supporting ex-date and pay-date comparison does not approve either convention.
+## Distribution accounting
+
+O-002 is resolved by active decision D-018. Research Total Return uses explicit ex-date, same-day-close theoretical reinvestment. The virtual portfolio separately recognizes an ex-date receivable, pay-date cash, and eligibility for reinvestment only at the next scheduled rebalance.
+
+`ykoba/distribution-ledger-accounting` implements the versioned ledger, Point-in-Time estimate revisions, payment validation, rebalance-cash extraction, distribution-aware forecast scoring, synthetic fixtures, and documentation. It does not connect a production event source or perform foreign-currency conversion.
 
 ## Next implementation sequence
 
-1. Review the Total Return normalization foundation.
-2. Research and approve the final O-002 accounting policy.
-3. Add Point-in-Time JPY conversion for non-JPY assets.
-4. Add a point-in-time loader for `universe_master.csv`.
-5. Add data-quality reports and cross-source reconciliation hooks.
-6. Add robustness-grid execution for Strategy A/B.
-7. Define the Strategy C decision-package schema.
-8. Add forward-test persistence, scheduling, reporting, and notifications.
+1. Review and merge the D-018 distribution ledger only with explicit user approval.
+2. Add Point-in-Time JPY conversion for non-JPY assets.
+3. Add a point-in-time loader for `universe_master.csv`.
+4. Add data-quality reports and cross-source reconciliation hooks.
+5. Add robustness-grid execution for Strategy A/B.
+6. Define the Strategy C decision-package schema.
+7. Add forward-test persistence, scheduling, reporting, and notifications.
 
 ## Working rules
 

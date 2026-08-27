@@ -2,6 +2,8 @@
 
 These items are intentionally unresolved. Codex must not convert them into permanent policy by preference alone. Resolve them through research, reproducible tests, and human approval where material.
 
+O-002 was resolved on 2026-08-26 and moved to active decision D-018. Decision IDs are not reused.
+
 ## O-001 — Final market-data provider
 
 Need to choose the production-quality source for:
@@ -14,19 +16,6 @@ Need to choose the production-quality source for:
 - reproducible access and acceptable licensing/cost.
 
 Stooq may be used for research plumbing, but is not yet approved as final evidence.
-
-## O-002 — Distribution and total-return treatment
-
-The virtual portfolio compounds, but the exact accounting remains open:
-
-- whether forecast hit/miss scoring includes distributions;
-- how ex-dividend dates and reinvestment dates are modeled;
-- how management fees embedded in NAV are separated from explicit costs;
-- how distributions are reinvested under monthly rebalancing.
-
-This is the unanswered item that followed the original policy interview; do not assume a final rule.
-
-Implementation note: `src/data/return-normalization.ts` supports explicit `ex_date` and `pay_date` comparison with `same_day_close` reinvestment, but has no default. This is an experimental comparison surface, not an approved accounting policy. Final selection still requires evidence and human approval.
 
 ## O-003 — Exact ETF eligibility thresholds
 

@@ -80,7 +80,7 @@ fixtureはCorporate Actionのない合成 `unadjusted_price` 系列であり、�
 - `total_return`: さらに完全な分配金coverageと、`ex_date`／`pay_date`を含む明示的ポリシーを要求
 - 外貨分配金、未対応Corporate Action、coverage不足、認識日時点で未入手のイベントはfail closed
 
-再投資日などの恒久方針は未決定で、デフォルト値はない。詳細は [`docs/return-normalization.md`](./docs/return-normalization.md) と `OPEN_DECISIONS.md` O-002を参照する。
+D-018により、研究用Total Returnはex-date終値での理論再投資に決定した。方針は `APPROVED_RESEARCH_TOTAL_RETURN_POLICY` として明示的に渡し、暗黙のデフォルトにはしない。仮想口座ではex-dateに未収金、pay-dateに現金化し、次回リバランスまで自動再投資しない。詳細は [`docs/return-normalization.md`](./docs/return-normalization.md) と [`docs/distribution-accounting.md`](./docs/distribution-accounting.md) を参照する。
 
 ## Backtest pipeline
 

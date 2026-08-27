@@ -1,12 +1,12 @@
 # Return Normalization Foundation v1
 
-Status: experimental implementation foundation. The accounting choices in OPEN_DECISIONS.md O-002 remain unresolved.
+Status: implemented foundation. D-018 approves the primary research policy; virtual-portfolio cash accounting is defined separately in `distribution-accounting.md`.
 
 ## Purpose
 
 The repository previously used AdjustedClose without an explicit statement of what the provider adjustment contained. This foundation separates source-price labels from normalized Price Return and Total Return series.
 
-It does not approve a final market-data provider or a permanent distribution-reinvestment policy.
+It does not approve a final market-data provider. The approved primary research policy is explicit ex-date close reinvestment; pay-date remains a robustness comparison path.
 
 ## Return-basis labels
 
@@ -80,12 +80,12 @@ For Price Return, recognized cash is zero. The factors compound into the normali
 
 ## Explicit policy boundary
 
-Total Return has no default distribution policy. Callers must provide:
+Total Return still has no silent default. Callers must record `APPROVED_RESEARCH_TOTAL_RETURN_POLICY_ID` and explicitly use `APPROVED_RESEARCH_TOTAL_RETURN_POLICY`, which selects:
 
-- distributionRecognition: ex_date or pay_date;
-- reinvestment: currently only same_day_close is implemented.
+- distributionRecognition: ex_date;
+- reinvestment: same_day_close.
 
-The implementation supports both recognition dates so they can be compared reproducibly. Supporting an option is not approval of that option. A final choice still requires evidence and user approval under O-002.
+The implementation retains pay-date recognition for reproducible robustness comparison, but it is not the primary research policy. Neither path represents spendable portfolio cash; that state is handled by `src/portfolio/distribution-ledger.ts` under D-018.
 
 ## Known limitations
 

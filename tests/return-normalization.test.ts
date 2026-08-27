@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import type { DailyBar } from "../src/data/models.ts";
 import {
+  APPROVED_RESEARCH_TOTAL_RETURN_POLICY,
+  APPROVED_RESEARCH_TOTAL_RETURN_POLICY_ID,
   normalizedReturnSeriesToDailyBars,
   normalizeReturnSeries,
   type NormalizeReturnSeriesRequest,
@@ -96,6 +98,15 @@ test("Total Return applies an explicit ex-date close-reinvestment policy", () =>
   assert.equal(adaptedBars.at(-1)!.adjustedClose, result.points.at(-1)!.indexValue);
   assert.equal(adaptedBars.at(-1)!.volume, 2100);
   assert.equal(adaptedBars.at(-1)!.tradingValue, 105000);
+});
+
+test("the approved research Total Return policy remains explicit and versionable", () => {
+  assert.equal(APPROVED_RESEARCH_TOTAL_RETURN_POLICY_ID, "research-total-return-d018-v1");
+  assert.deepEqual(APPROVED_RESEARCH_TOTAL_RETURN_POLICY, {
+    distributionRecognition: "ex_date",
+    reinvestment: "same_day_close",
+  });
+  assert.equal(Object.isFrozen(APPROVED_RESEARCH_TOTAL_RETURN_POLICY), true);
 });
 
 test("ex-date and pay-date policies remain explicit and produce different paths", () => {

@@ -18,6 +18,10 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 - `src/portfolio/risk.ts`: maximum drawdown / -30% hard stop
 - `src/portfolio/costs.ts`: turnover-aware execution costs
 
+On `ykoba/distribution-ledger-accounting`:
+
+- `src/portfolio/distribution-ledger.ts`: Point-in-Time distribution receivable, revision, payment, rebalance-cash, and forecast-scoring ledger
+
 ### Data
 
 - `src/data/models.ts`: normalized market / Universe models
@@ -25,11 +29,8 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 - `src/data/provider.ts`: `MarketDataProvider` abstraction and daily-bar validation
 - `src/data/csv.ts`: CSV fallback provider
 - `src/data/stooq.ts`: Stooq research provider
-
-On `ykoba/total-return-normalization`:
-
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
-- `docs/return-normalization.md`: normalization semantics and unresolved policy boundaries
+- `docs/return-normalization.md`: normalization semantics and explicit policy boundaries
 
 ### Backtest
 
@@ -47,11 +48,13 @@ On `ykoba/total-return-normalization`:
 - `tests/frame-builder.test.ts`
 - `tests/csv-provider.test.ts`
 - `tests/runner.test.ts`
-
-On `ykoba/total-return-normalization`:
-
 - `tests/return-normalization.test.ts`
 - `tests/fixtures/return-normalization/events.json`
+
+On `ykoba/distribution-ledger-accounting`:
+
+- `tests/distribution-ledger.test.ts`
+- `tests/fixtures/distribution-ledger/events.json`
 
 ### AI
 
@@ -100,17 +103,18 @@ Defects found and fixed on the branch:
 
 The fixture is synthetic unadjusted Price data. It does not validate JPY FX conversion, final data-provider quality, or investable historical performance.
 
-The Total Return foundation branch currently verifies 38 tests / 0 failures and passes `bunx tsc --noEmit`. It distinguishes unadjusted/provider-adjusted CLI inputs from normalized Price Return and Total Return. Total Return requires complete event coverage and an explicit policy; O-002 remains open.
+PR #4 merged the Total Return foundation into `main`. Post-merge verification passed 38 tests / 0 failures, `bunx tsc --noEmit`, and both fixture CLIs.
+
+O-002 is resolved by active decision D-018. The distribution-ledger branch currently verifies 53 tests / 0 failures and passes `bunx tsc --noEmit`. It separates ex-date research Total Return from executable receivable/pay-date cash accounting, includes selected-ETF distributions in forecast scoring, and never automatically reinvests unpaid cash.
 
 The optional `bun run test:node` script remains incompatible with the pre-existing Bun-specific tests and TypeScript parameter properties under Node's strip-only loader. Bun is the required test path; this branch does not broaden scope to convert the test suite.
 
 ## Next blocks
 
-1. Review and merge the Total Return normalization foundation only with explicit user approval
-2. Research and approve the final O-002 distribution-accounting policy
-3. JPY FX normalization for overseas assets
-4. Point-in-time ETF master loader from `universe_master.csv`
-5. Data-quality and cross-source reconciliation reports
-6. Robustness grid runner for Strategy A/B
-7. Decision-package schema for Strategy C
-8. Forward-test persistence, scheduling, notifications, and monthly dashboard
+1. Review and merge the D-018 distribution ledger only with explicit user approval
+2. JPY FX normalization for overseas assets
+3. Point-in-time ETF master loader from `universe_master.csv`
+4. Data-quality and cross-source reconciliation reports
+5. Robustness grid runner for Strategy A/B
+6. Decision-package schema for Strategy C
+7. Forward-test persistence, scheduling, notifications, and monthly dashboard
