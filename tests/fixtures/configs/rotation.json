@@ -9,6 +9,7 @@
   "returnBasis": "unadjusted_price",
   "provider": "csv",
   "csvRoot": "tests/fixtures/market-data",
+  "researchLayer": "synthetic_fixture",
   "assets": [
     { "code": "ALPHA", "symbol": "synthetic", "listingDate": "2023-01-02" },
     { "code": "BETA", "symbol": "synthetic", "listingDate": "2023-01-02" },

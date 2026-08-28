@@ -48,7 +48,7 @@ bun run backtest --config=backtest.config.json
 - `unadjusted_price`: `Close`を使用
 - `provider_adjusted`: `AdjustedClose`を使用するが、分配金込みTotal Returnとは認定しない
 
-CLI出力は `backtest-summary-v2`。通常のCSV/Stooq経路は `returnNormalization.status=not_normalized` と警告を出す。`cumulativePortfolioReturn` はポートフォリオの累積損益であり、入力系列がTotal Returnであることを意味しない。通常のCSV入力を `total_return` と宣言することはできない。
+CLI出力は `backtest-summary-v2`。通常のCSV/Stooq経路は `returnNormalization.status=not_normalized`、`evidenceDisposition=research_only` と警告を出す。`cumulativePortfolioReturn` はポートフォリオの累積損益であり、入力系列がTotal Returnであることを意味しない。通常のCSV入力を `total_return` と宣言することはできない。strict Universe masterを使わない互換経路は、明示した `synthetic_fixture` / `proxy` researchに限定される。正規化return・行単位availability・JPY換算が通常runnerへ統合されるまで、`researchLayer=etf_realistic` は実行を拒否する。
 
 Stooqを使う場合はAPIキーを設定してproviderを切り替える。
 
@@ -72,6 +72,15 @@ bun run backtest --config=tests/fixtures/configs/rotation.json
 
 fixtureはCorporate Actionのない合成 `unadjusted_price` 系列であり、分配金、JPY換算、実際のスプレッドや流動性を表現しない。出力は配管と制約の検証専用で、投資成績の根拠には使用しない。
 
+厳格なPoint-in-Time Universe masterを通す同等の統合経路もある。
+
+```bash
+bun run backtest --config=tests/fixtures/configs/trend-universe.json
+bun run backtest --config=tests/fixtures/configs/rotation-universe.json
+```
+
+ルートの `universe_master.csv` は初期候補カタログであり、上場履歴、availability、symbol、provenanceが不足しているため、そのまま歴史的Universeとしては使用できない。実行用の `universe-master-v1` 契約と制約は [`docs/universe-master.md`](./docs/universe-master.md) を参照する。
+
 ## Return normalization
 
 `src/data/return-normalization.ts` は、raw CloseとPoint-in-Timeイベントから正規化指数を作る基盤を提供する。
@@ -88,6 +97,26 @@ D-018により、研究用Total Returnはex-date終値での理論再投資に�
 
 評価用reference rateと実売買のFXコストは分離する。最終providerはO-001として未決定で、現在のCLIには未接続。詳細は [`docs/fx-normalization.md`](./docs/fx-normalization.md) を参照する。
 
+## Data quality and reconciliation
+
+versioned provenance、決定論的な品質report、provider-neutralな複数source照合hookを提供する。単一sourceや未調整Priceを合格扱いせず、`research_only` と `blocked` を明示する。現段階はdataset終点のsidecar auditであり、各signal frameのproduction gateではない。
+
+```bash
+bun run data-quality --config=tests/fixtures/configs/data-quality.json
+```
+
+fixtureは意図どおり `research_only` になる。詳細は [`docs/data-quality.md`](./docs/data-quality.md) を参照する。
+
+## Strategy A/B robustness grid
+
+Strategy weights、コスト、最大保有数、volatility windowを全組合せで実行し、全cellと安定性rangeを出力する。最良cellを自動採用しない。未実装の月中・25日・hysteresis等は、既存結果で代用せず明示的な `unsupported` cellになる。
+
+```bash
+bun run robustness --config=tests/fixtures/configs/robustness-grid.json
+```
+
+詳細は [`docs/robustness-grid.md`](./docs/robustness-grid.md) を参照する。
+
 ## Backtest pipeline
 
 `MarketDataProvider -> validation -> monthly frames -> Strategy A/B -> inverse-vol allocation -> cost model -> -30% DD stop`
@@ -96,14 +125,14 @@ Point-in-Time制約として、設定された上場日前・上場廃止日後�
 
 ## Structure
 
-- `src/data/` — market data providers / point-in-time Universe / validation
+- `src/data/` — market data providers / Point-in-Time Universe / provenance / quality / reconciliation
 - `src/strategies/` — Strategy A Trend / Strategy B Rotation
 - `src/portfolio/` — allocation / risk / costs
 - `src/backtest/` — frame builder / simulator / metrics / CLI runner
 - `src/ai/` — Strategy C AI investment committee
 - `docs/handoff/` — Codex Project向け引き継ぎ資料
 - `investment_policy.md` — 投資方針とガードレール
-- `universe_master.csv` — Universe初版
+- `universe_master.csv` — Universe初期候補カタログ（歴史実行用masterではない）
 - `strategy_spec.md` — Strategy A/B/C
 - `backtest_spec.md` — バックテスト設計
 

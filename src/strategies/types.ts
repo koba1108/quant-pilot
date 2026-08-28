@@ -12,3 +12,22 @@ export interface RankedAsset {
   score: number;
   volatility: number;
 }
+
+export interface TrendStrategyParameters {
+  r3mWeight: number;
+  r6mWeight: number;
+  r12mWeight: number;
+  requirePositiveR12m: boolean;
+}
+
+export interface RotationStrategyParameters {
+  r6mWeight: number;
+  r12mWeight: number;
+  volatilityPenalty: number;
+  requirePositiveR12m: boolean;
+}
+
+export interface StrategyParameterOverrides {
+  trend?: TrendStrategyParameters;
+  rotation?: RotationStrategyParameters;
+}

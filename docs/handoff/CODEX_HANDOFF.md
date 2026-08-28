@@ -5,8 +5,9 @@
 - Repository: `koba1108/quant-pilot`
 - Local path: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- PR #1: merged into `main`
-- Handoff date: 2026-08-26
+- Current implementation branch: `ykoba/pit-universe-quality-robustness`
+- Pull request: #7 (`feat: add point-in-time research validation`), open and intentionally unmerged
+- Handoff date: 2026-08-28
 - Primary migration instructions: `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 
 ## Mission
@@ -41,60 +42,58 @@ JPY 1,000,000 × 3 strategies
 Decision Package / Monthly Report
 ```
 
-## What is implemented
+## Merged foundation
 
-`main` contains deterministic TypeScript implementations for:
+`main` through PR #6 contains deterministic TypeScript implementations for:
 
-- Strategy A/B ranking
-- inverse-volatility allocation
-- transaction-cost calculation
-- drawdown handling
-- point-in-time universe primitives
-- monthly simulation
-- performance metrics
-- `MarketDataProvider` abstraction
-- CSV market-data provider
-- Stooq research provider
-- daily-bar to monthly-frame construction
-- Strategy A/B CLI runner
-- example backtest configuration
-- frame-builder test
+- Strategy A/B ranking, inverse-volatility allocation, costs, the three-holding limit, and the -30% hard stop
+- commit-safe Trend/Rotation CLI fixtures and Point-in-Time lifecycle validation
+- versioned Price Return / Total Return normalization
+- D-018 distribution receivable/pay-date accounting
+- Point-in-Time non-JPY to JPY conversion
+- CSV and Stooq research providers
 
-## Phase 0 validation
+PR #6 (`feat: add point-in-time JPY FX normalization`) was merged on 2026-08-27 at merge commit `15cb74346f0acdd03302155b318f0fc49e266cb2`. Post-merge baseline verification passed 67 Bun tests, TypeScript checking, and both synthetic Strategy A/B CLIs.
 
-PR #1 was merged before local verification. Validation and defect fixes were completed afterward and merged through PR #3.
+## Current branch
 
-- `bun install`: success
-- `bun test`: 22 pass / 0 fail
-- Trend and Rotation fixture CLI runs: success
-- Point-in-Time boundaries, future-data isolation, explicit missing-history handling, costs, maximum three holdings, reproducibility, and the -30% stop: covered
+`ykoba/pit-universe-quality-robustness` combines the next three already-defined foundations in one reviewable PR:
 
-The validation found defects in holding-limit enforcement, missing-return handling, exclusion visibility, stop-liquidation costs, consecutive-month handling, and CSV missing-value handling. Fixes and commit-safe synthetic fixtures are now on `main`. See `CURRENT_STATUS.md` for exact commands, results, and limitations.
+1. a strict versioned Point-in-Time Universe master and per-decision-date runner integration;
+2. raw artifact provenance, deterministic data-quality reports, and source-reconciliation hooks;
+3. a deterministic Strategy A/B robustness grid with no automatic winning parameter selection.
 
-## Total Return foundation
+The branch intentionally does not implement Strategy C, operational scheduling, a dashboard, a production provider, or brokerage/order behavior.
 
-PR #4 merged versioned Price Return / Total Return normalization with explicit event coverage, source provenance, and Point-in-Time availability checks. Existing CLI inputs are labeled `unadjusted_price` or `provider_adjusted`; neither is silently promoted to Total Return.
+## Important data boundaries
 
-## Distribution accounting
+- The repository-root `universe_master.csv` is a legacy candidate catalog. It is not safe as a Point-in-Time membership source and is not silently upgraded or inferred.
+- The strict v1 fixture uses synthetic instruments, versioned observations, availability timestamps, and explicit listing/last-eligible dates.
+- The quality fixture is expected to be `research_only` because it is unadjusted, single-source synthetic data.
+- Ordinary runner output is explicitly `research_only`; `etf_realistic` is rejected until normalized returns, row-level availability, and JPY conversion are integrated.
+- The config-only runner path is explicitly limited to `synthetic_fixture` or `proxy`; strict product/currency enforcement requires the versioned master.
+- Reconciliation never chooses a preferred source implicitly.
+- Robustness output is machine-labeled `research_only` / `not_normalized` evidence for O-005/O-006 research, not an approved parameter decision.
+- Stooq remains research plumbing and must not be the sole final investment basis.
 
-O-002 is resolved by active decision D-018. Research Total Return uses explicit ex-date, same-day-close theoretical reinvestment. The virtual portfolio separately recognizes an ex-date receivable, pay-date cash, and eligibility for reinvestment only at the next scheduled rebalance.
+## Verification snapshot
 
-PR #5 merged the versioned ledger, Point-in-Time estimate revisions, payment validation, rebalance-cash extraction, distribution-aware forecast scoring, synthetic fixtures, and documentation.
+- `bun test`: 105 pass / 0 fail
+- `bunx tsc --noEmit`: pass
+- Trend with strict v1 Universe: pass
+- Rotation with strict v1 Universe: pass
+- data-quality CLI: pass with expected `research_only` disposition
+- robustness grid: 16 completed supported cells and 16 explicit unsupported cells
 
-## Point-in-Time JPY FX normalization
-
-`ykoba/point-in-time-jpy-fx` adds a provider-neutral FX rate book and converts normalized local-currency returns into unhedged JPY returns. It requires exact-date `JPY per source-currency unit` observations, availability timestamps, explicit correction chains, and provenance. It also converts foreign distribution-income entries for forecast scoring while keeping reference valuation separate from executable FX costs.
-
-The branch does not choose the O-001 provider, fill holidays, connect the path to the ordinary CLI, or complete multicurrency cash/receivable revaluation in the simulator.
+See `CURRENT_STATUS.md` for commands, outputs, and current limitations.
 
 ## Next implementation sequence
 
-1. Review and merge the Point-in-Time JPY FX foundation only with explicit user approval.
-2. Add a point-in-time loader for `universe_master.csv`.
-3. Add data-quality reports and cross-source reconciliation hooks.
-4. Add robustness-grid execution for Strategy A/B.
-5. Define the Strategy C decision-package schema.
-6. Add forward-test persistence, scheduling, reporting, and notifications.
+1. Review PR #7 and merge only after explicit user approval.
+2. Research/connect production-grade Universe and data-provider sources without settling O-001 arbitrarily.
+3. Add the remaining execution-timing, replacement/hysteresis, crisis-period, and benchmark-comparison robustness axes.
+4. Define the Strategy C decision-package schema.
+5. Add forward-test persistence, scheduling, reporting, and notifications.
 
 ## Working rules
 

@@ -19,6 +19,8 @@ test("simulator compounds and costs", () => {
   assert.ok(result.equityCurve.at(-1)! < withoutCosts.equityCurve.at(-1)!);
   assert.equal(result.monthlyReturns.length, 2);
   assert.ok(Math.abs(result.totalCostRate - .001) < 1e-12);
+  assert.ok(result.totalTurnover > 0);
+  assert.ok(result.averageCashWeight >= 0 && result.averageCashWeight <= 1);
 });
 
 test("simulator hard stops after 30% drawdown and charges liquidation cost", () => {
@@ -32,6 +34,7 @@ test("simulator hard stops after 30% drawdown and charges liquidation cost", () 
   assert.deepEqual(result.endingWeights, { CASH: 1 });
   assert.deepEqual(result.weightsHistory[1], { CASH: 1 });
   assert.ok(Math.abs(result.totalCostRate - .002) < 1e-12);
+  assert.equal(result.averageCashWeight, .5);
 });
 
 test("simulator rejects a holding limit above the approved maximum", () => {

@@ -6,7 +6,9 @@
   "scripts": {
     "test": "bun test",
     "test:node": "node --experimental-strip-types --test tests/*.test.ts",
-    "backtest": "bun run src/backtest/runner.ts"
+    "backtest": "bun run src/backtest/runner.ts",
+    "data-quality": "bun run src/data/data-quality-runner.ts",
+    "robustness": "bun run src/backtest/robustness-grid.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

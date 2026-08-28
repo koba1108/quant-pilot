@@ -10,14 +10,13 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 
 - `src/strategies/trend.ts`: Strategy A Trend ranking
 - `src/strategies/rotation.ts`: Strategy B Cross-Asset Rotation ranking
-- `src/strategies/types.ts`: normalized strategy inputs
+- `src/strategies/types.ts`: normalized strategy inputs and parameter contracts
 
 ### Portfolio / Risk
 
 - `src/portfolio/allocator.ts`: inverse-volatility allocation
 - `src/portfolio/risk.ts`: maximum drawdown / -30% hard stop
 - `src/portfolio/costs.ts`: turnover-aware execution costs
-
 - `src/portfolio/distribution-ledger.ts`: Point-in-Time distribution receivable, revision, payment, rebalance-cash, and forecast-scoring ledger
 
 ### Data
@@ -29,7 +28,8 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 - `src/data/stooq.ts`: Stooq research provider
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
 - `src/data/fx-normalization.ts`: Point-in-Time FX observations, revisions, exact-date amount conversion, and unhedged JPY return normalization
-- `docs/return-normalization.md`: normalization semantics and explicit policy boundaries
+- `docs/return-normalization.md`: return-normalization semantics and explicit policy boundaries
+- `docs/distribution-accounting.md`: D-018 distribution-accounting semantics
 - `docs/fx-normalization.md`: JPY FX calculation, audit contract, official evidence, and limitations
 
 ### Backtest
@@ -40,28 +40,37 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 - `src/backtest/runner.ts`: config-driven Strategy A/B CLI
 - `backtest.config.example.json`: runnable configuration example
 
-### Tests present
-
-- `tests/core.test.ts`
-- `tests/data-costs.test.ts`
-- `tests/simulator.test.ts`
-- `tests/frame-builder.test.ts`
-- `tests/csv-provider.test.ts`
-- `tests/runner.test.ts`
-- `tests/return-normalization.test.ts`
-- `tests/fixtures/return-normalization/events.json`
-
-- `tests/distribution-ledger.test.ts`
-- `tests/fixtures/distribution-ledger/events.json`
-
-On `ykoba/point-in-time-jpy-fx`:
-
-- `tests/fx-normalization.test.ts`
-- `tests/fixtures/fx-normalization/rates.json`
-
 ### AI
 
 - `src/ai/`: Strategy C area. PM / Macro Analyst / Risk-Critic will consume validated, timestamped inputs. Strategy C is not implemented yet.
+
+## Added on `ykoba/pit-universe-quality-robustness`
+
+### Point-in-Time Universe
+
+- `src/data/universe-master.ts`: strict versioned CSV loader, revision-chain validation, listing/last-eligible bounds, D-003 product flags, currency capability, and decision-time snapshot resolution
+- `src/data/universe.ts`: decision-date eligibility diagnostics with no implicit liquidity or history substitution
+- `src/backtest/runner.ts`: opt-in `universeMasterPath`, per-frame Point-in-Time resolution, full decision provenance, applied observation/artifact IDs, and execution-boundary input-integrity checks
+- `docs/universe-master.md`: v1 schema, inclusive date semantics, provenance, and legacy-catalog boundary
+
+The repository-root `universe_master.csv` remains a legacy research catalog. It lacks the timestamps and lifecycle fields needed for safe backtest membership and is intentionally rejected by the strict v1 loader. The config-only compatibility path now requires an explicit `synthetic_fixture` or `proxy` research label.
+
+### Data quality and reconciliation
+
+- `src/data/provenance.ts`: canonical hashing and versioned raw/normalized artifact lineage
+- `src/data/data-quality.ts`: deterministic quality findings and `pass` / `research_only` / `blocked` disposition
+- `src/data/reconciliation.ts`: parent-artifact-bound observation evidence, consumer-side semantic recomputation, and explicit source comparison without silently selecting a winning source
+- `src/data/data-quality-runner.ts`: config-driven quality CLI using the same input-loading path as the backtest
+- `docs/data-quality.md`: policy, failure behavior, and current source limitations
+
+### Strategy A/B robustness
+
+- `src/backtest/robustness-grid.ts`: deterministic parameter-grid execution and stability summaries, with machine-readable `research_only` / `not_normalized` boundaries
+- Strategy A/B ranking functions accept validated versioned parameter overrides while preserving current defaults
+- Grid cells report unsupported rebalance/replacement rules explicitly instead of substituting current behavior
+- `docs/robustness-grid.md`: supported axes, metrics, fingerprints, and interpretation boundary
+
+No grid cell is automatically promoted to an approved strategy. O-005 and O-006 remain open.
 
 ## Runtime
 
@@ -83,42 +92,30 @@ Stooq is a research plumbing provider only. Do not interpret Stooq-only OHLCV re
 
 ## Verification state
 
-PR #1 was merged before local verification. The merged code was subsequently validated and fixed by PR #3, now merged into `main`.
+On `main` through merged PR #6:
 
 - Runtime: Node.js `v26.7.0`, Bun `1.3.14`
 - `bun install`: success, no dependency changes
-- `bun test`: 22 pass / 0 fail
+- `bun test`: 67 pass / 0 fail
 - `bunx tsc --noEmit`: success
-- Trend fixture CLI: success
-- Rotation fixture CLI: success
-- Repeated fixture execution: byte-for-byte deterministic output
+- Trend and Rotation synthetic fixture CLIs: success and byte-for-byte reproducible
 
-PR #3 added commit-safe synthetic CSV fixtures and integration coverage for listing/delisting bounds, decision-date-only signals, explicit insufficient-history exclusion, transaction costs, the three-holding cap, and the -30% high-water-mark stop.
+On `ykoba/pit-universe-quality-robustness` before PR creation:
 
-Defects found and fixed on the branch:
+- `bun test`: 105 pass / 0 fail
+- `bunx tsc --noEmit`: success
+- strict v1 Universe Trend CLI: success
+- strict v1 Universe Rotation CLI: success
+- data-quality CLI: success with the expected `research_only` disposition
+- robustness grid CLI: success; 16 supported cells completed and 16 unimplemented timing/replacement cells reported as unsupported
+- every ordinary backtest output is explicitly `research_only`; unsupported `etf_realistic` execution fails closed
 
-- `maxAssets` could exceed the approved limit of three.
-- A missing held-asset forward return could be silently treated as zero.
-- Insufficient history was silently omitted from CLI output.
-- Hard-stop liquidation did not charge its exit transaction cost.
-- A missing calendar month could stretch a forward return across multiple months.
-- Missing optional CSV fields were represented as numeric zero, and malformed in-range prices could be skipped.
-
-The Trend/Rotation CLI fixture is synthetic unadjusted Price data. It does not validate JPY FX conversion, final data-provider quality, or investable historical performance. JPY conversion is covered separately by the synthetic FX fixture and is not yet connected to that CLI path.
-
-PR #4 merged the Total Return foundation into `main`. Post-merge verification passed 38 tests / 0 failures, `bunx tsc --noEmit`, and both fixture CLIs.
-
-PR #5 merged the D-018 distribution ledger. Post-merge `main` verifies 53 tests / 0 failures, passes `bunx tsc --noEmit`, and preserves both fixture CLI results.
-
-The Point-in-Time JPY FX branch verifies 67 tests / 0 failures and passes `bunx tsc --noEmit`. It converts normalized non-JPY returns using explicit exact-date rates, supports availability-timestamped corrections, and converts selected-ETF distribution income while rejecting missing or ambiguous FX inputs.
-
-The optional `bun run test:node` script remains incompatible with the pre-existing Bun-specific tests and TypeScript parameter properties under Node's strip-only loader. Bun is the required test path; this branch does not broaden scope to convert the test suite.
+The committed fixtures are synthetic unadjusted Price data. They validate code behavior, not investable historical performance, production data quality, or a final provider choice.
 
 ## Next blocks
 
-1. Review and merge the Point-in-Time JPY FX foundation only with explicit user approval
-2. Point-in-time ETF master loader from `universe_master.csv`
-3. Data-quality and cross-source reconciliation reports
-4. Robustness grid runner for Strategy A/B
-5. Decision-package schema for Strategy C
-6. Forward-test persistence, scheduling, notifications, and monthly dashboard
+1. Review and merge the Point-in-Time Universe, data-quality, and robustness foundation only with explicit user approval
+2. Connect production-grade versioned Universe and multiple-source provider adapters after O-001 research
+3. Implement the remaining rebalance-date, execution-timing, replacement/hysteresis, and crisis/benchmark robustness axes
+4. Define the Strategy C decision-package schema
+5. Add forward-test persistence, scheduling, notifications, and dashboard
