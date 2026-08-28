@@ -10,7 +10,7 @@ Snapshot date: 2026-08-28
 - Latest merged PR: #6 (`feat: add point-in-time JPY FX normalization`)
 - Latest `main` commit: `15cb74346f0acdd03302155b318f0fc49e266cb2`
 - Active branch: `ykoba/pit-universe-quality-robustness`
-- Active branch PR: not yet created at this snapshot
+- Active branch PR: #7 (`feat: add point-in-time research validation`), open and intentionally unmerged
 
 ## Implemented on main through PR #6
 
@@ -85,7 +85,7 @@ bun run data-quality --config=tests/fixtures/configs/data-quality.json
 bun run robustness --config=tests/fixtures/configs/robustness-grid.json
 ```
 
-Latest pre-PR results:
+Latest PR verification results:
 
 - `bun test`: 105 pass / 0 fail
 - `bunx tsc --noEmit`: pass
@@ -153,7 +153,7 @@ The current branch adds evidence-producing contracts and executable research too
 
 ## Next implementation sequence
 
-1. Complete review, create one PR for the current branch, and merge only after explicit user approval.
+1. Review PR #7 and merge only after explicit user approval.
 2. Connect verified versioned Universe and multiple-source provider adapters after O-001 research.
 3. Add remaining timing/replacement, crisis-period, and benchmark-comparison robustness axes.
 4. Define the Strategy C decision-package schema.

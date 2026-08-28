@@ -6,6 +6,7 @@
 - Local path: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
 - Current implementation branch: `ykoba/pit-universe-quality-robustness`
+- Pull request: #7 (`feat: add point-in-time research validation`), open and intentionally unmerged
 - Handoff date: 2026-08-28
 - Primary migration instructions: `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 
@@ -88,7 +89,7 @@ See `CURRENT_STATUS.md` for commands, outputs, and current limitations.
 
 ## Next implementation sequence
 
-1. Review this combined PR and merge only after explicit user approval.
+1. Review PR #7 and merge only after explicit user approval.
 2. Research/connect production-grade Universe and data-provider sources without settling O-001 arbitrarily.
 3. Add the remaining execution-timing, replacement/hysteresis, crisis-period, and benchmark-comparison robustness axes.
 4. Define the Strategy C decision-package schema.
