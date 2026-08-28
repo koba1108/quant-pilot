@@ -26,7 +26,7 @@ Codex Projectへ移行する場合は、最初に次を読んでください。
 
 引き継ぎ資料には、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状態、未確定事項、実行手順を整理しています。
 
-PR #1はすでに `main` へマージ済みです。マージされた市場データ・バックテスト実装は、Codex Projectで最初にローカル検証してください。
+PR #7（Point-in-Time Universe、データ品質・照合、Strategy A/B robustness foundation）は `main` へマージ済みです。現在の作業ブランチでは、provider-neutral な正規化リターン、行単位 availability、JPY換算をbacktest runnerへ統合しています。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合完了まで実行できません。
 
 ## Backtest quick start
 
@@ -48,7 +48,7 @@ bun run backtest --config=backtest.config.json
 - `unadjusted_price`: `Close`を使用
 - `provider_adjusted`: `AdjustedClose`を使用するが、分配金込みTotal Returnとは認定しない
 
-CLI出力は `backtest-summary-v2`。通常のCSV/Stooq経路は `returnNormalization.status=not_normalized`、`evidenceDisposition=research_only` と警告を出す。`cumulativePortfolioReturn` はポートフォリオの累積損益であり、入力系列がTotal Returnであることを意味しない。通常のCSV入力を `total_return` と宣言することはできない。strict Universe masterを使わない互換経路は、明示した `synthetic_fixture` / `proxy` researchに限定される。正規化return・行単位availability・JPY換算が通常runnerへ統合されるまで、`researchLayer=etf_realistic` は実行を拒否する。
+CLI出力は `backtest-summary-v3`。通常のraw CSV/Stooq経路は `returnNormalization.status=not_normalized`、`evidenceDisposition=research_only` と警告を出す。`price_return` / `total_return` は明示的なopt-in経路で、`ReturnEventCoverage.availableAt`、signal/forward別PIT snapshot、signal prefixの固定、exact-date JPY換算、full fingerprintsを適用する。全月次実行の `end` は暦月末を必須とし、normalized経路では各資産のsnapshot cutoffにその月の実際の最終取引日を使う。出力の `start` / `end` は実現リターン期間、`signalStart` / `signalEnd` は判断期間を表す。`cumulativePortfolioReturn` はポートフォリオの累積損益であり、入力系列がTotal Returnであることを意味しない。`etf_realistic` は引き続き実行を拒否する。
 
 Stooqを使う場合はAPIキーを設定してproviderを切り替える。
 
@@ -79,6 +79,15 @@ bun run backtest --config=tests/fixtures/configs/trend-universe.json
 bun run backtest --config=tests/fixtures/configs/rotation-universe.json
 ```
 
+正規化済みPrice ReturnのPoint-in-Time経路は、次の合成fixtureで検証できる。
+
+```bash
+bun run backtest --config=tests/fixtures/configs/trend-normalized.json
+bun run backtest --config=tests/fixtures/configs/rotation-normalized.json
+```
+
+この経路も合成データ専用であり、production providerや投資成績の証拠ではない。
+
 ルートの `universe_master.csv` は初期候補カタログであり、上場履歴、availability、symbol、provenanceが不足しているため、そのまま歴史的Universeとしては使用できない。実行用の `universe-master-v1` 契約と制約は [`docs/universe-master.md`](./docs/universe-master.md) を参照する。
 
 ## Return normalization
@@ -95,7 +104,7 @@ D-018により、研究用Total Returnはex-date終値での理論再投資に�
 
 `src/data/fx-normalization.ts` は、正規化済みの非円Price Return／Total Returnを、為替変動込みの無ヘッジJPY系列へ変換する。レートは「1 source currencyあたりのJPY」を明示し、各取引日・分配金認識日に完全一致するPoint-in-Time観測を要求する。欠損時の前方補完、前月値利用、暗黙の逆数・クロスレートは禁止する。
 
-評価用reference rateと実売買のFXコストは分離する。最終providerはO-001として未決定で、現在のCLIには未接続。詳細は [`docs/fx-normalization.md`](./docs/fx-normalization.md) を参照する。
+評価用reference rateと実売買のFXコストは分離する。明示的なnormalized入力はこの換算経路を使用できるが、production FX providerは未接続で、最終providerはO-001として未決定。詳細は [`docs/fx-normalization.md`](./docs/fx-normalization.md) を参照する。
 
 ## Data quality and reconciliation
 
@@ -109,7 +118,7 @@ fixtureは意図どおり `research_only` になる。詳細は [`docs/data-qual
 
 ## Strategy A/B robustness grid
 
-Strategy weights、コスト、最大保有数、volatility windowを全組合せで実行し、全cellと安定性rangeを出力する。最良cellを自動採用しない。未実装の月中・25日・hysteresis等は、既存結果で代用せず明示的な `unsupported` cellになる。
+Strategy weights、コスト、最大保有数、volatility windowを全組合せで実行し、全cellと安定性rangeを出力する。最良cellを自動採用しない。未実装の月中・25日・hysteresis等は、既存結果で代用せず明示的な `unsupported` cellになる。出力スキーマは `robustness-grid-v2`。
 
 ```bash
 bun run robustness --config=tests/fixtures/configs/robustness-grid.json
@@ -121,7 +130,7 @@ bun run robustness --config=tests/fixtures/configs/robustness-grid.json
 
 `MarketDataProvider -> validation -> monthly frames -> Strategy A/B -> inverse-vol allocation -> cost model -> -30% DD stop`
 
-Point-in-Time制約として、設定された上場日前・上場廃止日後のデータは取得対象にしない。月次シグナルはその月末までのデータだけで作り、翌月リターンを評価に使う。
+Point-in-Time制約として、設定された上場日前・上場廃止日後のデータは取得対象にしない。normalized月次シグナルは各資産の実際の月末取引日までに利用可能なsnapshotだけで作り、そのsnapshotを固定したうえで翌月endpointまでのリターンを評価する。
 
 ## Structure
 

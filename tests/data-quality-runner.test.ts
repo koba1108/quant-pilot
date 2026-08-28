@@ -17,3 +17,10 @@ test("data-quality CLI model is deterministic and never calls one source reconci
   assert.ok(first.reports[0]!.checks.some((check) => check.checkId === "return_basis.unadjusted_price"));
   assert.ok(first.reports[0]!.checks.some((check) => check.checkId === "reconciliation.not_performed"));
 });
+
+test("raw-bar quality CLI never mislabels normalized Point-in-Time output as certified", async () => {
+  await assert.rejects(
+    () => runDataQualityForBacktest("tests/fixtures/configs/trend-normalized.json"),
+    /cannot certify normalized Point-in-Time returns/,
+  );
+});

@@ -34,6 +34,7 @@ Local trading value is multiplied by the same dated FX rate and exposed as `trad
 - `rateDate`, `observedAt`, `availableAt`, and source provenance are mandatory.
 - The rate book selects only observations available by its `decisionDate` end-of-day UTC cutoff.
 - A correction for an earlier `rateDate` must explicitly supersede the prior observation. Earlier decision snapshots keep the prior value; later snapshots may use the correction once available.
+- When a forward return is evaluated, all FX observations through the signal snapshot are pinned. Corrections available later may inform later signals, but cannot retroactively replace the entry prefix.
 - Every asset point and every converted distribution-income entry requires an exact-date rate.
 - Missing dates fail closed. Forward-fill, backfill, prior-month substitution, implicit inversion, and implicit triangulation are forbidden.
 - The FX rate-book `decisionDate` must match the normalized return series or distribution ledger being evaluated.
@@ -57,6 +58,7 @@ Reference or midpoint rates support valuation and research. They are not assumed
 ## Implementation
 
 - `src/data/fx-normalization.ts`: versioned rate book, revision selection, exact-date amount conversion, JPY return conversion, and DailyBar adapter.
+- `src/data/point-in-time-return-source.ts`: provider-neutral signal/forward snapshots, pinned historical prefixes, and full input/resolution fingerprints for normalized runner integration.
 - `src/portfolio/distribution-ledger.ts`: optional Point-in-Time FX books for selected-ETF distribution scoring.
 - `tests/fixtures/fx-normalization/rates.json`: deterministic synthetic USD/JPY observations and revisions.
 - `tests/fx-normalization.test.ts`: return, revision, missing-rate, quote-direction, provenance, and distribution-scoring regression coverage.
@@ -73,5 +75,5 @@ Reference or midpoint rates support valuation and research. They are not assumed
 - The cutoff model is end-of-day UTC; exchange-specific closes and intraday decisions are not modeled.
 - Holiday/calendar alignment has no fallback policy. A missing exact-date rate stops the affected conversion.
 - Foreign-currency receivable and cash revaluation between ledger events is not yet integrated into the full position simulator.
-- The existing Trend/Rotation CLI still consumes its synthetic unadjusted JPY fixture and does not invoke this normalization path.
+- Raw Trend/Rotation CLI paths remain synthetic unadjusted JPY fixtures and do not invoke this normalization path. Explicit normalized configs do invoke it, using `synthetic_same_day_close_v1`; they remain research-only and not investment evidence.
 - Executable FX spreads and broker conversion mechanics remain modeled separately through explicit cost assumptions.

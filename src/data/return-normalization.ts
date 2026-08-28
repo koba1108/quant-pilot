@@ -56,6 +56,7 @@ export interface ReturnEventCoverage {
   endDate: string;
   corporateActions: CoverageStatus;
   distributions: CoverageStatus;
+  availableAt: string;
   provenance: DataProvenance;
 }
 
@@ -240,6 +241,7 @@ function assertCoverage(
   firstDate: string,
   lastDate: string,
   basis: NormalizedReturnBasis,
+  decisionDate: string,
 ): void {
   if (coverage.code !== code) {
     throw new Error(`Unexpected coverage code ${coverage.code}; expected ${code}.`);
@@ -257,6 +259,12 @@ function assertCoverage(
   }
   if (basis === "total_return" && coverage.distributions !== "complete") {
     throw new Error("Complete distribution coverage is required for Total Return normalization.");
+  }
+  if (!isIsoDateTime(coverage.availableAt)) {
+    throw new Error("Coverage availableAt must be an ISO date-time with an explicit timezone.");
+  }
+  if (Date.parse(coverage.availableAt) > endOfUtcDate(decisionDate)) {
+    throw new Error(`Event coverage was not available by decisionDate ${decisionDate}.`);
   }
   assertProvenance(coverage.provenance, "Coverage provenance");
 }
@@ -303,7 +311,7 @@ export function normalizeReturnSeries(
   const firstDate = bars[0]!.tradingDate;
   const lastDate = bars.at(-1)!.tradingDate;
   const barDates = new Set(bars.map((bar) => bar.tradingDate));
-  assertCoverage(request.coverage, request.code, firstDate, lastDate, request.basis);
+  assertCoverage(request.coverage, request.code, firstDate, lastDate, request.basis, request.decisionDate);
 
   const seenEventIds = new Set<string>();
   for (const event of request.events) {

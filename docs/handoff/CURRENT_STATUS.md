@@ -7,12 +7,12 @@ Snapshot date: 2026-08-28
 - Repository: `koba1108/quant-pilot`
 - Local checkout: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Latest merged PR: #6 (`feat: add point-in-time JPY FX normalization`)
-- Latest `main` commit: `15cb74346f0acdd03302155b318f0fc49e266cb2`
-- Active branch: `ykoba/pit-universe-quality-robustness`
-- Active branch PR: #7 (`feat: add point-in-time research validation`), open and intentionally unmerged
+- Latest merged PR: #7 (`feat: add point-in-time research validation`)
+- Latest `main` commit: `2a522904695070a3b75770b2d1b84a459a6ebfe8`
+- Active branch: `ykoba/normalized-pit-backtest-integration`
+- This branch contains the post-PR #7 provider-neutral normalized Point-in-Time backtest integration. It is not merged; confirm the current PR state before continuing.
 
-## Implemented on main through PR #6
+## Implemented on main through PR #7
 
 ### Deterministic research engine
 
@@ -36,13 +36,13 @@ Snapshot date: 2026-08-28
 - Node.js: `v26.7.0`
 - Bun: `1.3.14`
 - `bun install`: pass, no dependency changes
-- `bun test`: 67 pass / 0 fail
+- `bun test`: 105 pass / 0 fail (PR #7 pre-merge baseline)
 - `bunx tsc --noEmit`: pass
 - Trend CLI: pass
 - Rotation CLI: pass
 - exact repeated-run fixture reproducibility: pass
 
-## Added on the current branch
+## Included in main from PR #7
 
 ### Point-in-Time Universe master
 
@@ -72,7 +72,7 @@ Snapshot date: 2026-08-28
 - Output contains stability ranges and no automatic best-cell or approved-parameter selection.
 - Grid output itself carries `evidenceDisposition=research_only`, its return basis, and `returnNormalization.status=not_normalized`.
 
-## Current branch verification
+## PR #7 verification now present on main
 
 Commands:
 
@@ -85,7 +85,7 @@ bun run data-quality --config=tests/fixtures/configs/data-quality.json
 bun run robustness --config=tests/fixtures/configs/robustness-grid.json
 ```
 
-Latest PR verification results:
+PR #7 verification results (completed before merge and now present on `main`):
 
 - `bun test`: 105 pass / 0 fail
 - `bunx tsc --noEmit`: pass
@@ -97,7 +97,15 @@ Latest PR verification results:
 - completed cells preserve the three-holding cap, cost drag, and -30% stop
 - every ordinary backtest result is explicitly `research_only`; `etf_realistic` is rejected until its required data layers are integrated
 
-The Trend and Rotation strict-Universe fixtures use the same synthetic daily Price series as the legacy integration fixture. Both produce 18 monthly frames, final value `833426`, cumulative portfolio return approximately `-0.1665735`, modeled cost rate approximately `0.002`, maximum three holdings, and a stop after `2025-01`.
+The Trend and Rotation strict-Universe fixtures use the same synthetic daily Price series as the legacy integration fixture. Both produce 18 monthly frames, final value `833426`, cumulative portfolio return approximately `-0.1665735`, modeled cost rate approximately `0.002`, maximum three holdings, and a stop after `2025-02`.
+
+## Current branch implementation verification
+
+The current branch adds `backtest-summary-v3`, `robustness-grid-v2`, and a provider-neutral `src/data/point-in-time-return-source.ts`. The runner now supports explicit `price_return` / `total_return` opt-in, separate signal/forward Point-in-Time snapshots, `ReturnEventCoverage.availableAt`, exact-date non-JPY to JPY conversion, and full input/resolution fingerprints. A forward resolution pins every signal-time bar/FX observation, so a later correction cannot replace the historical entry prefix. Signal and endpoint snapshots are re-resolved at each asset's actual last trading date; calendar-month-end information released after that trading date cannot leak into the frame. All monthly configs require a calendar-month-end `end`, avoiding partial-month annualization in raw and normalized paths.
+
+Synthetic normalized fixtures use `synthetic_same_day_close_v1`; Trend and Rotation normalized configs execute reproducibly. Summary `start` / `end` now describe realized-return months (`2024-01` through `2025-06` in the fixture), while `signalStart` / `signalEnd` describe decision months (`2023-12` through `2025-05`). Realized-return labels and corrected worst-month/worst-year and hard-stop labels are included; incomplete calendar years carry `observedMonths` and `complete=false`, and the fixture stop is labeled `2025-02`.
+
+Latest implementation verification is `bun test`: 131 pass / 0 fail and `bunx tsc --noEmit`: pass. `bun install` completed without dependency changes. Raw strict-Universe Trend/Rotation, normalized Trend/Rotation, data-quality, and robustness CLIs all pass. Both normalized CLI outputs are byte-for-byte reproducible. This branch is not merged.
 
 ## Required validation coverage
 
@@ -119,7 +127,8 @@ The Trend and Rotation strict-Universe fixtures use the same synthetic daily Pri
 - The fixture is unadjusted Price data with no real distributions, Corporate Actions, FX, spreads, depth, or fund-structure evidence.
 - No production market-data, Corporate Action, FX, historical-Universe, or second-source adapter is connected.
 - The quality/reconciliation layer is a provider-neutral foundation; production source identity and metadata must come from a trusted adapter rather than a user assertion.
-- Dataset-level availability is recorded, but ordinary daily bars do not yet carry row-level `availableAt`; the current CLI must therefore not be described as a fully production-ready per-bar Point-in-Time quality gate.
+- Row-level `availableAt` is now consumed by the normalized opt-in runner path; ordinary raw daily-bar paths remain `not_normalized` and are not a production-ready per-bar Point-in-Time quality gate.
+- Calendar-month-end config validation prevents known partial final months, but production exchange-calendar completeness still requires an approved provider/calendar adapter.
 - Stooq remains research plumbing and cannot be the sole final investment basis.
 
 ### Universe correctness
@@ -149,12 +158,12 @@ The Trend and Rotation strict-Universe fixtures use the same synthetic daily Pri
 - O-005/O-006: approved Strategy A/B parameters and trading rules
 - O-007 through O-016: cash, caps, AI policy, evaluation, persistence, and real-money details
 
-The current branch adds evidence-producing contracts and executable research tooling. It does not resolve these decisions.
+PR #7 adds evidence-producing contracts and executable research tooling. It does not resolve these decisions.
 
 ## Next implementation sequence
 
-1. Review PR #7 and merge only after explicit user approval.
-2. Connect verified versioned Universe and multiple-source provider adapters after O-001 research.
-3. Add remaining timing/replacement, crisis-period, and benchmark-comparison robustness axes.
-4. Define the Strategy C decision-package schema.
-5. Implement forward-test persistence, scheduled execution, notification, and dashboard layers.
+1. Complete PR review for the current normalized Point-in-Time integration while keeping `etf_realistic` fail-closed; do not merge without user approval.
+2. Research production providers, licensing, and exchange-calendar evidence under O-001 before connecting any production adapter.
+3. Add remaining timing/replacement, crisis-period, and benchmark-comparison robustness axes without selecting O-005/O-006 parameters.
+4. Define the Strategy C decision-package schema without resolving O-012/O-013 by assumption.
+5. Implement forward-test persistence, scheduled execution, notification, and dashboard layers after the relevant open decisions remain explicitly bounded.

@@ -13,6 +13,7 @@ import {
   loadBacktestConfig,
   loadBacktestInputs,
   type BacktestConfig,
+  type BacktestReturnNormalizationSummary,
   type BacktestReturnBasis,
   type LoadedBacktestInput,
   type ResearchLayer,
@@ -30,9 +31,10 @@ import {
 } from "../strategies/trend.ts";
 import type { RotationStrategyParameters, TrendStrategyParameters } from "../strategies/types.ts";
 import { compareText } from "../determinism.ts";
+import type { MonthlyFrame } from "./simulator.ts";
 
 export const ROBUSTNESS_GRID_CONFIG_VERSION = "robustness-grid-config-v1" as const;
-export const ROBUSTNESS_GRID_OUTPUT_VERSION = "robustness-grid-v1" as const;
+export const ROBUSTNESS_GRID_OUTPUT_VERSION = "robustness-grid-v2" as const;
 const MAX_GRID_SCENARIOS = 2_000;
 const SUPPORTED_REBALANCE_TIMING = "month_end_close";
 const SUPPORTED_REPLACEMENT_RULE = "immediate_top_n";
@@ -83,7 +85,7 @@ export interface RobustnessScenarioMetrics {
   totalCostRate: number;
   cashRatio: number;
   worstMonth?: { label: string; return: number };
-  worstYear?: { label: string; return: number };
+  worstYear?: { label: string; return: number; observedMonths: number; complete: boolean };
 }
 
 export interface RobustnessScenario {
@@ -149,9 +151,10 @@ export interface RobustnessGridReport {
   configSchemaVersion: typeof ROBUSTNESS_GRID_CONFIG_VERSION;
   selectionPolicy: "descriptive_only_no_automatic_winner";
   returnBasis: BacktestReturnBasis;
-  returnNormalization: {
-    status: "not_normalized";
-    warning: string;
+  returnNormalization: BacktestReturnNormalizationSummary | {
+    status: "not_executed";
+    basis: "price_return" | "total_return";
+    reason: string;
   };
   evidenceDisposition: "research_only";
   researchLayer: ResearchLayer | "unspecified";
@@ -358,6 +361,17 @@ function unsupportedAxes(parameters: RobustnessScenarioParameters): UnsupportedA
   return output;
 }
 
+export function realizedReturnLabels(
+  frames: readonly Pick<MonthlyFrame, "label" | "returnLabel">[],
+): string[] {
+  return frames.map((frame, index) => {
+    if (frame.returnLabel === undefined) {
+      throw new Error(`Missing realized return label for frame ${frame.label} at index ${index}.`);
+    }
+    return frame.returnLabel;
+  });
+}
+
 function scenarioConfig(base: BacktestConfig, parameters: RobustnessScenarioParameters): BacktestConfig {
   return {
     ...base,
@@ -467,6 +481,7 @@ export async function runRobustnessGridConfig(config: RobustnessGridConfig): Pro
     ? undefined
     : await loadBacktestInputs(base);
   const appliedUniverseObservationIds = new Set<string>();
+  let executedReturnNormalization: BacktestReturnNormalizationSummary | undefined;
   const scenarios: RobustnessScenario[] = [];
   for (const parameters of expanded) {
     const scenarioId = sha256Canonical(parameters);
@@ -476,7 +491,12 @@ export async function runRobustnessGridConfig(config: RobustnessGridConfig): Pro
       continue;
     }
     const detail = executeLoadedBacktest(loaded!, scenarioConfig(base, parameters));
-    const labels = detail.frames.map((frame) => frame.label);
+    if (executedReturnNormalization === undefined) {
+      executedReturnNormalization = structuredClone(detail.summary.returnNormalization);
+    } else if (canonicalJson(executedReturnNormalization) !== canonicalJson(detail.summary.returnNormalization)) {
+      throw new Error("Robustness scenarios produced inconsistent return-normalization audit metadata.");
+    }
+    const labels = realizedReturnLabels(detail.frames);
     assertConsecutiveMonthlyLabels(labels);
     for (const diagnostic of detail.summary.assetDiagnostics) {
       for (const decision of diagnostic.universeDecisions ?? []) {
@@ -522,15 +542,26 @@ export async function runRobustnessGridConfig(config: RobustnessGridConfig): Pro
       .sort((left, right) => compareText(left.code, right.code));
   const universeMasterFingerprint = loaded?.universeMaster?.fingerprint;
   const universeObservationIds = [...appliedUniverseObservationIds].sort(compareText);
+  const returnBasis = base.returnBasis ?? "provider_adjusted";
+  const returnNormalization: RobustnessGridReport["returnNormalization"] = executedReturnNormalization
+    ?? (returnBasis === "price_return" || returnBasis === "total_return"
+      ? {
+          status: "not_executed",
+          basis: returnBasis,
+          reason: "Every requested scenario was unsupported, so normalized market data was intentionally not loaded.",
+        }
+      : {
+          status: "not_normalized",
+          warning: returnBasis === "unadjusted_price"
+            ? "Corporate Actions and distributions are not normalized."
+            : "Provider adjustment semantics and Point-in-Time safety are unverified.",
+        });
   const reportWithoutFingerprint = {
     outputSchemaVersion: ROBUSTNESS_GRID_OUTPUT_VERSION,
     configSchemaVersion: ROBUSTNESS_GRID_CONFIG_VERSION,
     selectionPolicy: "descriptive_only_no_automatic_winner" as const,
-    returnBasis: base.returnBasis ?? "provider_adjusted" as const,
-    returnNormalization: {
-      status: "not_normalized" as const,
-      warning: "Corporate Actions, distributions, per-observation availability, and JPY conversion are not integrated into this grid.",
-    },
+    returnBasis,
+    returnNormalization,
     evidenceDisposition: "research_only" as const,
     researchLayer: base.researchLayer ?? "unspecified" as const,
     inputFingerprint: sha256Canonical({

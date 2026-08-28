@@ -49,8 +49,13 @@ export async function runDataQualityForBacktest(
   policy: DataQualityPolicy = BACKTEST_RESEARCH_QUALITY_POLICY,
 ): Promise<DataQualityRunReport> {
   const config = await loadBacktestConfig(configPath);
-  const loaded = await loadBacktestInputs(config);
   const returnBasis = config.returnBasis ?? "provider_adjusted";
+  if (returnBasis === "price_return" || returnBasis === "total_return") {
+    throw new Error(
+      "The raw daily-bar data-quality CLI cannot certify normalized Point-in-Time returns; use the normalization decision audit instead.",
+    );
+  }
+  const loaded = await loadBacktestInputs(config);
   const reports = loaded.assets.map((asset) => buildDailyBarDataQualityReport({
     code: asset.code,
     bars: asset.bars,

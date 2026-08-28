@@ -7,6 +7,8 @@ import { hardStopTriggered } from "../portfolio/risk.ts";
 
 export interface MonthlyFrame {
   label: string;
+  /** Calendar month in which nextMonthReturns are realized, when known. */
+  returnLabel?: string;
   decisionDate?: string;
   snapshots: AssetSnapshot[];
   nextMonthReturns: Record<string, number>;
@@ -129,7 +131,7 @@ export function runMonthlyStrategy(
       totalCostRate += liquidationCost;
       net = equity / equityAtStart - 1;
       stopped = true;
-      stopLabel = frame.label;
+      stopLabel = frame.returnLabel ?? frame.label;
       oldWeights = { CASH: 1 };
     } else {
       oldWeights = newWeights;

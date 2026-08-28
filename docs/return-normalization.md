@@ -1,4 +1,4 @@
-# Return Normalization Foundation v1
+# Return Normalization Foundation v1 / Point-in-Time runner integration
 
 Status: implemented foundation. D-018 approves the primary research policy; virtual-portfolio cash accounting is defined separately in `distribution-accounting.md`.
 
@@ -19,7 +19,7 @@ The current Stooq adapter returns only unadjusted closes and therefore accepts o
 
 The CLI does not accept total_return as a label for ordinary CSV input. A series must pass the explicit normalization contract before it can be called Total Return.
 
-The CLI output schema is backtest-summary-v2. Ordinary CSV/Stooq runs report returnNormalization.status as not_normalized with a visible warning. The portfolio-level performance output is named cumulativePortfolioReturn; it is not evidence that the input data used a Total Return basis.
+The CLI output schema is `backtest-summary-v3`. Ordinary raw CSV/Stooq runs report `returnNormalization.status=not_normalized` with a visible warning. Normalized `price_return` / `total_return` are explicit opt-in paths. The portfolio-level performance output is named cumulativePortfolioReturn; it is not evidence that the input data used a Total Return basis.
 
 ### Normalized series
 
@@ -58,10 +58,13 @@ For a requested decisionDate:
 4. Coverage must span every normalized bar.
 5. Price Return requires complete Corporate Action coverage.
 6. Total Return additionally requires complete distribution coverage.
-7. A distribution in a different currency fails until the Point-in-Time FX layer is implemented.
+7. A distribution in a different currency requires exact-date Point-in-Time FX conversion.
 8. An event on the first bar fails because no prior close exists for a return calculation.
 9. The selected recognition date must have a bar; same-day close is never approximated with a later price.
 10. Split and distribution events sharing one recognition date fail until ordering is explicitly modeled.
+11. Monthly signal and forward snapshots use each asset's actual last trading date, not a later calendar-day cutoff.
+12. A forward snapshot pins the complete signal-time bar/FX prefix; a later revision cannot replace the historical entry observation.
+13. All monthly backtest configs reject a partial final month rather than annualizing it as a complete month.
 
 These constraints deliberately prefer a visible failure over a plausible-looking but unreproducible return series.
 
@@ -90,6 +93,7 @@ The implementation retains pay-date recognition for reproducible robustness comp
 ## Known limitations
 
 - decisionDate is an end-of-day UTC boundary in v1; exchange-specific close timestamps and calendars are not modeled yet.
+- Calendar-month completeness is required at the config boundary, while production exchange-calendar completeness still requires an approved provider/calendar adapter.
 - Distribution amount availability before ex-date may be unavailable for some sources; strict Point-in-Time validation will reject those cases.
 - Trust/management fees embedded in NAV are not separated or added again.
 - Taxes are not modeled.
@@ -97,3 +101,5 @@ The implementation retains pay-date recognition for reproducible robustness comp
 - Stock distributions, mergers, tender offers, spin-offs, and other non-split actions are unsupported.
 - Multiple-source reconciliation and production-provider coverage verification are not implemented.
 - Current Trend/Rotation CLI fixtures remain synthetic unadjusted Price data and are not investment evidence.
+- Normalized Trend/Rotation configs use the synthetic-only `synthetic_same_day_close_v1` fixture; the normalized path is research evidence of implementation behavior, not investable performance.
+- Full runner integration is covered by `backtest-summary-v3`; production-provider selection and `etf_realistic` remain out of scope.

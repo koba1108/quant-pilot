@@ -3,11 +3,28 @@ import { CsvMarketDataProvider } from "../data/csv.ts";
 import type { DailyBar } from "../data/models.ts";
 import type { MarketDataProvider } from "../data/provider.ts";
 import {
+  assertPointInTimeReturnResolutionIntegrity,
+  POINT_IN_TIME_RETURN_SOURCE_VERSION,
+  pointInTimeReturnAssetFingerprint,
+  resolvePointInTimeReturn,
+  validatePointInTimeReturnSourceAsset,
+  type PointInTimeBarObservation,
+  type PointInTimeReturnAsset,
+  type PointInTimeReturnResolution,
+} from "../data/point-in-time-return-source.ts";
+import {
   buildVersionedDataArtifact,
   isIsoDateTime,
   sha256Canonical,
   type DataArtifactProvenance,
 } from "../data/provenance.ts";
+import type {
+  NormalizedReturnBasis,
+  ReturnEvent,
+  ReturnEventCoverage,
+  TotalReturnPolicy,
+} from "../data/return-normalization.ts";
+import type { FxRateCoverage, FxRateObservation } from "../data/fx-normalization.ts";
 import { StooqMarketDataProvider } from "../data/stooq.ts";
 import {
   assertUniverseMasterIntegrity,
@@ -23,16 +40,21 @@ import { validateTrendParameters } from "../strategies/trend.ts";
 import type { RotationStrategyParameters, TrendStrategyParameters } from "../strategies/types.ts";
 import {
   buildMonthlyFramesWithDiagnostics,
+  buildPointInTimeMonthlyFramesWithDiagnostics,
   type FrameBuildResult,
+  type PointInTimeReturnDecisionAudit,
+  type PointInTimeReturnSnapshot,
   type UniverseDecisionAudit,
 } from "./frame-builder.ts";
 import { runMonthlyStrategy, type SimulationResult } from "./simulator.ts";
 import { compareText } from "../determinism.ts";
 
 type ProviderName = "csv" | "stooq";
-export type BacktestReturnBasis = "unadjusted_price" | "provider_adjusted";
+export type RawBacktestReturnBasis = "unadjusted_price" | "provider_adjusted";
+export type BacktestReturnBasis = RawBacktestReturnBasis | NormalizedReturnBasis;
 export type ResearchLayer = "synthetic_fixture" | "proxy" | "etf_realistic";
-export const BACKTEST_SUMMARY_SCHEMA_VERSION = "backtest-summary-v2" as const;
+export const BACKTEST_SUMMARY_SCHEMA_VERSION = "backtest-summary-v3" as const;
+export const SYNTHETIC_SAME_DAY_CLOSE_AVAILABILITY_POLICY = "synthetic_same_day_close_v1" as const;
 
 export interface BacktestAssetProvenanceConfig {
   source: string;
@@ -45,12 +67,25 @@ export interface BacktestAssetProvenanceConfig {
   recordId?: string;
 }
 
+export interface BacktestPointInTimeReturnConfig {
+  /** Synthetic-fixture-only adapter. Production inputs must supply real row-level observations through the source contract. */
+  barAvailabilityPolicy: typeof SYNTHETIC_SAME_DAY_CLOSE_AVAILABILITY_POLICY;
+  currency: string;
+  events: readonly ReturnEvent[];
+  coverage: ReturnEventCoverage;
+  totalReturnPolicyId?: string;
+  totalReturnPolicy?: TotalReturnPolicy;
+  fxObservations?: readonly FxRateObservation[];
+  fxCoverage?: FxRateCoverage;
+}
+
 export interface BacktestAssetConfig {
   code: string;
   symbol?: string;
   listingDate?: string;
   delistingDate?: string;
   provenance?: BacktestAssetProvenanceConfig;
+  pointInTimeReturn?: BacktestPointInTimeReturnConfig;
 }
 
 export interface BacktestConfig {
@@ -88,18 +123,41 @@ export interface BacktestAssetDiagnostic {
   universeObservationIds?: string[];
   universeExclusions?: Record<string, number>;
   universeDecisions?: UniverseDecisionAudit[];
+  returnNormalizationExclusions?: Record<string, number>;
+  returnNormalizationDecisions?: PointInTimeReturnDecisionAudit[];
 }
+
+export type BacktestReturnNormalizationSummary =
+  | {
+      status: "not_normalized";
+      warning: string;
+    }
+  | {
+      status: "normalized_point_in_time";
+      basis: NormalizedReturnBasis;
+      sourceVersion: "point-in-time-return-source-v1";
+      snapshotPolicy: "separate_signal_and_forward_endpoint";
+      barAvailabilityPolicy: typeof SYNTHETIC_SAME_DAY_CLOSE_AVAILABILITY_POLICY;
+      policyIds: readonly string[];
+      fxContractIds: readonly string[];
+      inputFingerprints: readonly { code: string; fingerprint: string }[];
+      warning: string;
+    };
 
 export interface BacktestSummary {
   outputSchemaVersion: typeof BACKTEST_SUMMARY_SCHEMA_VERSION;
   provider: string;
   returnBasis: BacktestReturnBasis;
-  returnNormalization: { status: "not_normalized"; warning: string };
+  returnNormalization: BacktestReturnNormalizationSummary;
   researchLayer: ResearchLayer | "unspecified";
   evidenceDisposition: "research_only";
   strategy: "trend" | "rotation";
+  /** Calendar months whose returns are included in the reported performance. */
   start: string;
   end: string;
+  /** Calendar months in which the corresponding portfolio decisions were made. */
+  signalStart: string;
+  signalEnd: string;
   months: number;
   initialEquity: number;
   finalEquity: number;
@@ -138,6 +196,7 @@ export interface LoadedBacktestInput {
   baseDiagnostics: ReadonlyMap<string, BacktestAssetDiagnostic>;
   universeMaster?: UniverseMaster;
   universeStatuses?: ReadonlySet<string>;
+  pointInTimeReturnAssets?: ReadonlyMap<string, PointInTimeReturnAsset>;
 }
 
 export interface DetailedBacktestResult {
@@ -169,6 +228,11 @@ function isIsoDate(value: unknown): value is string {
   } catch {
     return false;
   }
+}
+
+function isCalendarMonthEnd(value: string): boolean {
+  const [year, month] = value.slice(0, 7).split("-").map(Number);
+  return new Date(Date.UTC(year!, month!, 0)).toISOString().slice(0, 10) === value;
 }
 
 function optionalFiniteNumber(
@@ -216,6 +280,67 @@ function validateAssetProvenance(value: unknown, field: string): BacktestAssetPr
   return output;
 }
 
+function isNormalizedReturnBasis(value: BacktestReturnBasis): value is NormalizedReturnBasis {
+  return value === "price_return" || value === "total_return";
+}
+
+function validatePointInTimeReturnConfig(
+  value: unknown,
+  field: string,
+): BacktestPointInTimeReturnConfig | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error(`${field} must be an object.`);
+  assertOnlyKeys(value, [
+    "barAvailabilityPolicy",
+    "currency",
+    "events",
+    "coverage",
+    "totalReturnPolicyId",
+    "totalReturnPolicy",
+    "fxObservations",
+    "fxCoverage",
+  ], field);
+  if (value.barAvailabilityPolicy !== SYNTHETIC_SAME_DAY_CLOSE_AVAILABILITY_POLICY) {
+    throw new Error(
+      `${field}.barAvailabilityPolicy must be ${SYNTHETIC_SAME_DAY_CLOSE_AVAILABILITY_POLICY}.`,
+    );
+  }
+  const currency = requiredString(value.currency, `${field}.currency`);
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error(`${field}.currency must be an ISO-style three-letter uppercase currency code.`);
+  }
+  if (!Array.isArray(value.events)) throw new Error(`${field}.events must be an array.`);
+  if (!isRecord(value.coverage)) throw new Error(`${field}.coverage must be an object.`);
+  if (value.fxObservations !== undefined && !Array.isArray(value.fxObservations)) {
+    throw new Error(`${field}.fxObservations must be an array when provided.`);
+  }
+  if (value.fxCoverage !== undefined && !isRecord(value.fxCoverage)) {
+    throw new Error(`${field}.fxCoverage must be an object when provided.`);
+  }
+  if (value.totalReturnPolicyId !== undefined) {
+    requiredString(value.totalReturnPolicyId, `${field}.totalReturnPolicyId`);
+  }
+  if (value.totalReturnPolicy !== undefined && !isRecord(value.totalReturnPolicy)) {
+    throw new Error(`${field}.totalReturnPolicy must be an object when provided.`);
+  }
+  return {
+    barAvailabilityPolicy: SYNTHETIC_SAME_DAY_CLOSE_AVAILABILITY_POLICY,
+    currency,
+    events: structuredClone(value.events) as ReturnEvent[],
+    coverage: structuredClone(value.coverage) as unknown as ReturnEventCoverage,
+    totalReturnPolicyId: value.totalReturnPolicyId as string | undefined,
+    totalReturnPolicy: value.totalReturnPolicy === undefined
+      ? undefined
+      : structuredClone(value.totalReturnPolicy) as unknown as TotalReturnPolicy,
+    fxObservations: value.fxObservations === undefined
+      ? undefined
+      : structuredClone(value.fxObservations) as FxRateObservation[],
+    fxCoverage: value.fxCoverage === undefined
+      ? undefined
+      : structuredClone(value.fxCoverage) as unknown as FxRateCoverage,
+  };
+}
+
 function parseTrendParameters(value: unknown): TrendStrategyParameters | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) throw new Error("trendParameters must be an object.");
@@ -258,10 +383,15 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
   }
   if (value.returnBasis !== undefined
     && value.returnBasis !== "unadjusted_price"
-    && value.returnBasis !== "provider_adjusted") {
-    throw new Error(`returnBasis must be "unadjusted_price" or "provider_adjusted"; received ${String(value.returnBasis)}.`);
+    && value.returnBasis !== "provider_adjusted"
+    && value.returnBasis !== "price_return"
+    && value.returnBasis !== "total_return") {
+    throw new Error(
+      `returnBasis must be "unadjusted_price", "provider_adjusted", "price_return", or "total_return"; received ${String(value.returnBasis)}.`,
+    );
   }
-  if (value.provider === "stooq" && value.returnBasis === "provider_adjusted") {
+  const returnBasis = (value.returnBasis ?? "provider_adjusted") as BacktestReturnBasis;
+  if (value.provider === "stooq" && returnBasis !== "unadjusted_price") {
     throw new Error("Stooq currently supports only unadjusted_price returnBasis.");
   }
   if (value.csvRoot !== undefined && (typeof value.csvRoot !== "string" || value.csvRoot.trim() === "")) {
@@ -275,7 +405,12 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
   }
   if (value.researchLayer === "etf_realistic") {
     throw new Error(
-      "researchLayer=etf_realistic is not executable until normalized returns, per-observation availability, and JPY conversion are integrated.",
+      "researchLayer=etf_realistic is not executable until production row-level provenance, normalized data-quality/reconciliation, and realistic ETF/FX execution inputs are integrated.",
+    );
+  }
+  if (isNormalizedReturnBasis(returnBasis) && value.researchLayer !== "synthetic_fixture") {
+    throw new Error(
+      "The current CLI Point-in-Time bar-availability adapter is restricted to researchLayer=synthetic_fixture; production/proxy observations must use the explicit provider-neutral source contract.",
     );
   }
 
@@ -329,7 +464,11 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
   const seenCodes = new Set<string>();
   const assets = value.assets.map((asset, index): BacktestAssetConfig => {
     if (!isRecord(asset)) throw new Error(`assets[${index}] must be an object.`);
-    assertOnlyKeys(asset, ["code", "symbol", "listingDate", "delistingDate", "provenance"], `assets[${index}]`);
+    assertOnlyKeys(
+      asset,
+      ["code", "symbol", "listingDate", "delistingDate", "provenance", "pointInTimeReturn"],
+      `assets[${index}]`,
+    );
     const code = requiredString(asset.code, `assets[${index}].code`);
     if (seenCodes.has(code)) throw new Error(`Duplicate asset code in config: ${code}.`);
     seenCodes.add(code);
@@ -351,14 +490,36 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
       && asset.listingDate > asset.delistingDate) {
       throw new Error(`listingDate must not be after delistingDate for ${code}.`);
     }
+    const provenance = validateAssetProvenance(asset.provenance, `assets[${index}].provenance`);
+    const pointInTimeReturn = validatePointInTimeReturnConfig(
+      asset.pointInTimeReturn,
+      `assets[${index}].pointInTimeReturn`,
+    );
+    if (isNormalizedReturnBasis(returnBasis)) {
+      if (pointInTimeReturn === undefined) {
+        throw new Error(`Asset ${code} requires pointInTimeReturn for normalized returnBasis=${returnBasis}.`);
+      }
+      if (provenance === undefined) {
+        throw new Error(`Asset ${code} requires provenance for row-level synthetic Point-in-Time observations.`);
+      }
+    } else if (pointInTimeReturn !== undefined) {
+      throw new Error(`Asset ${code} pointInTimeReturn requires normalized returnBasis.`);
+    }
     return {
       code,
       symbol,
       listingDate: asset.listingDate as string | undefined,
       delistingDate: asset.delistingDate as string | undefined,
-      provenance: validateAssetProvenance(asset.provenance, `assets[${index}].provenance`),
+      provenance,
+      pointInTimeReturn,
     };
   }).sort((left, right) => compareText(left.code, right.code));
+
+  if (!isCalendarMonthEnd(value.end)) {
+    throw new Error(
+      `Monthly backtests require end to be a calendar month-end; received ${value.end}. Partial months are not treated as complete monthly returns.`,
+    );
+  }
 
   return {
     strategy: value.strategy,
@@ -408,6 +569,7 @@ function loadedInputIntegrityFingerprint(input: {
   baseDiagnostics: ReadonlyMap<string, BacktestAssetDiagnostic>;
   universeMaster?: UniverseMaster;
   universeStatuses?: ReadonlySet<string>;
+  pointInTimeReturnAssets?: ReadonlyMap<string, PointInTimeReturnAsset>;
 }): string {
   return sha256Canonical({
     providerName: input.providerName,
@@ -426,6 +588,11 @@ function loadedInputIntegrityFingerprint(input: {
       .map(([code, diagnostic]) => ({ code, diagnostic })),
     universeMasterFingerprint: input.universeMaster?.fingerprint,
     universeStatuses: input.universeStatuses === undefined ? undefined : [...input.universeStatuses].sort(compareText),
+    pointInTimeReturnAssets: input.pointInTimeReturnAssets === undefined
+      ? undefined
+      : [...input.pointInTimeReturnAssets.entries()]
+        .sort(([left], [right]) => compareText(left, right))
+        .map(([code, asset]) => ({ code, contentHash: sha256Canonical(asset) })),
   });
 }
 
@@ -441,6 +608,15 @@ function cloneDiagnostic(diagnostic: BacktestAssetDiagnostic): BacktestAssetDiag
     universeDecisions: diagnostic.universeDecisions === undefined
       ? undefined
       : diagnostic.universeDecisions.map((decision) => ({ ...decision })),
+    returnNormalizationExclusions: diagnostic.returnNormalizationExclusions === undefined
+      ? undefined
+      : { ...diagnostic.returnNormalizationExclusions },
+    returnNormalizationDecisions: diagnostic.returnNormalizationDecisions === undefined
+      ? undefined
+      : diagnostic.returnNormalizationDecisions.map((decision) => ({
+          ...decision,
+          appliedReturnEventIds: [...decision.appliedReturnEventIds],
+        })),
   };
 }
 
@@ -460,6 +636,55 @@ export function assertBarsWithinRequest(
   }
 }
 
+function buildSyntheticPointInTimeReturnAsset(
+  asset: BacktestAssetConfig,
+  bars: readonly DailyBar[],
+  basis: NormalizedReturnBasis,
+): PointInTimeReturnAsset {
+  const config = asset.pointInTimeReturn!;
+  const provenance = asset.provenance!;
+  const recordPrefix = provenance.recordId ?? `${asset.code}-bar`;
+  const barObservations: PointInTimeBarObservation[] = bars.map((bar) => {
+    const observationId = `${recordPrefix}:${bar.tradingDate}:v1`;
+    return {
+      ...bar,
+      // The ordinary provider adjusted field is deliberately ignored. Explicit
+      // return normalization always starts from the raw close.
+      adjustedClose: bar.close,
+      observationId,
+      observedAt: `${bar.tradingDate}T23:59:58Z`,
+      availableAt: `${bar.tradingDate}T23:59:59Z`,
+      provenance: {
+        source: provenance.source,
+        dataset: provenance.dataset,
+        retrievedAt: provenance.retrievedAt,
+        sourceVersion: provenance.sourceVersion,
+        recordId: observationId,
+      },
+    };
+  });
+  return validatePointInTimeReturnSourceAsset({
+    code: asset.code,
+    currency: config.currency,
+    basis,
+    barObservations,
+    events: config.events,
+    coverage: config.coverage,
+    totalReturnPolicyId: config.totalReturnPolicyId,
+    totalReturnPolicy: config.totalReturnPolicy,
+    fxObservations: config.fxObservations,
+    fxCoverage: config.fxCoverage,
+  });
+}
+
+function hasAvailableBarObservation(asset: PointInTimeReturnAsset, decisionDate: string): boolean {
+  const decisionCutoff = Date.parse(`${decisionDate}T23:59:59.999Z`);
+  return asset.barObservations.some(
+    (observation) => observation.tradingDate <= decisionDate
+      && Date.parse(observation.availableAt) <= decisionCutoff,
+  );
+}
+
 export async function loadBacktestInputs(
   config: BacktestConfig,
   providerOverride?: string,
@@ -467,6 +692,7 @@ export async function loadBacktestInputs(
   config = validateBacktestConfig(config);
   const providerName = resolveProviderName(providerOverride) ?? config.provider ?? "csv";
   const returnBasis = config.returnBasis ?? "provider_adjusted";
+  const normalizedReturnBasis = isNormalizedReturnBasis(returnBasis) ? returnBasis : undefined;
   if (providerName === "stooq" && returnBasis !== "unadjusted_price") {
     throw new Error("Stooq currently supports only unadjusted_price returnBasis.");
   }
@@ -479,6 +705,9 @@ export async function loadBacktestInputs(
   const series: Record<string, DailyBar[]> = {};
   const diagnostics = new Map<string, BacktestAssetDiagnostic>();
   const loadedAssets: LoadedBacktestAsset[] = [];
+  const pointInTimeReturnAssets = normalizedReturnBasis !== undefined
+    ? new Map<string, PointInTimeReturnAsset>()
+    : undefined;
   for (const asset of config.assets) {
     const definition = universeMaster === undefined ? undefined : getUniverseInstrumentDefinition(universeMaster, asset.code);
     const symbol = definition?.symbol ?? asset.symbol!;
@@ -527,6 +756,12 @@ export async function loadBacktestInputs(
       dataContentHash,
       provenance: artifact?.provenance,
     });
+    if (pointInTimeReturnAssets !== undefined) {
+      pointInTimeReturnAssets.set(
+        asset.code,
+        buildSyntheticPointInTimeReturnAsset(asset, bars, normalizedReturnBasis!),
+      );
+    }
     diagnostics.set(asset.code, {
       code: asset.code,
       symbol,
@@ -551,6 +786,7 @@ export async function loadBacktestInputs(
     baseDiagnostics: diagnostics,
     universeMaster,
     universeStatuses,
+    pointInTimeReturnAssets,
   };
   loaded.integrityFingerprint = loadedInputIntegrityFingerprint(loaded);
   return loaded;
@@ -575,39 +811,103 @@ export function executeLoadedBacktest(
     throw new Error("Loaded backtest inputs changed after validation.");
   }
   const returnBasis = config.returnBasis ?? "provider_adjusted";
-  const built = buildMonthlyFramesWithDiagnostics(loaded.series, {
+  const normalized = isNormalizedReturnBasis(returnBasis);
+  if (normalized !== (loaded.pointInTimeReturnAssets !== undefined)) {
+    throw new Error("Loaded Point-in-Time return inputs do not match the validated returnBasis.");
+  }
+  const universeEligibility = loaded.universeMaster === undefined ? undefined : (
+    code: string,
+    decisionDate: string,
+    _phase: "signal" | "forward_endpoint",
+  ) => {
+    const supportedCurrency = normalized
+      ? loaded.pointInTimeReturnAssets!.get(code)?.currency
+      : "JPY";
+    const membership = evaluateUniverseMembership(
+      loaded.universeMaster!,
+      code,
+      decisionDate,
+      {
+        allowedStatuses: loaded.universeStatuses!,
+        supportedCurrencies: supportedCurrency === undefined ? new Set<string>() : new Set([supportedCurrency]),
+      },
+    );
+    return {
+      eligible: membership.eligible,
+      reason: membership.reason,
+      observationId: membership.observationId,
+      status: membership.status,
+      listingDate: membership.listingDate,
+      lastEligibleDate: membership.lastEligibleDate,
+      observedAt: membership.observedAt,
+      availableAt: membership.availableAt,
+      retrievedAt: membership.provenance?.retrievedAt,
+      source: membership.provenance?.source,
+      dataset: membership.provenance?.dataset,
+      sourceVersion: membership.provenance?.sourceVersion,
+      recordId: membership.provenance?.recordId,
+      instrumentType: membership.instrumentType,
+      isUsEquity: membership.isUsEquity,
+      isCryptoAsset: membership.isCryptoAsset,
+      isLeveraged: membership.isLeveraged,
+      isInverse: membership.isInverse,
+      currency: membership.currency,
+    };
+  };
+  const resolutionCache = new Map<string, PointInTimeReturnResolution>();
+  const resolutionByFingerprint = new Map<string, PointInTimeReturnResolution>();
+  const built = normalized ? buildPointInTimeMonthlyFramesWithDiagnostics({
+    codes: loaded.assets.map((asset) => asset.code),
+    start: config.start,
+    end: config.end,
+    resolveReturnSnapshot: (code, decisionDate, pinnedPrefix?: PointInTimeReturnSnapshot) => {
+      const asset = loaded.pointInTimeReturnAssets!.get(code);
+      if (asset === undefined || !hasAvailableBarObservation(asset, decisionDate)) return undefined;
+      const pinnedResolution = pinnedPrefix === undefined
+        ? undefined
+        : resolutionByFingerprint.get(pinnedPrefix.snapshotFingerprint);
+      if (pinnedPrefix !== undefined && pinnedResolution === undefined) {
+        throw new Error(`Cannot resolve forward Point-in-Time return for ${code}: signal snapshot is not loaded.`);
+      }
+      const key = `${code}:${decisionDate}:${pinnedPrefix?.snapshotFingerprint ?? "unbound"}`;
+      let resolution = resolutionCache.get(key);
+      if (resolution === undefined) {
+        resolution = resolvePointInTimeReturn(asset, decisionDate, pinnedResolution);
+        assertPointInTimeReturnResolutionIntegrity(resolution);
+        if (resolution.inputFingerprint !== pointInTimeReturnAssetFingerprint(asset)) {
+          throw new Error(`Point-in-Time return input fingerprint changed while resolving ${code}.`);
+        }
+        resolutionCache.set(key, resolution);
+        resolutionByFingerprint.set(resolution.fingerprint, resolution);
+      }
+      return {
+        code: resolution.code,
+        decisionDate: resolution.decisionDate,
+        sourceCurrency: resolution.sourceCurrency,
+        currency: resolution.currency,
+        basis: resolution.basis,
+        normalizationVersion: resolution.normalization.returnNormalizationVersion,
+        policyId: resolution.normalization.totalReturnPolicyId,
+        fxNormalizationVersion: resolution.normalization.fxNormalizationVersion,
+        fxContractId: resolution.normalization.fxContractId,
+        inputFingerprint: resolution.inputFingerprint,
+        snapshotFingerprint: resolution.fingerprint,
+        pinnedPrefixFingerprint: resolution.pinnedPrefixFingerprint,
+        bars: resolution.bars,
+        selectedBarObservationIds: resolution.appliedBarObservationIds,
+        appliedReturnEventIds: resolution.appliedEventIds,
+        appliedFxObservationIds: resolution.appliedFxObservationIds,
+      };
+    },
+  }, {
+    costRate: config.costRate,
+    volatilityWindowDays: config.volatilityWindowDays,
+    universeEligibility,
+  }) : buildMonthlyFramesWithDiagnostics(loaded.series, {
     costRate: config.costRate,
     priceField: returnBasis === "unadjusted_price" ? "close" : "adjustedClose",
     volatilityWindowDays: config.volatilityWindowDays,
-    universeEligibility: loaded.universeMaster === undefined ? undefined : (code, decisionDate, phase) => {
-      const membership = evaluateUniverseMembership(
-        loaded.universeMaster!,
-        code,
-        decisionDate,
-        { allowedStatuses: loaded.universeStatuses!, supportedCurrencies: new Set(["JPY"]) },
-      );
-      return {
-        eligible: membership.eligible,
-        reason: membership.reason,
-        observationId: membership.observationId,
-        status: membership.status,
-        listingDate: membership.listingDate,
-        lastEligibleDate: membership.lastEligibleDate,
-        observedAt: membership.observedAt,
-        availableAt: membership.availableAt,
-        retrievedAt: membership.provenance?.retrievedAt,
-        source: membership.provenance?.source,
-        dataset: membership.provenance?.dataset,
-        sourceVersion: membership.provenance?.sourceVersion,
-        recordId: membership.provenance?.recordId,
-        instrumentType: membership.instrumentType,
-        isUsEquity: membership.isUsEquity,
-        isCryptoAsset: membership.isCryptoAsset,
-        isLeveraged: membership.isLeveraged,
-        isInverse: membership.isInverse,
-        currency: membership.currency,
-      };
-    },
+    universeEligibility,
   });
   const diagnostics = new Map(
     [...loaded.baseDiagnostics].map(([code, diagnostic]) => [code, cloneDiagnostic(diagnostic)]),
@@ -625,6 +925,12 @@ export function executeLoadedBacktest(
     }
     if (frameDiagnostic.universeDecisions !== undefined) {
       diagnostic.universeDecisions = frameDiagnostic.universeDecisions;
+    }
+    if (frameDiagnostic.returnNormalizationExclusions !== undefined) {
+      diagnostic.returnNormalizationExclusions = frameDiagnostic.returnNormalizationExclusions;
+    }
+    if (frameDiagnostic.returnNormalizationDecisions !== undefined) {
+      diagnostic.returnNormalizationDecisions = frameDiagnostic.returnNormalizationDecisions;
     }
   }
   const assetDiagnostics = config.assets.map((asset) => diagnostics.get(asset.code)!);
@@ -647,21 +953,41 @@ export function executeLoadedBacktest(
     const holdings = Object.entries(weights).filter(([asset, weight]) => asset !== "CASH" && weight > 0).length;
     return Math.max(maximum, holdings);
   }, 0);
+  const returnNormalization: BacktestReturnNormalizationSummary = normalized ? {
+    status: "normalized_point_in_time",
+    basis: returnBasis,
+    sourceVersion: POINT_IN_TIME_RETURN_SOURCE_VERSION,
+    snapshotPolicy: "separate_signal_and_forward_endpoint",
+    barAvailabilityPolicy: SYNTHETIC_SAME_DAY_CLOSE_AVAILABILITY_POLICY,
+    policyIds: [...new Set(
+      [...loaded.pointInTimeReturnAssets!.values()].flatMap((asset) => asset.totalReturnPolicyId ?? []),
+    )].sort(compareText),
+    fxContractIds: [...new Set(
+      assetDiagnostics.flatMap((diagnostic) => diagnostic.returnNormalizationDecisions ?? [])
+        .flatMap((decision) => decision.fxContractId ?? []),
+    )].sort(compareText),
+    inputFingerprints: [...loaded.pointInTimeReturnAssets!.entries()]
+      .map(([code, asset]) => ({ code, fingerprint: pointInTimeReturnAssetFingerprint(asset) }))
+      .sort((left, right) => compareText(left.code, right.code)),
+    warning: "Normalized Point-in-Time execution uses explicit synthetic same-day row availability; it remains research-only and is not production-provider evidence.",
+  } : {
+    status: "not_normalized",
+    warning: returnBasis === "unadjusted_price"
+      ? "Corporate Actions and distributions are not normalized."
+      : "Provider adjustment semantics and Point-in-Time safety are unverified.",
+  };
   const summary: BacktestSummary = {
     outputSchemaVersion: BACKTEST_SUMMARY_SCHEMA_VERSION,
     provider: loaded.providerName,
     returnBasis,
-    returnNormalization: {
-      status: "not_normalized",
-      warning: returnBasis === "unadjusted_price"
-        ? "Corporate Actions and distributions are not normalized."
-        : "Provider adjustment semantics and Point-in-Time safety are unverified.",
-    },
+    returnNormalization,
     researchLayer: config.researchLayer ?? "unspecified",
     evidenceDisposition: "research_only",
     strategy: config.strategy,
-    start: built.frames[0]!.label,
-    end: built.frames.at(-1)!.label,
+    start: built.frames[0]!.returnLabel ?? built.frames[0]!.label,
+    end: built.frames.at(-1)!.returnLabel ?? built.frames.at(-1)!.label,
+    signalStart: built.frames[0]!.label,
+    signalEnd: built.frames.at(-1)!.label,
     months: built.frames.length,
     initialEquity: initial,
     finalEquity: Math.round(finalEquityExact),

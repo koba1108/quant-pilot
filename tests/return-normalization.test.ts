@@ -156,6 +156,18 @@ test("Price Return fails closed when Corporate Action coverage is unavailable", 
   );
 });
 
+test("return-event coverage must itself be available by the decision date", () => {
+  assert.throws(
+    () => normalizeReturnSeries(request("price_return", {
+      coverage: {
+        ...structuredClone(fixture.coverage),
+        availableAt: "2025-01-08T00:00:00Z",
+      },
+    })),
+    /coverage was not available by decisionDate/,
+  );
+});
+
 test("future bars and events cannot change a prior decision-date series", () => {
   const baseline = normalizeReturnSeries(request("total_return"));
   const bars = structuredClone(fixture.bars);
