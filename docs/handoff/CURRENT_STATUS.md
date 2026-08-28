@@ -10,7 +10,8 @@ Snapshot date: 2026-08-28
 - Latest merged PR: #7 (`feat: add point-in-time research validation`)
 - Latest `main` commit: `2a522904695070a3b75770b2d1b84a459a6ebfe8`
 - Active branch: `ykoba/normalized-pit-backtest-integration`
-- This branch contains the post-PR #7 provider-neutral normalized Point-in-Time backtest integration. It is not merged; confirm the current PR state before continuing.
+- Active PR: #8 (`feat: integrate point-in-time normalized backtests`)
+- This branch contains the post-PR #7 provider-neutral normalized Point-in-Time backtest integration. PR #8 is open and not merged.
 
 ## Implemented on main through PR #7
 

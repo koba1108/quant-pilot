@@ -22,6 +22,7 @@ Quant Pilotの実装をChatGPTから引き継いでください。
 重要な現状:
 
 - PR #7（Point-in-Time Universe、データ品質・照合、robustness foundation）は `main` へマージ済みです（`2a522904695070a3b75770b2d1b84a459a6ebfe8`）。
+- PR #8（provider-neutral normalized Point-in-Time backtest integration）はレビュー中で、未マージです。
 - PR #7の検証は合成・research-onlyデータ中心です。`etf_realistic` は未解禁です。
 - 現在のprovider-neutralな正規化 runner統合は最終全CLI監査まで完了し、PRレビューへ進む段階です。
 

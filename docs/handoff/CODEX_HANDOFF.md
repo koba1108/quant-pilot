@@ -6,8 +6,9 @@
 - Local path: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
 - Current implementation branch: `ykoba/normalized-pit-backtest-integration`
+- Current pull request: #8 (`feat: integrate point-in-time normalized backtests`)
 - Base state: PR #7 (`feat: add point-in-time research validation`) merged into `main` at `2a522904695070a3b75770b2d1b84a459a6ebfe8`
-- Current work is not merged; confirm the current PR state before continuing and do not describe it as merged.
+- PR #8 is open and not merged; do not describe the implementation as merged.
 - Handoff date: 2026-08-28
 - Primary migration instructions: `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 
