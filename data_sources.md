@@ -28,6 +28,14 @@ Do not run a fake 20-year LLM backtest using today's web. Historical AI tests re
 7. Duplicate exposures are resolved before ranking.
 8. Any source disagreement above tolerance stops the affected instrument for that rebalance.
 
+The current repository-level `universe_master.csv` is a candidate catalog, not a Point-in-Time historical dataset. It must not be backdated into earlier simulations. The executable `universe-master-v1` contract requires listing lifecycle, knowledge timestamps, explicit corrections, and record-level provenance; see `docs/universe-master.md`.
+
+The config-only compatibility path is restricted to an explicit `synthetic_fixture` or `proxy` research layer. It has no machine-verifiable ETF/product/currency classification and must not be used as ETF-realistic evidence.
+
+Quality and cross-source results use versioned deterministic policies. A source label declared in config identifies an input claim but is not independent provider attestation and does not approve that source under O-001. Production provenance must come from the adapter. Single-source evidence remains `research_only` or `blocked` according to policy and is never reported as reconciled.
+
+The current quality CLI audits the dataset at the configured backtest end. It does not prove row-level availability at every historical signal date. Until trusted revision-aware adapters and the normalized JPY path are integrated, the ordinary runner reports `research_only` and rejects `etf_realistic` execution.
+
 ## Return-basis contract
 
 - Raw or provider-adjusted prices must be labeled; `AdjustedClose` alone is never proof of Total Return coverage.
@@ -37,4 +45,4 @@ Do not run a fake 20-year LLM backtest using today's web. Historical AI tests re
 - Foreign-currency prices and distribution income require an exact-date Point-in-Time FX observation with explicit quote direction, availability time, and provenance. Missing observations fail closed.
 - Reference-rate valuation does not replace executable FX spread, fee, or broker-conversion assumptions.
 
-See `docs/return-normalization.md`, `docs/distribution-accounting.md`, and `docs/fx-normalization.md`. O-002 is resolved by D-018; final market-data and FX provider selection remains open under O-001.
+See `docs/return-normalization.md`, `docs/distribution-accounting.md`, `docs/fx-normalization.md`, `docs/universe-master.md`, and `docs/data-quality.md`. O-002 is resolved by D-018; final market-data and FX provider selection remains open under O-001.

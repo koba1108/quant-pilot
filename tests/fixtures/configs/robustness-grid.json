@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "robustness-grid-config-v1",
+  "baseConfig": "tests/fixtures/configs/trend-universe.json",
+  "axes": {
+    "strategies": ["trend", "rotation"],
+    "trendParameters": [
+      { "r3mWeight": 0.2, "r6mWeight": 0.3, "r12mWeight": 0.5, "requirePositiveR12m": true },
+      { "r3mWeight": 0.1, "r6mWeight": 0.3, "r12mWeight": 0.6, "requirePositiveR12m": true }
+    ],
+    "rotationParameters": [
+      { "r6mWeight": 0.4, "r12mWeight": 0.4, "volatilityPenalty": 0.2, "requirePositiveR12m": true },
+      { "r6mWeight": 0.3, "r12mWeight": 0.5, "volatilityPenalty": 0.2, "requirePositiveR12m": true }
+    ],
+    "costRates": [0, 0.001],
+    "maxAssets": [2, 3],
+    "volatilityWindowDays": [63],
+    "rebalanceTimings": ["month_end_close", "calendar_day_25"],
+    "replacementRules": ["immediate_top_n"]
+  }
+}

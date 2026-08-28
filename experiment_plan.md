@@ -13,6 +13,8 @@ Parameter families, not single optimized points:
 
 Reject parameterizations whose apparent edge disappears under small timing/parameter perturbations.
 
+Current implementation status: the executable grid covers Strategy A/B weight variants, costs, portfolio size, and volatility windows. It does not yet satisfy this full Gate 1: horizon-family changes, long-trend alternatives, walk-forward/holdout splits, and nearby timing variants remain unimplemented or explicitly unsupported.
+
 ## Gate 2 — ETF-realistic research
 Use only instruments actually tradable at each date. Apply spread, slippage, commissions, trading units and FX costs. Report separately from Gate 1.
 

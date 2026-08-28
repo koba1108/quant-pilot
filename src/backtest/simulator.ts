@@ -1,4 +1,4 @@
-import type { AssetSnapshot } from "../strategies/types.ts";
+import type { AssetSnapshot, StrategyParameterOverrides } from "../strategies/types.ts";
 import { rankTrend } from "../strategies/trend.ts";
 import { rankRotation } from "../strategies/rotation.ts";
 import { inverseVolWeights, MAX_PORTFOLIO_ASSETS, type Weights } from "../portfolio/allocator.ts";
@@ -7,6 +7,7 @@ import { hardStopTriggered } from "../portfolio/risk.ts";
 
 export interface MonthlyFrame {
   label: string;
+  decisionDate?: string;
   snapshots: AssetSnapshot[];
   nextMonthReturns: Record<string, number>;
   costRates: Record<string, number>;
@@ -19,8 +20,21 @@ export interface SimulationResult {
   weightsHistory: Weights[];
   endingWeights: Weights;
   totalCostRate: number;
+  totalTurnover: number;
+  /** Mean cash allocation used during each monthly return period, before any end-of-period hard-stop liquidation. */
+  averageCashWeight: number;
   stopped: boolean;
   stopLabel?: string;
+}
+
+function grossTurnover(oldWeights: Weights, newWeights: Weights): number {
+  const assets = new Set([...Object.keys(oldWeights), ...Object.keys(newWeights)]);
+  assets.delete("CASH");
+  let total = 0;
+  for (const asset of assets) {
+    total += Math.abs((newWeights[asset] ?? 0) - (oldWeights[asset] ?? 0));
+  }
+  return total;
 }
 
 function assertSimulationParameters(maxAssets: number, ddLimit: number): void {
@@ -49,15 +63,19 @@ export function runMonthlyStrategy(
   initialEquity = 1_000_000,
   maxAssets = 3,
   ddLimit = -0.3,
+  strategyParameters: StrategyParameterOverrides = {},
 ): SimulationResult {
   assertSimulationParameters(maxAssets, ddLimit);
-  const ranker = strategy === "trend" ? rankTrend : rankRotation;
+  const ranker = strategy === "trend"
+    ? (snapshots: Iterable<AssetSnapshot>) => rankTrend(snapshots, strategyParameters.trend)
+    : (snapshots: Iterable<AssetSnapshot>) => rankRotation(snapshots, strategyParameters.rotation);
   let equity = initialEquity;
   const equityCurve = [equity];
   const monthlyReturns: number[] = [];
   const weightsHistory: Weights[] = [];
   let oldWeights: Weights = { CASH: 1 };
   let totalCostRate = 0;
+  let totalTurnover = 0;
   let stopped = false;
   let stopLabel: string | undefined;
 
@@ -72,6 +90,7 @@ export function runMonthlyStrategy(
       }
     }
     const cost = turnoverCost(oldWeights, newWeights, frame.costRates);
+    totalTurnover += grossTurnover(oldWeights, newWeights);
     totalCostRate += cost;
 
     const cashReturn = frame.cashReturn ?? 0;
@@ -106,6 +125,7 @@ export function runMonthlyStrategy(
         throw new Error(`Liquidation cost is invalid in frame ${frame.label}: ${liquidationCost}.`);
       }
       equity *= 1 - liquidationCost;
+      totalTurnover += grossTurnover(newWeights, { CASH: 1 });
       totalCostRate += liquidationCost;
       net = equity / equityAtStart - 1;
       stopped = true;
@@ -125,6 +145,10 @@ export function runMonthlyStrategy(
     weightsHistory,
     endingWeights: oldWeights,
     totalCostRate,
+    totalTurnover,
+    averageCashWeight: weightsHistory.length === 0
+      ? 1
+      : weightsHistory.reduce((sum, weights) => sum + (weights.CASH ?? 0), 0) / weightsHistory.length,
     stopped,
     stopLabel,
   };

@@ -83,4 +83,102 @@ describe("buildMonthlyFrames", () => {
 
     expect(rawPrice[0]!.snapshots[0]!.r12m).not.toBe(providerAdjusted[0]!.snapshots[0]!.r12m);
   });
+
+  test("volatility-window variants change the calculated signal input", () => {
+    const bars = makeBars("AAA", 500).map((bar, index) => ({
+      ...bar,
+      adjustedClose: index > 450 ? bar.adjustedClose * (index % 2 === 0 ? 1.2 : .8) : bar.adjustedClose,
+    }));
+    const shortWindow = buildMonthlyFrames({ AAA: bars }, { volatilityWindowDays: 10 });
+    const longWindow = buildMonthlyFrames({ AAA: bars }, { volatilityWindowDays: 120 });
+    const sharedLabel = shortWindow.at(-1)!.label;
+    const shortVolatility = shortWindow.find((frame) => frame.label === sharedLabel)!.snapshots[0]!.volatility;
+    const longVolatility = longWindow.find((frame) => frame.label === sharedLabel)!.snapshots[0]!.volatility;
+    expect(shortVolatility).not.toBe(longVolatility);
+  });
+
+  test("applies Point-in-Time Universe availability on each actual signal date", () => {
+    const bars = makeBars("AAA", 500);
+    const baseline = buildMonthlyFrames({ AAA: bars });
+    const availableFrom = baseline[2]!.decisionDate!;
+    const filtered = buildMonthlyFramesWithDiagnostics({ AAA: bars }, {
+      universeEligibility: (_code, decisionDate) => decisionDate >= availableFrom
+        ? { eligible: true, observationId: "universe-v1" }
+        : { eligible: false, reason: "metadata_unavailable" },
+    });
+
+    expect(filtered.frames).toHaveLength(baseline.length);
+    expect(filtered.frames.some((frame) => frame.snapshots.length === 0)).toBe(true);
+    expect(filtered.frames.filter((frame) => frame.snapshots.length > 0)
+      .every((frame) => frame.decisionDate! >= availableFrom)).toBe(true);
+    expect(filtered.assetDiagnostics[0]!.universeObservationIds).toEqual(["universe-v1"]);
+    expect(filtered.assetDiagnostics[0]!.universeExclusions?.metadata_unavailable).toBeGreaterThan(0);
+  });
+
+  test("uses each asset's own month-end trading date for Point-in-Time membership", () => {
+    const alpha = makeBars("ALPHA", 500);
+    const beta = makeBars("BETA", 500).filter((bar) => Number(bar.tradingDate.slice(8, 10)) <= 25);
+    const result = buildMonthlyFramesWithDiagnostics({ ALPHA: alpha, BETA: beta }, {
+      universeEligibility: () => ({ eligible: true, observationId: "known" }),
+    });
+    const label = result.frames.find((frame) => frame.snapshots.length === 2)!.label;
+    const alphaSignal = result.assetDiagnostics.find((item) => item.code === "ALPHA")!
+      .universeDecisions!.find((item) => item.frameLabel === label && item.phase === "signal")!;
+    const betaSignal = result.assetDiagnostics.find((item) => item.code === "BETA")!
+      .universeDecisions!.find((item) => item.frameLabel === label && item.phase === "signal")!;
+
+    expect(alphaSignal.date).not.toBe(betaSignal.date);
+    expect(alphaSignal.date).toBe(alpha.filter((bar) => bar.tradingDate.startsWith(label)).at(-1)!.tradingDate);
+    expect(betaSignal.date).toBe(beta.filter((bar) => bar.tradingDate.startsWith(label)).at(-1)!.tradingDate);
+  });
+
+  test("keeps a valid month as an explicit cash frame when the whole Universe is unavailable", () => {
+    const bars = makeBars("AAA", 500);
+    const baseline = buildMonthlyFrames({ AAA: bars });
+    const excludedLabel = baseline[2]!.label;
+    const result = buildMonthlyFrames({ AAA: bars }, {
+      universeEligibility: (_code, date, phase) => phase === "signal" && date.startsWith(excludedLabel)
+        ? { eligible: false, reason: "metadata_unavailable" }
+        : { eligible: true, observationId: "known" },
+    });
+    const explicitCash = result.find((frame) => frame.label === excludedLabel)!;
+
+    expect(explicitCash).toBeDefined();
+    expect(explicitCash.snapshots).toEqual([]);
+    expect(explicitCash.nextMonthReturns).toEqual({});
+  });
+
+  test("does not use a forward endpoint after the final eligible date", () => {
+    const bars = makeBars("AAA", 500);
+    const baseline = buildMonthlyFrames({ AAA: bars });
+    const target = baseline.find((frame) => {
+      const next = followingMonth(frame.label);
+      return bars.some((bar) => bar.tradingDate.startsWith(next) && bar.tradingDate.slice(8, 10) > "15");
+    })!;
+    const lastEligibleDate = `${followingMonth(target.label)}-15`;
+    expect(() => buildMonthlyFrames({ AAA: bars }, {
+      universeEligibility: (_code, date) => date <= lastEligibleDate
+        ? { eligible: true, observationId: "lifecycle-v1", lastEligibleDate }
+        : { eligible: false, reason: "past_last_eligible_date", observationId: "lifecycle-v1", lastEligibleDate },
+    })).toThrow(/Cannot construct a Point-in-Time forward return.*past_last_eligible_date/);
+  });
+
+  test("does not use a forward endpoint after its Universe status becomes ineligible", () => {
+    const bars = makeBars("AAA", 500);
+    const baseline = buildMonthlyFrames({ AAA: bars });
+    const target = baseline[0]!;
+
+    expect(() => buildMonthlyFrames({ AAA: bars }, {
+      universeEligibility: (_code, _date, phase) => phase === "signal"
+        ? { eligible: true, observationId: "status-v1", status: "test_candidate" }
+        : {
+            eligible: false,
+            reason: "status_not_enabled",
+            observationId: "status-v2",
+            status: "disabled",
+          },
+    })).toThrow(new RegExp(
+      `Cannot construct a Point-in-Time forward return for AAA in frame ${target.label}.*status_not_enabled`,
+    ));
+  });
 });

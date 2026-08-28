@@ -9,6 +9,7 @@
   "returnBasis": "provider_adjusted",
   "provider": "csv",
   "csvRoot": "data/raw",
+  "researchLayer": "proxy",
   "assets": [
     { "code": "1540", "symbol": "1540.jp", "listingDate": "2010-07-02" },
     { "code": "2510", "symbol": "2510.jp", "listingDate": "2017-12-11" },

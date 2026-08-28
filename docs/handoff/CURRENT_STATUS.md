@@ -1,242 +1,160 @@
 # Current Status
 
-Snapshot date: 2026-08-27
+Snapshot date: 2026-08-28
 
 ## Repository state
 
 - Repository: `koba1108/quant-pilot`
 - Local checkout: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- PR #1: merged
-- Merge commit: `5b161573419bccd83cd82400fb31110d99651fe1`
-- PR #2: merged (`docs: add Codex Project migration instructions`)
-- PR #3: merged (`fix: validate market data backtests`)
-- PR #4: merged (`feat: add return normalization foundation`)
-- Merge commit: `0e7402dbc2fba822111cc486f65498d16c0967fd`
-- PR #5: merged (`feat: add distribution accounting ledger`)
-- Merge commit: `dbc4f40eefe9c6c8e16b14d8283a7033ba91e6e4`
-- Active branch: `ykoba/point-in-time-jpy-fx`
+- Latest merged PR: #6 (`feat: add point-in-time JPY FX normalization`)
+- Latest `main` commit: `15cb74346f0acdd03302155b318f0fc49e266cb2`
+- Active branch: `ykoba/pit-universe-quality-robustness`
+- Active branch PR: not yet created at this snapshot
 
-## Implemented on main
+## Implemented on main through PR #6
 
-### Strategy
+### Deterministic research engine
 
-- `src/strategies/trend.ts` — Strategy A trend ranking
-- `src/strategies/rotation.ts` — Strategy B cross-asset rotation ranking
-- `src/strategies/types.ts` — normalized strategy inputs and ranking output
+- Strategy A Trend and Strategy B Cross-Asset Rotation ranking
+- inverse-volatility allocation with a hard maximum of three holdings
+- turnover-aware transaction costs, including stop liquidation
+- -30% high-water-mark hard stop and ending-cash behavior
+- daily-bar to monthly-frame construction with explicit missing-history diagnostics
+- CSV and Stooq research providers
+- config-driven Strategy A/B CLI and commit-safe synthetic fixtures
 
-### Portfolio and risk
+### Financial-data foundations
 
-- `src/portfolio/allocator.ts` — inverse-volatility allocation
-- `src/portfolio/costs.ts` — turnover-aware execution-cost model
-- `src/portfolio/risk.ts` — maximum drawdown and hard-stop logic
-- `src/portfolio/distribution-ledger.ts` — Point-in-Time distribution receivable, payment, and forecast-scoring ledger
+- versioned Price Return / Total Return normalization
+- explicit distribution and Corporate Action coverage/provenance checks
+- D-018 ex-date research return and separate receivable/pay-date virtual-account ledger
+- Point-in-Time exact-date non-JPY to JPY conversion and corrected-observation chains
 
-### Data
-
-- `src/data/models.ts` — normalized bars, universe members, quote quality, and eligibility policy
-- `src/data/universe.ts` — point-in-time universe eligibility primitives
-- `src/data/provider.ts` — `MarketDataProvider` interface and bar validation
-- `src/data/csv.ts` — CSV fallback provider
-- `src/data/stooq.ts` — Stooq research provider
-- `src/data/return-normalization.ts` — versioned Price Return / Total Return normalization
-
-### Backtest
-
-- `src/backtest/simulator.ts` — monthly compounding simulation
-- `src/backtest/metrics.ts` — cumulative return, CAGR, volatility, Sharpe, and Sortino calculations
-- `src/backtest/frame-builder.ts` — daily bars to monthly snapshots and forward returns
-- `src/backtest/runner.ts` — config-driven CLI for Strategy A/B
-- `backtest.config.example.json` — example configuration
-
-### Tests present in repository
-
-- `tests/core.test.ts`
-- `tests/data-costs.test.ts`
-- `tests/simulator.test.ts`
-- `tests/frame-builder.test.ts`
-- `tests/csv-provider.test.ts`
-- `tests/runner.test.ts`
-- `tests/return-normalization.test.ts`
-- `tests/distribution-ledger.test.ts`
-
-## Added by merged PR #3
-
-- commit-safe synthetic CSV data and Trend/Rotation configs under `tests/fixtures/`
-- strict runtime validation for backtest configuration and daily bars
-- explicit per-asset CLI diagnostics for loaded date bounds and history exclusion
-- a hard maximum of three holdings at both config and simulator boundaries
-- fail-closed behavior for missing held-asset returns and transaction-cost rates
-- hard-stop liquidation with exit cost and explicit ending cash weights
-- protection against treating a non-consecutive month as the next-month return
-- integration tests in `tests/csv-provider.test.ts` and `tests/runner.test.ts`
-- expanded point-in-time and safety tests in existing suites
-
-## Added by merged PR #4
-
-- `src/data/return-normalization.ts` — versioned Price Return / Total Return normalization
-- explicit cash-distribution, split/reverse-split, unsupported-action, coverage, and provenance contracts
-- explicit `ex_date` or `pay_date` policy selection for Total Return
-- Point-in-Time exclusion of future bars/events and rejection of events unavailable at recognition time
-- fail-closed handling for incomplete coverage, foreign-currency distributions, and unsupported actions
-- `unadjusted_price` / `provider_adjusted` labels in the existing CLI
-- `provider_adjusted` requires an `AdjustedClose` column; Stooq is restricted to `unadjusted_price`
-- ordinary provider CLI runs emit `returnNormalization.status=not_normalized` and a basis-specific warning
-- portfolio output rename from ambiguous `totalReturn` to `cumulativePortfolioReturn`
-- reusable normalization fixture and `tests/return-normalization.test.ts`
-- `docs/return-normalization.md` defining semantics and policy boundaries
-
-## Added by merged PR #5
-
-- approved D-018 two-layer accounting decision and O-002 resolution
-- explicit approved research policy: ex-date recognition and same-day-close theoretical reinvestment
-- `src/portfolio/distribution-ledger.ts` — versioned entitlement, revision, payment, and audit entries
-- ex-date receivables remain in economic value but are unavailable for orders until an explicit pay-date event
-- paid distribution cash becomes eligible only at a scheduled rebalance; no automatic ex-date/pay-date purchase
-- forecast scoring includes dated distribution income and subtracts transaction and FX-conversion costs
-- trust fees embedded in NAV/market prices are documented as non-additive costs
-- missing payments, payment mismatches, late amounts, foreign-currency scoring, and future-data contamination fail closed
-- `tests/fixtures/distribution-ledger/events.json` and `tests/distribution-ledger.test.ts`
-- `docs/distribution-accounting.md` — approved semantics, evidence, implementation, and limitations
-
-## Added on the Point-in-Time JPY FX branch
-
-- `src/data/fx-normalization.ts` — versioned provider-neutral FX rate book and JPY conversion
-- explicit `target_currency_per_source_currency` quote direction; JPY 150 per USD 1 is represented as `150`
-- unhedged JPY return compounds local return and FX return multiplicatively
-- exact-date matching for prices, trading value, and distribution-income entries
-- `rateDate`, `observedAt`, `availableAt`, coverage, and provenance validation
-- explicit supersession chains for corrected historical FX observations
-- no implicit forward-fill, backfill, prior-month value, quote inversion, or cross-rate construction
-- valuation/reference rates remain separate from executable FX conversion costs
-- foreign distributions can enter selected-ETF JPY forecast scoring with applied observation IDs
-- `tests/fixtures/fx-normalization/rates.json` and `tests/fx-normalization.test.ts`
-- `docs/fx-normalization.md` — calculation, Point-in-Time rules, official evidence, and limitations
-
-## Verification status
-
-The merged implementation was checked locally on 2026-08-27. Validation fixes, Return normalization, and distribution accounting are on `main` through PR #5.
+### Main verification baseline
 
 - Node.js: `v26.7.0`
 - Bun: `1.3.14`
-- `bun install`: PASS, no changes
-- `bun test`: PASS, 53 tests / 0 failures on post-PR #5 `main`
-- `bunx tsc --noEmit`: PASS
-- Trend CLI: PASS
-- Rotation CLI: PASS
-- exact repeated-run reproducibility: PASS
+- `bun install`: pass, no dependency changes
+- `bun test`: 67 pass / 0 fail
+- `bunx tsc --noEmit`: pass
+- Trend CLI: pass
+- Rotation CLI: pass
+- exact repeated-run fixture reproducibility: pass
 
-Fixture commands:
+## Added on the current branch
+
+### Point-in-Time Universe master
+
+- `src/data/universe-master.ts` adds a strict `universe-master-v1` CSV contract.
+- Instrument observations have stable IDs, explicit correction chains, listing and inclusive `last_eligible_date`, availability timestamps, source provenance, and explicit D-003 product-class flags.
+- The resolver selects only metadata available by each decision cutoff and records applied observation IDs.
+- The backtest runner can opt into the master with `universeMasterPath`; lifecycle overrides in the ordinary asset config are then rejected, and the current runner fails closed on non-JPY or prohibited/non-ETF products.
+- Universe membership is resolved for every monthly signal frame, not only once at the backtest end date.
+- Signal and forward-return endpoints both enforce lifecycle, status, product, and currency eligibility. A newly ineligible endpoint stops frame construction rather than consuming that return.
+- Execution revalidates the config and fingerprints of the loaded master, status policy, and bar inputs so callers cannot mutate validated inputs or silently change the requested window.
+- The repository-root `universe_master.csv` remains a legacy candidate catalog and is intentionally rejected by the strict loader because it lacks safe Point-in-Time fields.
+- The config-only compatibility path requires `researchLayer=synthetic_fixture` or `researchLayer=proxy`; it cannot masquerade as ETF-realistic D-003/D-006 evidence.
+
+### Data provenance, quality, and source comparison
+
+- `src/data/provenance.ts` adds canonical hashes and versioned artifact lineage.
+- `src/data/data-quality.ts` emits deterministic `pass`, `research_only`, or `blocked` reports rather than filling missing data.
+- `src/data/reconciliation.ts` binds comparable observations to parent artifacts, field-specific semantics, availability, and policy fingerprints; consumers recompute group results/issues from the embedded evidence and never silently select a source winner.
+- `src/data/data-quality-runner.ts` provides the `bun run data-quality` executable path.
+- The committed single-source unadjusted fixture correctly reports `research_only`; it is not presented as production evidence.
+
+### Strategy A/B robustness grid
+
+- `src/backtest/robustness-grid.ts` runs deterministic combinations of Strategy A/B weights/filter choices, transaction costs, maximum holdings, and volatility windows.
+- Results include return/risk, drawdown, turnover, cost, cash-ratio, worst-month, and worst-year metrics.
+- Rebalance timing and replacement/hysteresis values not implemented by the simulator are explicit `unsupported` cells, never substituted silently.
+- Output contains stability ranges and no automatic best-cell or approved-parameter selection.
+- Grid output itself carries `evidenceDisposition=research_only`, its return basis, and `returnNormalization.status=not_normalized`.
+
+## Current branch verification
+
+Commands:
 
 ```bash
-bun run backtest --config=tests/fixtures/configs/trend.json
-bun run backtest --config=tests/fixtures/configs/rotation.json
+bun test
+bunx tsc --noEmit
+bun run backtest --config=tests/fixtures/configs/trend-universe.json
+bun run backtest --config=tests/fixtures/configs/rotation-universe.json
+bun run data-quality --config=tests/fixtures/configs/data-quality.json
+bun run robustness --config=tests/fixtures/configs/robustness-grid.json
 ```
 
-Both strategies produced 18 monthly frames from `2023-12` through `2025-05`, held at most three assets, charged a total modeled cost rate of approximately `0.002`, and stopped after frame `2025-01` when the synthetic series crossed the -30% high-water-mark limit. Ending weights were 100% cash.
+Latest pre-PR results:
 
-The synthetic fixture contains 651 weekday rows from `2023-01-02` through `2025-06-30`. It is labeled `unadjusted_price`, with identical `Close` and `AdjustedClose`; no distribution, Corporate Action, FX, or real liquidity evidence is represented.
+- `bun test`: 105 pass / 0 fail
+- `bunx tsc --noEmit`: pass
+- strict v1 Universe Trend CLI: pass
+- strict v1 Universe Rotation CLI: pass
+- repeated CLI output: deterministic
+- data-quality CLI: pass, disposition `research_only` as expected
+- robustness CLI: pass, 32 cells total; 16 completed and 16 explicitly unsupported
+- completed cells preserve the three-holding cap, cost drag, and -30% stop
+- every ordinary backtest result is explicitly `research_only`; `etf_realistic` is rejected until its required data layers are integrated
 
-Defects found in merged PR #1:
-
-- `maxAssets=4` produced four positions.
-- a missing held-asset next-month return was treated as zero.
-- insufficient-history assets disappeared without an explicit CLI reason.
-- mandatory stop liquidation omitted the sell-side transaction cost.
-- a missing calendar month could be used as though the next available month were the immediate next month.
-- malformed/missing CSV values could be skipped or represented as zero.
-
-All are fixed and covered on `main`.
-
-Current Point-in-Time JPY FX branch verification:
-
-- `bun test`: PASS, 67 tests / 0 failures
-- `bunx tsc --noEmit`: PASS
-- `bun run test:node`: FAIL due to pre-existing Bun-only imports and Node strip-only TypeScript limitations; not the required test path
-- split discontinuity normalization: PASS
-- approved ex-date research policy and pay-date robustness path: PASS
-- incomplete coverage and missing policy rejection: PASS
-- future bar/event isolation: PASS
-- event-availability Point-in-Time validation: PASS
-- foreign-currency and unsupported-action rejection: PASS
-- ex-date entitlement, later revision, and pay-date cash transition: PASS
-- scheduled-rebalance cash availability and forecast scoring: PASS
-- missing/mismatched payment and foreign-currency forecast rejection: PASS
-- multiplicative local-return and FX-return conversion: PASS
-- exact-date trading-value and distribution-income conversion: PASS
-- Point-in-Time FX revisions and future-data isolation: PASS
-- missing rates, inverted quotes, implicit cross rates, and ambiguous revision chains: REJECTED as required
+The Trend and Rotation strict-Universe fixtures use the same synthetic daily Price series as the legacy integration fixture. Both produce 18 monthly frames, final value `833426`, cumulative portfolio return approximately `-0.1665735`, modeled cost rate approximately `0.002`, maximum three holdings, and a stop after `2025-01`.
 
 ## Required validation coverage
 
-- PASS — TypeScript/Bun runtime succeeds
-- PASS — all required Bun unit and integration tests pass
-- PASS — Trend CLI succeeds with controlled fixture data
-- PASS — Rotation CLI succeeds with controlled fixture data
-- PASS — listing and delisting boundaries are enforced
-- PASS — signal construction uses only decision-date information
-- PASS — insufficient history is visible and deterministic
-- PASS — transaction costs reduce returns, including stop liquidation
+- PASS — Trend and Rotation both execute
+- PASS — identical input/config produces identical output
+- PASS — insufficient history is an explicit exclusion
+- PASS — pre-listing and post-last-eligible bars are not used
+- PASS — signals use no data after the monthly decision point
+- PASS — transaction costs reduce portfolio results
 - PASS — maximum holdings remain three or fewer
-- PASS — -30% high-water-mark stop is covered by an integration test
-- PASS — repeated execution is reproducible
+- PASS — -30% high-water-mark stop is enforced
+- PASS — missing data is never implicitly replaced with zero or the prior value
 
 ## Known limitations and risks
 
 ### Data correctness
 
-- Stooq is a research OHLCV source, not approved final total-return evidence.
-- D-018 accounting is approved and implemented as a deterministic ledger, but no production event provider is connected.
-- Provider-neutral Point-in-Time JPY conversion is implemented, but no production FX provider is connected.
-- Exchange-calendar/holiday alignment has no fallback; missing exact-date rates stop conversion.
-- Cross-source reconciliation is not implemented.
-- Data licensing, retention, and reproducibility for the final provider remain unresolved.
+- All committed end-to-end fixtures are synthetic. They prove implementation behavior, not investable performance.
+- The fixture is unadjusted Price data with no real distributions, Corporate Actions, FX, spreads, depth, or fund-structure evidence.
+- No production market-data, Corporate Action, FX, historical-Universe, or second-source adapter is connected.
+- The quality/reconciliation layer is a provider-neutral foundation; production source identity and metadata must come from a trusted adapter rather than a user assertion.
+- Dataset-level availability is recorded, but ordinary daily bars do not yet carry row-level `availableAt`; the current CLI must therefore not be described as a fully production-ready per-bar Point-in-Time quality gate.
+- Stooq remains research plumbing and cannot be the sole final investment basis.
 
 ### Universe correctness
 
-- The runner currently accepts assets from config rather than loading `universe_master.csv` as the source of truth.
-- Listing/delisting bounds may be supplied from config, but the complete historical ETF master is not yet wired into the runner.
-- Survivorship-bias controls require a maintained point-in-time universe and delisting history.
+- The strict v1 fixture is synthetic. The legacy root catalog has not been converted into a verified historical master.
+- Status values are explicitly opted into by research config; no final Universe member or production status policy is approved.
+- Product-class booleans are fail-closed gates, but production correctness still depends on a trusted source populating them accurately.
+- Exact eligibility and liquidity thresholds remain O-003; missing required evidence is not fabricated.
 
-### Backtest completeness
+### Robustness completeness
 
-- Robustness-grid execution is not implemented.
-- Rebalance-date and replacement/hysteresis comparisons are not implemented.
-- Cash return is simplified.
-- Research Total Return, embedded-fee treatment, and JPY return conversion are defined; integration with production events and the full position simulator remains incomplete.
-- Distribution entitlement units are supplied to the ledger; derivation from Point-in-Time orders, positions, and settlement remains unimplemented.
-- Foreign receivable/cash FX revaluation between ledger events is not integrated into the full simulator.
-- Strategy C is specified but not implemented.
+- Current grid supports only the parameter axes the simulator can apply deterministically today.
+- Nearby rebalance dates, next-open execution, hysteresis/minimum holding periods, and cost-aware no-trade bands remain explicit unsupported cells under O-006.
+- Crisis-window, benchmark-correlation, and complementarity reports are not yet implemented.
+- No parameter combination is approved; O-005 remains open.
 
 ### Operations
 
-- Forward-test persistence, scheduled monthly execution, decision-package storage, notifications, and dashboard are not implemented.
-- No brokerage or real-order connection exists and none should be added in the current phase.
+- Strategy C and its decision-package schema are not implemented.
+- Forward-test persistence, scheduling, notifications, and dashboard are not implemented.
+- No brokerage connection or real-order path exists and none should be added in the current phase.
+
+## Open decisions preserved
+
+- O-001: production providers and licensing
+- O-003/O-004: exact ETF eligibility thresholds and final members
+- O-005/O-006: approved Strategy A/B parameters and trading rules
+- O-007 through O-016: cash, caps, AI policy, evaluation, persistence, and real-money details
+
+The current branch adds evidence-producing contracts and executable research tooling. It does not resolve these decisions.
 
 ## Next implementation sequence
 
-### P0 — Validate merged main
-
-Complete through merged PR #3.
-
-### P1 — Make data financially correct
-
-1. Review and merge the Point-in-Time JPY FX foundation with explicit user approval.
-2. Implement a `universe_master.csv` loader with point-in-time filtering.
-3. Add data-quality reports and cross-source comparison hooks.
-4. Preserve raw input provenance and normalized-output versioning.
-
-### P2 — Make research robust
-
-1. Add parameter-grid execution for Strategy A/B.
-2. Add rebalance-date and turnover-rule sensitivity tests.
-3. Add crisis-period, worst-month/year, cash-ratio, and benchmark-correlation reporting.
-4. Select candidates by robustness and distinct behavior, not peak return.
-
-### P3 — Build Strategy C and forward testing
-
-1. Define the complete decision-package schema.
-2. Implement Portfolio Manager, Macro Analyst, and Risk/Critic interfaces.
-3. Add evidence timestamps, source confidence, contrary evidence, and thesis expiry.
-4. Add virtual portfolio persistence and monthly scheduling.
-5. Build the one-minute dashboard and detailed drill-down report.
+1. Complete review, create one PR for the current branch, and merge only after explicit user approval.
+2. Connect verified versioned Universe and multiple-source provider adapters after O-001 research.
+3. Add remaining timing/replacement, crisis-period, and benchmark-comparison robustness axes.
+4. Define the Strategy C decision-package schema.
+5. Implement forward-test persistence, scheduled execution, notification, and dashboard layers.

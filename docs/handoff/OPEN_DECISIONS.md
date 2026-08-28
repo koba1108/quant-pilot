@@ -19,6 +19,8 @@ Stooq may be used for research plumbing, but is not yet approved as final eviden
 
 Implementation note: `src/data/fx-normalization.ts` defines a provider-neutral Point-in-Time JPY conversion contract and synthetic regression fixture. It does not approve an FX source, fixing time, holiday alignment rule, license, or production adapter.
 
+Implementation note: `src/data/provenance.ts`, `src/data/data-quality.ts`, and `src/data/reconciliation.ts` define versioned evidence and comparison contracts. They deliberately do not approve a provider, preferred source, license, or automatic conflict winner. The committed quality fixture is synthetic and single-source.
+
 ## O-003 — Exact ETF eligibility thresholds
 
 Need evidence-backed thresholds for core and theme ETFs, including:
@@ -35,6 +37,8 @@ Need evidence-backed thresholds for core and theme ETFs, including:
 
 The current defaults in code are placeholders, not approved production thresholds.
 
+Implementation note: the strict Universe loader preserves explicit fields and rejects missing required evidence. Its committed fixture uses a 253-observation research-history check only to exercise the current Strategy A/B lookback; that is not an approved production eligibility threshold.
+
 ## O-004 — Final Universe members
 
 Need to confirm:
@@ -44,6 +48,8 @@ Need to confirm:
 - how to avoid duplicate exposures tracking similar indices;
 - whether any bond or REIT exposure with substantial US components conflicts with the intended diversification role;
 - which commodity products have acceptable roll and tracking behavior.
+
+Implementation note: `universe-master-v1` can reproduce dated candidate observations and explicit status opt-ins, but the synthetic fixture and legacy root catalog do not approve any final member.
 
 ## O-005 — Strategy A/B parameters
 
@@ -59,6 +65,8 @@ The current formulas are provisional. Test, rather than assume:
 
 Adopt broad, robust parameter regions rather than the single best backtest point.
 
+Implementation note: `src/backtest/robustness-grid.ts` can execute supported Strategy A/B parameter cells and summarize stability without choosing a winner. No tested value is promoted to policy by the runner.
+
 ## O-006 — Rebalance and replacement rules
 
 Need to compare:
@@ -69,6 +77,8 @@ Need to compare:
 - rank hysteresis for existing holdings;
 - minimum holding periods;
 - cost-aware no-trade bands.
+
+Implementation note: unsupported timing and replacement values are preserved as explicit unsupported grid cells. They are not substituted with month-end/immediate-replacement behavior.
 
 ## O-007 — Cash return proxy
 
@@ -99,6 +109,8 @@ AI may choose 100% cash, but the confidence/evidence threshold and its calibrati
 Overall evaluation must include absolute return, risk-adjusted return, drawdown, and complementarity to the existing US equity index exposure. Exact metric weights and minimum pass thresholds remain open.
 
 Routine reporting should still focus on the Quant Pilot strategy itself.
+
+Implementation note: the robustness grid reports individual risk/return metrics and ranges, but deliberately emits no composite score or pass threshold.
 
 ## O-012 — Strategy C historical validation
 

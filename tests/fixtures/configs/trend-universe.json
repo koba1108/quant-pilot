@@ -1,0 +1,25 @@
+{
+  "strategy": "trend",
+  "start": "2023-01-02",
+  "end": "2025-06-30",
+  "initialEquity": 1000000,
+  "maxAssets": 3,
+  "ddLimit": -0.3,
+  "costRate": 0.001,
+  "volatilityWindowDays": 63,
+  "returnBasis": "unadjusted_price",
+  "provider": "csv",
+  "csvRoot": "tests/fixtures/market-data",
+  "researchLayer": "synthetic_fixture",
+  "universeMasterPath": "tests/fixtures/universe/universe-master-v1.csv",
+  "universeStatuses": ["test_candidate"],
+  "assets": [
+    { "code": "ALPHA", "provenance": { "source": "synthetic-fixture", "dataset": "synthetic-bars", "sourceVersion": "v1", "adapterVersion": "csv-market-data-v1", "observedAt": "2025-06-30T16:00:00Z", "availableAt": "2025-06-30T20:00:00Z", "retrievedAt": "2026-08-27T00:00:00Z", "recordId": "bars-alpha-v1" } },
+    { "code": "BETA", "provenance": { "source": "synthetic-fixture", "dataset": "synthetic-bars", "sourceVersion": "v1", "adapterVersion": "csv-market-data-v1", "observedAt": "2025-06-30T16:00:00Z", "availableAt": "2025-06-30T20:00:00Z", "retrievedAt": "2026-08-27T00:00:00Z", "recordId": "bars-beta-v1" } },
+    { "code": "GAMMA", "provenance": { "source": "synthetic-fixture", "dataset": "synthetic-bars", "sourceVersion": "v1", "adapterVersion": "csv-market-data-v1", "observedAt": "2025-06-30T16:00:00Z", "availableAt": "2025-06-30T20:00:00Z", "retrievedAt": "2026-08-27T00:00:00Z", "recordId": "bars-gamma-v1" } },
+    { "code": "DELTA", "provenance": { "source": "synthetic-fixture", "dataset": "synthetic-bars", "sourceVersion": "v1", "adapterVersion": "csv-market-data-v1", "observedAt": "2025-06-30T16:00:00Z", "availableAt": "2025-06-30T20:00:00Z", "retrievedAt": "2026-08-27T00:00:00Z", "recordId": "bars-delta-v1" } },
+    { "code": "ENDED", "provenance": { "source": "synthetic-fixture", "dataset": "synthetic-bars", "sourceVersion": "v1", "adapterVersion": "csv-market-data-v1", "observedAt": "2025-01-15T16:00:00Z", "availableAt": "2025-01-15T20:00:00Z", "retrievedAt": "2026-08-27T00:00:00Z", "recordId": "bars-ended-v1" } },
+    { "code": "LATE", "provenance": { "source": "synthetic-fixture", "dataset": "synthetic-bars", "sourceVersion": "v1", "adapterVersion": "csv-market-data-v1", "observedAt": "2025-06-30T16:00:00Z", "availableAt": "2025-06-30T20:00:00Z", "retrievedAt": "2026-08-27T00:00:00Z", "recordId": "bars-late-v1" } },
+    { "code": "FUTURE", "provenance": { "source": "synthetic-fixture", "dataset": "synthetic-bars", "sourceVersion": "v1", "adapterVersion": "csv-market-data-v1", "observedAt": "2025-06-30T16:00:00Z", "availableAt": "2025-06-30T20:00:00Z", "retrievedAt": "2026-08-27T00:00:00Z", "recordId": "bars-future-v1" } }
+  ]
+}
