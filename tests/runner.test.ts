@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   assertBarsWithinRequest,
   executeLoadedBacktest,
@@ -14,6 +15,8 @@ const trendConfig = "tests/fixtures/configs/trend.json";
 const rotationConfig = "tests/fixtures/configs/rotation.json";
 const trendUniverseConfig = "tests/fixtures/configs/trend-universe.json";
 const rotationUniverseConfig = "tests/fixtures/configs/rotation-universe.json";
+const trendNormalizedConfig = "tests/fixtures/configs/trend-normalized.json";
+const rotationNormalizedConfig = "tests/fixtures/configs/rotation-normalized.json";
 
 test("Trend and Rotation fixture runs enforce integration guardrails", async () => {
   const [trend, rotation] = await Promise.all([
@@ -22,7 +25,11 @@ test("Trend and Rotation fixture runs enforce integration guardrails", async () 
   ]);
 
   for (const result of [trend, rotation]) {
-    assert.equal(result.outputSchemaVersion, "backtest-summary-v2");
+    assert.equal(result.outputSchemaVersion, "backtest-summary-v3");
+    assert.equal(result.start, "2024-01");
+    assert.equal(result.end, "2025-06");
+    assert.equal(result.signalStart, "2023-12");
+    assert.equal(result.signalEnd, "2025-05");
     assert.equal(result.returnBasis, "unadjusted_price");
     assert.equal(result.returnNormalization.status, "not_normalized");
     assert.equal(result.evidenceDisposition, "research_only");
@@ -31,7 +38,7 @@ test("Trend and Rotation fixture runs enforce integration guardrails", async () 
     assert.equal("totalReturn" in result, false);
     assert.ok(result.months > 0);
     assert.equal(result.stopped, true);
-    assert.equal(result.stopLabel, "2025-01");
+    assert.equal(result.stopLabel, "2025-02");
     assert.ok(result.maxDrawdown <= -.3);
     assert.equal(result.maxObservedHoldings, 3);
     assert.deepEqual(result.latestWeights, { CASH: 1 });
@@ -52,6 +59,113 @@ test("Trend and Rotation fixture runs enforce integration guardrails", async () 
   }
 });
 
+test("Trend and Rotation execute deterministically on separate Point-in-Time normalized snapshots", async () => {
+  const [trend, rotation, repeated] = await Promise.all([
+    runBacktest(trendNormalizedConfig),
+    runBacktest(rotationNormalizedConfig),
+    runBacktest(trendNormalizedConfig),
+  ]);
+  assert.deepEqual(repeated, trend);
+  for (const result of [trend, rotation]) {
+    assert.equal(result.outputSchemaVersion, "backtest-summary-v3");
+    assert.equal(result.returnBasis, "price_return");
+    assert.equal(result.returnNormalization.status, "normalized_point_in_time");
+    if (result.returnNormalization.status !== "normalized_point_in_time") assert.fail("normalized summary expected");
+    assert.equal(result.returnNormalization.snapshotPolicy, "separate_signal_and_forward_endpoint");
+    assert.equal(result.returnNormalization.barAvailabilityPolicy, "synthetic_same_day_close_v1");
+    assert.deepEqual(result.returnNormalization.policyIds, []);
+    assert.deepEqual(result.returnNormalization.fxContractIds, []);
+    assert.match(result.returnNormalization.inputFingerprints[0]!.fingerprint, /^sha256:[0-9a-f]{64}$/);
+    assert.equal(result.months, 18);
+    assert.equal(result.finalEquity, 833426);
+    assert.equal(result.maxObservedHoldings, 1);
+    assert.equal(result.stopped, true);
+    assert.equal(result.stopLabel, "2025-02");
+    const diagnostic = result.assetDiagnostics[0]!;
+    assert.equal(diagnostic.eligibleFrameCount, 18);
+    assert.equal(diagnostic.returnNormalizationDecisions?.length, 36);
+    assert.ok(diagnostic.returnNormalizationDecisions?.some((decision) => decision.phase === "signal"));
+    assert.ok(diagnostic.returnNormalizationDecisions?.some((decision) => decision.phase === "forward_endpoint"));
+    assert.ok(diagnostic.returnNormalizationDecisions?.every(
+      (decision) => /^sha256:[0-9a-f]{64}$/.test(decision.snapshotFingerprint),
+    ));
+  }
+});
+
+test("normalized runner carries explicit Total Return policy and distribution events", async () => {
+  const config = JSON.parse(await readFile(trendNormalizedConfig, "utf8"));
+  config.returnBasis = "total_return";
+  const normalization = config.assets[0].pointInTimeReturn;
+  normalization.totalReturnPolicyId = "research-total-return-d018-v1";
+  normalization.totalReturnPolicy = { distributionRecognition: "ex_date", reinvestment: "same_day_close" };
+  normalization.events = [{
+    type: "cash_distribution",
+    eventId: "alpha-distribution-2024-02-01",
+    code: "ALPHA",
+    exDate: "2024-02-01",
+    amountPerUnit: 5,
+    currency: "JPY",
+    availableAt: "2024-01-31T00:00:00Z",
+    provenance: {
+      source: "synthetic-fixture",
+      dataset: "synthetic-return-events",
+      retrievedAt: "2026-08-27T00:00:00Z",
+      sourceVersion: "v1",
+      recordId: "alpha-distribution-2024-02-01",
+    },
+  }];
+
+  const totalReturn = await runBacktestConfig(config);
+  assert.equal(totalReturn.returnNormalization.status, "normalized_point_in_time");
+  if (totalReturn.returnNormalization.status !== "normalized_point_in_time") assert.fail("normalized summary expected");
+  assert.deepEqual(totalReturn.returnNormalization.policyIds, ["research-total-return-d018-v1"]);
+  assert.ok(totalReturn.assetDiagnostics[0]!.returnNormalizationDecisions?.some(
+    (decision) => decision.appliedReturnEventIds.includes("alpha-distribution-2024-02-01"),
+  ));
+});
+
+test("normalized runner converts a non-JPY source with exact-date Point-in-Time FX", async () => {
+  const config = JSON.parse(await readFile(trendNormalizedConfig, "utf8"));
+  const normalization = config.assets[0].pointInTimeReturn;
+  normalization.currency = "USD";
+  const lines = (await readFile("tests/fixtures/market-data/synthetic.csv", "utf8")).trim().split(/\r?\n/).slice(1);
+  const dates = lines.map((line) => line.split(",")[0]!);
+  const fxProvenance = {
+    source: "synthetic-fixture",
+    dataset: "synthetic-usd-jpy",
+    retrievedAt: "2026-08-27T00:00:00Z",
+    sourceVersion: "v1",
+  };
+  normalization.fxCoverage = {
+    sourceCurrency: "USD",
+    targetCurrency: "JPY",
+    startDate: dates[0],
+    endDate: dates.at(-1),
+    status: "complete",
+    availableAt: "2023-01-01T00:00:00Z",
+    provenance: { ...fxProvenance, recordId: "usd-jpy-coverage-v1" },
+  };
+  normalization.fxObservations = dates.map((date, index) => ({
+    observationId: `usd-jpy-${date}`,
+    rateDate: date,
+    sourceCurrency: "USD",
+    targetCurrency: "JPY",
+    quoteConvention: "target_currency_per_source_currency",
+    targetCurrencyPerSourceUnit: 140 + index / 1000,
+    observedAt: `${date}T20:00:00Z`,
+    availableAt: `${date}T20:01:00Z`,
+    provenance: { ...fxProvenance, recordId: `usd-jpy-${date}` },
+  }));
+
+  const result = await runBacktestConfig(config);
+  assert.equal(result.returnNormalization.status, "normalized_point_in_time");
+  if (result.returnNormalization.status !== "normalized_point_in_time") assert.fail("normalized summary expected");
+  assert.deepEqual(result.returnNormalization.fxContractIds, ["point-in-time-jpy-fx-d006-v1"]);
+  assert.ok(result.assetDiagnostics[0]!.returnNormalizationDecisions?.every(
+    (decision) => decision.fxObservationCount === decision.barObservationCount,
+  ));
+});
+
 test("fixture-backed backtest is exactly reproducible", async () => {
   const first = await runBacktest(trendConfig);
   const second = await runBacktest(trendConfig);
@@ -69,7 +183,7 @@ test("versioned Point-in-Time universe master drives both Strategy A and B deter
     assert.equal(result.months, 18);
     assert.equal(result.finalEquity, 833426);
     assert.equal(result.maxObservedHoldings, 3);
-    assert.equal(result.stopLabel, "2025-01");
+    assert.equal(result.stopLabel, "2025-02");
     assert.match(result.universeMaster!.fingerprint, /^sha256:[0-9a-f]{64}$/);
     const alpha = result.assetDiagnostics.find((asset) => asset.code === "ALPHA")!;
     assert.deepEqual(alpha.universeObservationIds, ["univ-alpha-v1"]);
@@ -97,7 +211,7 @@ test("legacy candidate catalog cannot masquerade as a Point-in-Time master", asy
     () => runBacktestConfig({
       strategy: "trend",
       start: "2024-01-01",
-      end: "2025-01-01",
+      end: "2024-12-31",
       returnBasis: "unadjusted_price",
       provider: "csv",
       csvRoot: "tests/fixtures/market-data",
@@ -122,7 +236,7 @@ test("CLI config validation rejects relaxed hard constraints", () => {
   assert.throws(() => validateBacktestConfig({ ...base, ddLimit: -.31 }), /Invalid ddLimit/);
   assert.throws(
     () => validateBacktestConfig({ ...base, returnBasis: "total_return" }),
-    /returnBasis must be/,
+    /requires pointInTimeReturn/,
   );
   assert.throws(
     () => validateBacktestConfig({ ...base, provider: "stooq", returnBasis: "provider_adjusted" }),
@@ -144,13 +258,26 @@ test("CLI config validation rejects relaxed hard constraints", () => {
   );
   assert.throws(
     () => validateBacktestConfig({ ...base, researchLayer: "etf_realistic" }),
-    /not executable until normalized returns/,
+    /not executable until production row-level provenance/,
   );
   const { researchLayer: _researchLayer, ...unlabeledLegacy } = base;
   assert.throws(
     () => validateBacktestConfig(unlabeledLegacy),
     /config-only asset path is limited to explicitly labeled/,
   );
+});
+
+test("monthly config validation rejects a partial final month for raw and normalized paths", async () => {
+  const [raw, normalized] = await Promise.all([
+    loadBacktestConfig(trendConfig),
+    loadBacktestConfig(trendNormalizedConfig),
+  ]);
+  for (const config of [raw, normalized]) {
+    assert.throws(
+      () => validateBacktestConfig({ ...config, end: "2025-06-15" }),
+      /calendar month-end/,
+    );
+  }
 });
 
 test("object API revalidates config and provider bars cannot escape the requested range", async () => {
@@ -193,4 +320,9 @@ test("execution rejects Universe, bar, policy, or audit mutations after input va
     () => executeLoadedBacktest(configLoaded, { ...config, start: "2024-01-01", end: "2024-12-31" }),
     /changes data-loading fields/,
   );
+
+  const normalizedConfig = await loadBacktestConfig(trendNormalizedConfig);
+  const normalizedLoaded = await loadBacktestInputs(normalizedConfig);
+  normalizedLoaded.pointInTimeReturnAssets!.get("ALPHA")!.barObservations[0]!.close += 1;
+  assert.throws(() => executeLoadedBacktest(normalizedLoaded), /inputs changed after validation/);
 });

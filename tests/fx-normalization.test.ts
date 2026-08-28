@@ -55,6 +55,7 @@ function eventCoverage(): ReturnEventCoverage {
     endDate: "2025-01-31",
     corporateActions: "complete",
     distributions: "complete",
+    availableAt: "2025-01-01T00:00:00Z",
     provenance: structuredClone(fixture.coverage.provenance),
   };
 }

@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  realizedReturnLabels,
   runRobustnessGrid,
   runRobustnessGridConfig,
   validateRobustnessGridConfig,
@@ -12,11 +13,18 @@ import {
 
 const configPath = "tests/fixtures/configs/robustness-grid.json";
 
+test("robustness metrics reject frames without an explicit realized return label", () => {
+  assert.throws(
+    () => realizedReturnLabels([{ label: "2024-01" }]),
+    /Missing realized return label for frame 2024-01 at index 0/,
+  );
+});
+
 test("Strategy A/B robustness grid is deterministic, descriptive, and explicit about unsupported axes", async () => {
   const first = await runRobustnessGrid(configPath);
   const second = await runRobustnessGrid(configPath);
   assert.deepEqual(second, first);
-  assert.equal(first.outputSchemaVersion, "robustness-grid-v1");
+  assert.equal(first.outputSchemaVersion, "robustness-grid-v2");
   assert.equal(first.selectionPolicy, "descriptive_only_no_automatic_winner");
   assert.equal(first.evidenceDisposition, "research_only");
   assert.equal(first.returnBasis, "unadjusted_price");
@@ -35,6 +43,10 @@ test("Strategy A/B robustness grid is deterministic, descriptive, and explicit a
   assert.ok(completed.every((scenario) => Number.isFinite(scenario.metrics!.totalTurnover)));
   assert.ok(completed.every((scenario) => scenario.metrics!.worstMonth !== undefined));
   assert.ok(completed.every((scenario) => scenario.metrics!.worstYear !== undefined));
+  assert.ok(completed.every((scenario) => scenario.metrics!.worstMonth!.label === "2025-02"));
+  assert.ok(completed.every((scenario) => scenario.metrics!.worstYear!.label === "2025"));
+  assert.ok(completed.every((scenario) => scenario.metrics!.worstYear!.observedMonths === 6));
+  assert.ok(completed.every((scenario) => scenario.metrics!.worstYear!.complete === false));
 
   const unsupported = first.scenarios.filter((scenario) => scenario.status === "unsupported");
   assert.ok(unsupported.every((scenario) => scenario.unsupportedAxes?.some(
@@ -47,6 +59,30 @@ test("Strategy A/B robustness grid is deterministic, descriptive, and explicit a
   const costGroups = first.axisStability.filter((group) => group.axis === "costRate");
   assert.deepEqual(costGroups.map((group) => [group.value, group.completedCount]), [[0, 8], [0.001, 8]]);
   assert.ok(costGroups[0]!.metrics.totalCostRate!.median < costGroups[1]!.metrics.totalCostRate!.median);
+});
+
+test("supported robustness cells preserve normalized Point-in-Time audit metadata", async () => {
+  const report = await runRobustnessGridConfig(validateRobustnessGridConfig({
+    schemaVersion: "robustness-grid-config-v1",
+    baseConfig: "tests/fixtures/configs/trend-normalized.json",
+    axes: {
+      strategies: ["trend", "rotation"],
+      trendParameters: [{ r3mWeight: .2, r6mWeight: .3, r12mWeight: .5, requirePositiveR12m: true }],
+      rotationParameters: [{ r6mWeight: .4, r12mWeight: .4, volatilityPenalty: .2, requirePositiveR12m: true }],
+      costRates: [.001],
+      maxAssets: [1],
+      volatilityWindowDays: [63],
+      rebalanceTimings: ["month_end_close"],
+      replacementRules: ["immediate_top_n"],
+    },
+  }));
+
+  assert.deepEqual(report.counts, { total: 2, completed: 2, unsupported: 0 });
+  assert.equal(report.returnBasis, "price_return");
+  assert.equal(report.returnNormalization.status, "normalized_point_in_time");
+  if (report.returnNormalization.status !== "normalized_point_in_time") assert.fail("normalized report expected");
+  assert.equal(report.returnNormalization.snapshotPolicy, "separate_signal_and_forward_endpoint");
+  assert.match(report.returnNormalization.inputFingerprints[0]!.fingerprint, /^sha256:[0-9a-f]{64}$/);
 });
 
 test("an all-unsupported grid reports capabilities without loading missing market data", async () => {

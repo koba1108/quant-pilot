@@ -63,6 +63,7 @@
     "endDate": "2025-01-08",
     "corporateActions": "complete",
     "distributions": "complete",
+    "availableAt": "2025-01-01T00:00:00Z",
     "provenance": {
       "source": "fixture",
       "dataset": "synthetic-return-events",

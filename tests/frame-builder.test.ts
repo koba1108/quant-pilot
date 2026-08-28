@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { buildMonthlyFrames, buildMonthlyFramesWithDiagnostics } from "../src/backtest/frame-builder.ts";
+import {
+  buildMonthlyFrames,
+  buildMonthlyFramesWithDiagnostics,
+  buildPointInTimeMonthlyFramesWithDiagnostics,
+  type PointInTimeReturnSnapshot,
+} from "../src/backtest/frame-builder.ts";
 import type { DailyBar } from "../src/data/models.ts";
 
 function makeBars(code: string, days = 320): DailyBar[] {
@@ -26,6 +31,44 @@ function followingMonth(label: string): string {
   return new Date(Date.UTC(year!, month!, 1)).toISOString().slice(0, 7);
 }
 
+function pointInTimeResolver(
+  bars: DailyBar[],
+  alterAtOrAfter?: { cutoff: string; month: string; multiplier: number },
+): (
+  code: string,
+  decisionDate: string,
+  pinnedPrefix?: PointInTimeReturnSnapshot,
+) => PointInTimeReturnSnapshot | undefined {
+  return (code, decisionDate, pinnedPrefix) => {
+    const selected = bars.filter((bar) => bar.tradingDate <= decisionDate).map((bar) => (
+      pinnedPrefix !== undefined && bar.tradingDate <= pinnedPrefix.decisionDate
+        ? { ...pinnedPrefix.bars.find((pinnedBar) => pinnedBar.tradingDate === bar.tradingDate)! }
+        :
+      alterAtOrAfter !== undefined
+        && decisionDate >= alterAtOrAfter.cutoff
+        && bar.tradingDate.startsWith(alterAtOrAfter.month)
+        ? { ...bar, close: bar.close * alterAtOrAfter.multiplier, adjustedClose: bar.adjustedClose * alterAtOrAfter.multiplier }
+        : { ...bar }
+    ));
+    if (selected.length === 0) return undefined;
+    return {
+      code,
+      decisionDate,
+      sourceCurrency: "JPY",
+      currency: "JPY",
+      basis: "price_return",
+      normalizationVersion: "test-normalization-v1",
+      inputFingerprint: `sha256:${"1".repeat(64)}`,
+      snapshotFingerprint: `sha256:${(decisionDate.endsWith("31") ? "2" : "3").repeat(64)}`,
+      pinnedPrefixFingerprint: pinnedPrefix?.snapshotFingerprint,
+      bars: selected,
+      selectedBarObservationIds: selected.map((bar) => `bar-${bar.tradingDate}`),
+      appliedReturnEventIds: [],
+      appliedFxObservationIds: [],
+    };
+  };
+}
+
 describe("buildMonthlyFrames", () => {
   test("builds point-in-time snapshots and next-month returns", () => {
     const frames = buildMonthlyFrames({ AAA: makeBars("AAA") }, { minHistoryDays: 252, costRate: 0.001 });
@@ -34,7 +77,164 @@ describe("buildMonthlyFrames", () => {
     expect(first.snapshots).toHaveLength(1);
     expect(first.snapshots[0]!.r12m).toBeGreaterThan(0);
     expect(first.nextMonthReturns.AAA).toBeGreaterThan(0);
+    expect(first.returnLabel).toBe(followingMonth(first.label));
     expect(first.costRates.AAA).toBe(0.001);
+  });
+
+  test("labels each frame with the month in which its forward return is realized", () => {
+    const frames = buildMonthlyFrames({ AAA: makeBars("AAA", 500) });
+
+    expect(frames.length).toBeGreaterThan(1);
+    expect(frames.every((frame) => frame.returnLabel === followingMonth(frame.label))).toBe(true);
+    expect(frames.map((frame) => frame.returnLabel)).toEqual(
+      frames.map((frame) => followingMonth(frame.label)),
+    );
+  });
+
+  test("rebuilds normalized signal and forward snapshots at their own Point-in-Time cutoffs", () => {
+    const bars = makeBars("AAA", 600);
+    const baseline = buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: pointInTimeResolver(bars),
+    });
+    const target = baseline.frames[0]!;
+    const changed = buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: pointInTimeResolver(bars, {
+        cutoff: `${target.returnLabel}-01`,
+        month: target.returnLabel!,
+        multiplier: 5,
+      }),
+    });
+    const changedTarget = changed.frames.find((frame) => frame.label === target.label)!;
+
+    expect(changedTarget.snapshots).toEqual(target.snapshots);
+    expect(changedTarget.nextMonthReturns.AAA).not.toBe(target.nextMonthReturns.AAA);
+    expect(changedTarget.returnLabel).toBe(followingMonth(changedTarget.label));
+    expect(changed.assetDiagnostics[0]!.returnNormalizationDecisions?.filter(
+      (decision) => decision.frameLabel === target.label,
+    ).map((decision) => decision.phase)).toEqual(["forward_endpoint", "signal"]);
+  });
+
+  test("pins the signal prefix when later observations revise the entry month", () => {
+    const bars = makeBars("AAA", 600);
+    const baseline = buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: pointInTimeResolver(bars),
+    });
+    const target = baseline.frames[0]!;
+    const revised = buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: pointInTimeResolver(bars, {
+        cutoff: `${target.returnLabel}-01`,
+        month: target.label,
+        multiplier: 5,
+      }),
+    });
+    const revisedTarget = revised.frames.find((frame) => frame.label === target.label)!;
+
+    expect(revisedTarget.snapshots).toEqual(target.snapshots);
+    expect(revisedTarget.nextMonthReturns.AAA).toBe(target.nextMonthReturns.AAA);
+  });
+
+  test("uses the asset's actual month-end trading date as the information cutoff", () => {
+    const bars = makeBars("AAA", 700).filter((bar) => {
+      const day = new Date(`${bar.tradingDate}T00:00:00Z`).getUTCDay();
+      return day !== 0 && day !== 6;
+    });
+    const baseline = buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: pointInTimeResolver(bars),
+    });
+    const changed = buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: pointInTimeResolver(bars, {
+        cutoff: "2025-05-31",
+        month: "2025-05",
+        multiplier: 5,
+      }),
+    });
+    const target = baseline.frames.find((frame) => frame.label === "2025-05")!;
+    const changedTarget = changed.frames.find((frame) => frame.label === "2025-05")!;
+
+    expect(target.decisionDate).toBe("2025-05-30");
+    expect(changedTarget.snapshots).toEqual(target.snapshots);
+    expect(changedTarget.nextMonthReturns.AAA).toBe(target.nextMonthReturns.AAA);
+    expect(changed.assetDiagnostics[0]!.returnNormalizationDecisions?.find(
+      (decision) => decision.frameLabel === "2025-05" && decision.phase === "signal",
+    )?.cutoffDate).toBe("2025-05-30");
+  });
+
+  test("fails closed when the actual forward endpoint was not available on its trading date", () => {
+    const bars = makeBars("AAA", 700).filter((bar) => {
+      const day = new Date(`${bar.tradingDate}T00:00:00Z`).getUTCDay();
+      return day !== 0 && day !== 6;
+    });
+    const resolver = pointInTimeResolver(bars);
+
+    expect(() => buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: (code, decisionDate, pinnedPrefix) => (
+        decisionDate === "2025-05-30" && pinnedPrefix !== undefined
+          ? undefined
+          : resolver(code, decisionDate, pinnedPrefix)
+      ),
+    })).toThrow(/endpoint was not available on its trading date 2025-05-30/);
+  });
+
+  test("fails closed when normalized source or policy metadata changes between snapshots", () => {
+    const bars = makeBars("AAA", 600);
+    const resolver = pointInTimeResolver(bars);
+
+    expect(() => buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: (code, decisionDate, pinnedPrefix) => {
+        const snapshot = resolver(code, decisionDate, pinnedPrefix);
+        return snapshot === undefined || pinnedPrefix === undefined
+          ? snapshot
+          : { ...snapshot, normalizationVersion: "test-normalization-v2" };
+      },
+    })).toThrow(/source or policy identity changed/);
+  });
+
+  test("rejects a partial final month instead of annualizing it as a complete month", () => {
+    const bars = makeBars("AAA", 600);
+    expect(() => buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-06-15",
+      resolveReturnSnapshot: pointInTimeResolver(bars),
+    })).toThrow(/calendar month-end/);
+  });
+
+  test("fails closed when a signal-eligible normalized asset has no forward snapshot", () => {
+    const bars = makeBars("AAA", 600);
+    const baselineResolver = pointInTimeResolver(bars);
+    const cutoffToRemove = `${followingMonth("2024-09")}-31`;
+    expect(() => buildPointInTimeMonthlyFramesWithDiagnostics({
+      codes: ["AAA"],
+      start: bars[0]!.tradingDate,
+      end: "2025-07-31",
+      resolveReturnSnapshot: (code, decisionDate, pinnedPrefix) => decisionDate === cutoffToRemove
+        ? undefined
+        : baselineResolver(code, decisionDate, pinnedPrefix),
+    })).toThrow(/no snapshot is available/);
   });
 
   test("future prices can change forward returns but not the decision-date signal", () => {

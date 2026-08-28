@@ -1,4 +1,4 @@
-# Codex Start Prompt
+# Codex Start Prompt (post-PR #7 continuation)
 
 Copy the following into the first task of the Codex Project opened at `/Users/ykoba/IdeaProjects/quant-pilot`.
 
@@ -21,22 +21,22 @@ Quant Pilotの実装をChatGPTから引き継いでください。
 
 重要な現状:
 
-- PR #1はすでにmainへマージ済みです。
-- PR #1のマージ前には、ローカルでのbun testとTrend/Rotation CLIの統合検証が完了していません。
-- 古いfeature branchの続きを前提にせず、最新mainを検証してください。
+- PR #7（Point-in-Time Universe、データ品質・照合、robustness foundation）は `main` へマージ済みです（`2a522904695070a3b75770b2d1b84a459a6ebfe8`）。
+- PR #8（provider-neutral normalized Point-in-Time backtest integration）はレビュー中で、未マージです。
+- PR #7の検証は合成・research-onlyデータ中心です。`etf_realistic` は未解禁です。
+- 現在のprovider-neutralな正規化 runner統合は最終全CLI監査まで完了し、PRレビューへ進む段階です。
 
 最初のタスク:
 
 1. `/Users/ykoba/IdeaProjects/quant-pilot` でGit状態を確認する
-2. mainを最新化する
+2. 現在の作業ブランチと `main` の基準commitを確認する
 3. Node/Bunのバージョンを確認する
-4. bun install
-5. bun test
-6. コミット可能な小さなCSV fixtureを用意する
-7. trendとrotation双方をCLIで実行する
-8. Point-in-Time境界、履歴不足、コスト、最大3本、-30% DD stopを検証する
-9. 問題があれば新しいbranchとPRで修正する
-10. docs/handoff/CURRENT_STATUS.md と IMPLEMENTATION.md を実績に合わせて更新する
+4. 既存fixtureで対象runnerの検証を行う
+5. 最新の検証結果（131 tests、raw/normalized Trend/Rotation、data-quality、robustness）を再確認する
+6. 欠損・将来データ・不一致をfail closedで検証する
+7. `etf_realistic` が未解禁のままであることを確認する
+8. 問題があれば新しいbranchとPRで修正する
+9. docs/handoff/CURRENT_STATUS.md と IMPLEMENTATION.md を実績に合わせて更新する
 
 方針:
 
