@@ -111,6 +111,131 @@ test("repeated fixture capture is idempotent and does not change retained artifa
   });
 });
 
+test("partial live capture retains a provider HTTP failure, continues other pairs, and replays offline", async () => {
+  await withTemporaryConfig(async ({ configPath, artifactRoot }) => {
+    const jquantsToken = "authorized-jquants-token";
+    const eodhdToken = "authorized-eodhd-token";
+    let fetchCount = 0;
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      fetchCount += 1;
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      assert.equal(init?.redirect, "error");
+      if (url.origin === "https://api.jquants.com") {
+        assert.equal(new Headers(init?.headers).get("x-api-key"), jquantsToken);
+        const code = url.searchParams.get("code");
+        assert.ok(code);
+        return new Response(JSON.stringify({
+          data: [{ Date: "2025-01-07", Code: code, C: 100, AdjC: 100, AdjFactor: 1, Vo: 10, Va: 1_000 }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      assert.equal(url.origin, "https://eodhd.com");
+      assert.equal(url.searchParams.get("api_token"), eodhdToken);
+      const symbol = decodeURIComponent(url.pathname.slice("/api/eod/".length));
+      if (symbol === "1308.TSE") return new Response("not found", { status: 404 });
+      return new Response(JSON.stringify([{
+        date: "2025-01-07", close: 100, adjusted_close: 100, volume: 10,
+      }]), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+
+    const captured = await captureCredentialedSample(configPath, {
+      cwd: repositoryRoot,
+      env: { JQUANTS_API_KEY: jquantsToken, EODHD_API_TOKEN: eodhdToken },
+      fetchImpl,
+      clock: () => "2025-01-08T00:00:00Z",
+      liveAuthorization: {
+        credentialUse: true,
+        cost: true,
+        rawRetention: true,
+        licenseRetention: true,
+      },
+    });
+    assert.equal(fetchCount, 10);
+    assert.equal(captured.payload.captureStatus, "partial");
+    assert.equal(captured.payload.providerFailures.length, 1);
+    assert.deepEqual(captured.payload.providerFailures[0], {
+      providerId: "eodhd_eod",
+      source: "eodhd-fixture",
+      stableId: "JPX:1308",
+      providerSymbol: "1308.TSE",
+      failureKind: "http_error",
+      status: 404,
+      rawResponseIds: [captured.payload.providerFailures[0]!.rawResponseIds[0]],
+    });
+    assert.equal(captured.payload.artifacts.rawResponseIds.length, 10);
+    assert.equal(captured.payload.artifacts.dailyBarsIds.length, 9);
+    assert.equal(captured.payload.artifacts.observationIds.length, 32);
+    assert.equal(captured.payload.disposition, "research_only");
+    assert.equal(captured.payload.productionSelection, "not_selected");
+    assert.equal(captured.payload.failClosed, true);
+    assert.equal(captured.payload.canEnableEtfRealistic, false);
+    assert.equal((await readdir(artifactRoot)).length, 1 + 10 + 9 + 32);
+
+    const replayed = await replayCredentialedSample(configPath, captured.provenance.artifactId, {
+      cwd: repositoryRoot,
+    });
+    assert.equal(canonicalJson(replayed), canonicalJson(captured));
+    assert.equal(credentialedSampleExitCode(captured.payload, false, false), 1);
+    assert.equal(credentialedSampleExitCode(captured.payload, true, false), 1);
+    assert.equal(credentialedSampleExitCode(captured.payload, false, true), 1);
+  }, "live");
+});
+
+test("replay rejects a refingerprinted provider failure whose retained status disagrees", async () => {
+  await withTemporaryConfig(async ({ configPath, artifactRoot }) => {
+    const captured = await captureCredentialedSample(configPath, {
+      cwd: repositoryRoot,
+      env: { JQUANTS_API_KEY: "authorized-jquants-token", EODHD_API_TOKEN: "authorized-eodhd-token" },
+      fetchImpl: (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const url = new URL(input instanceof Request ? input.url : input.toString());
+        assert.equal(init?.redirect, "error");
+        if (url.origin === "https://api.jquants.com") {
+          const code = url.searchParams.get("code")!;
+          return new Response(JSON.stringify({
+            data: [{ Date: "2025-01-07", Code: code, C: 100, AdjC: 100, AdjFactor: 1, Vo: 10, Va: 1_000 }],
+          }), { status: 200 });
+        }
+        const symbol = decodeURIComponent(url.pathname.slice("/api/eod/".length));
+        if (symbol === "1308.TSE") return new Response("not found", { status: 404 });
+        return new Response(JSON.stringify([{ date: "2025-01-07", close: 100, adjusted_close: 100, volume: 10 }]), { status: 200 });
+      }) as typeof fetch,
+      clock: () => "2025-01-08T00:00:00Z",
+      liveAuthorization: {
+        credentialUse: true,
+        cost: true,
+        rawRetention: true,
+        licenseRetention: true,
+      },
+    });
+    for (const [mutation, expectedError] of [
+      [(payload: MutableConfig) => { payload.providerFailures[0].status = 200; }, /Provider-failure status does not match retained raw response/],
+      [(payload: MutableConfig) => { payload.providerFailures[0].providerSymbol = "1308.XJPX"; }, /provider-failure metadata does not match config/],
+    ] as const) {
+      const payload = structuredClone(captured.payload) as MutableConfig;
+      mutation(payload);
+      const { fingerprint: _discarded, ...body } = payload;
+      const forgedPayload = { ...body, fingerprint: sha256Canonical(body) } as typeof captured.payload;
+      const forgedAudit: VersionedDataArtifact<typeof captured.payload> = buildVersionedDataArtifact({
+        artifactKind: "provider_capability_evidence",
+        payload: forgedPayload,
+        source: "quant-pilot",
+        dataset: "credentialed-sample-audit",
+        sourceVersion: forgedPayload.schemaVersion,
+        adapterVersion: forgedPayload.runnerVersion,
+        observedAt: `${forgedPayload.range.end}T00:00:00Z`,
+        availableAt: captured.provenance.availableAt,
+        retrievedAt: captured.provenance.retrievedAt,
+        request: { sampleDefinitionFingerprint: forgedPayload.sampleDefinitionFingerprint, artifacts: forgedPayload.artifacts },
+        recordId: forgedPayload.sampleDefinitionFingerprint,
+      });
+      await new FileArtifactStore(artifactRoot).put(forgedAudit);
+      await assert.rejects(
+        () => replayCredentialedSample(configPath, forgedAudit.provenance.artifactId, { cwd: repositoryRoot }),
+        expectedError,
+      );
+    }
+  }, "live");
+});
+
 test("replay rejects tampered raw, daily-bars, and reconciliation-observation artifacts", async () => {
   for (const target of ["raw", "daily", "observation"] as const) {
     await withTemporaryConfig(async ({ configPath, artifactRoot }) => {
