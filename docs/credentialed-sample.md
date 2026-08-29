@@ -1,10 +1,10 @@
 # Credentialed Sample Capture and Replay
 
-Status: M1 fixture contract implemented; real credentialed execution not authorized or performed.
+Status: M1 partial live audit completed locally after G1/G2 authorization; production use remains blocked.
 
 ## Outcome
 
-`credentialed-sample-v1` connects the current provider research to one executable path:
+The `credentialed-sample-v1` config and `credentialed-sample-report-v2` output connect the current provider research to one executable path:
 
 ```text
 strict config
@@ -13,7 +13,7 @@ strict config
   -> immutable content-addressed artifacts
   -> normalized daily-bar artifacts
   -> field-specific observations
-  -> two-source reconciliation
+  -> field-specific reconciliation, including explicit source failures
   -> fail-closed research audit
   -> offline replay
 ```
@@ -99,17 +99,35 @@ All gates and required environment variables are checked before directory creati
 Additional exit gates are available for automation:
 
 - `--require-live-evidence` returns nonzero for fixture output.
-- `--require-production` returns nonzero for every v1 output because the runner cannot approve production use.
+- `--require-production` returns nonzero for every output because the runner cannot approve production use.
+- A live audit with `captureStatus=partial` returns nonzero even when its retained audit artifact is valid. This prevents a provider failure from looking like successful comparison coverage.
+
+## Bounded live result
+
+With the four approved gates, the same five mappings were captured for `2026-04-20..22`. The owner-only, Git-ignored local audit retained:
+
+- 10 raw HTTP artifacts: five J-Quants successes and five EODHD HTTP 404 responses;
+- five J-Quants daily-bar artifacts containing 15 bars in total;
+- 60 field observations for close, provider-adjusted close, volume, and trading value;
+- five canonical `providerFailures` entries for `1308.TSE`, `1348.TSE`, `1473.TSE`, `1597.TSE`, and `2510.TSE`;
+- one `captureStatus=partial` audit with `research_only`, `productionSelection=not_selected`, `failClosed=true`, and `canEnableEtfRealistic=false`.
+
+Offline replay reproduced the retained audit canonically without provider access. The artifact directory was `0700`, all 76 artifact files were `0600`, and a local credential-byte scan found no key in retained JSON or decoded raw bodies. The live config, raw bodies, and normalized vendor data remain outside Git.
+
+Local replay checkpoint (not committed as data): audit `sha256:084d2ac0fdd9a57b6d792506a05b9441e01879a70d6ed9c17af044e6a036db1e` under `data/generated/provider-samples/live-v1-artifacts`, using the ignored `data/generated/provider-samples/live-v1.config.json`.
 
 ## Current explicit gaps
 
-The fixture validates software behavior only. No J-Quants or EODHD credential was used, and no vendor response was downloaded. The audit keeps these capabilities missing:
+The fixture validates software behavior only. The separate live audit is bounded and remains research-only: J-Quants daily bars succeeded for all five codes, while all five tested EODHD `.TSE` symbols returned HTTP 404. The reconciliation therefore reports each J-Quants field observation as `insufficient_sources`; it does not compare two successful vendor values. Do not interpret the EODHD result as a permanent global provider limitation.
+
+The current audit therefore keeps these capabilities missing:
 
 - source-native row availability and revision history;
 - exchange calendar/session exceptions;
 - Point-in-Time listing state and last trading date;
+- EODHD current-account JPX coverage and a usable Japanese ETF daily-price comparator;
 - ETF distributions and Corporate Actions;
 - historical JPX bid/ask and depth;
 - approved production license and retention rights.
 
-The next action remains Gate G1/G2: confirm exact subscription cost/entitlement and response-retention rights, then explicitly authorize one 5–10 ETF live sample. Until then M1 is software-ready for the sample but evidence-incomplete, and M2 must not consume fixture output as real market evidence.
+The partial immutable audit now satisfies the M1 executable evidence path, but it does not satisfy O-001 or the production data gate. After this branch is merged, M2 may consume the retained J-Quants observations only as `credentialed_sample_unverified` input and must preserve the missing comparator, Total Return, Point-in-Time revision, lifecycle, event, calendar, and quote-quality blocks. A larger or paid live request needs a separately scoped approval.

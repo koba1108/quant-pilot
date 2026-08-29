@@ -170,7 +170,7 @@
       "url": "https://eodhd.com/financial-apis/exchanges-api-list-of-tickers-and-trading-hours",
       "checkedAt": "2026-08-29",
       "version": "unversioned-web-page checked 2026-08-29",
-      "claim": "The provider documents Tokyo exchange metadata and ticker discovery, but not a proven immutable security-level calendar history."
+      "claim": "The public provider material describes exchange metadata and ticker discovery, but does not prove target Japanese ETF availability or an immutable security-level calendar history."
     },
     {
       "evidenceId": "eod-pricing",
@@ -272,12 +272,16 @@
       "capabilities": [
         {
           "capability": "daily_prices",
-          "status": "documented",
+          "status": "partial",
           "availabilityModel": "ingest_observed",
-          "adapterStatus": "fixture_contract",
+          "adapterStatus": "credentialed_sample",
           "evidenceIds": ["jq-bars"],
           "artifactIds": [],
-          "limitations": ["No credentialed sample artifact is committed.", "Adjusted fields are not Total Return evidence."]
+          "limitations": [
+            "A direct credentialed probe succeeded for JPX:1308, JPX:1348, JPX:1473, JPX:1597, and JPX:2510 over 2026-04-20..22.",
+            "The successful responses were retained only in an owner-only Git-ignored local audit; no sample artifact is embedded or bound in this committed evaluation, so the result remains research-only rather than production verification.",
+            "Adjusted fields are not Total Return evidence."
+          ]
         },
         {
           "capability": "adjustment_factors",
@@ -292,7 +296,7 @@
           "capability": "distributions",
           "status": "partial",
           "availabilityModel": "dataset_level",
-          "adapterStatus": "not_implemented",
+          "adapterStatus": "credentialed_sample",
           "evidenceIds": ["jq-dividend"],
           "artifactIds": [],
           "limitations": ["Premium access is required and complete ETF distribution coverage is unverified."]
@@ -404,12 +408,16 @@
       "capabilities": [
         {
           "capability": "daily_prices",
-          "status": "documented",
+          "status": "partial",
           "availabilityModel": "ingest_observed",
           "adapterStatus": "not_implemented",
           "evidenceIds": ["eod-prices", "eod-exchanges"],
           "artifactIds": [],
-          "limitations": ["Target Japanese ETF symbols and plan entitlements require a credentialed sample."]
+          "limitations": [
+            "The bounded credentialed audit on 2026-08-29 retained HTTP 404 responses for all five tested symbols: 1308.TSE, 1348.TSE, 1473.TSE, 1597.TSE, and 2510.TSE. Separate discovery probes found no Japan, XJPX, or Tokyo venue in /api/exchanges-list (70 exchanges returned) and no Japanese /api/search/1308 result.",
+            "This is a current-account and tested-symbol coverage result, not a claim that EODHD can never provide Japanese data globally.",
+            "The failure responses were retained only in an owner-only Git-ignored local audit; no sample artifact is embedded or bound in this committed evaluation, so this is not production verification."
+          ]
         },
         {
           "capability": "adjustment_factors",
@@ -667,7 +675,7 @@
       "displayName": "J-Quants primary plus EODHD complement",
       "sourceIds": ["jquants-individual", "eodhd-individual"],
       "responsibilities": [
-        { "capability": "daily_prices", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "daily_prices", "providerIds": ["jquants-individual"] },
         { "capability": "adjustment_factors", "providerIds": ["jquants-individual", "eodhd-individual"] },
         { "capability": "distributions", "providerIds": ["jquants-individual", "eodhd-individual"] },
         { "capability": "corporate_actions", "providerIds": ["jquants-individual", "eodhd-individual"] },

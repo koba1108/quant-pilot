@@ -59,7 +59,9 @@ test("J-Quants v2 adapter requires credentials and a valid provider code", async
   const neverFetch = async () => {
     throw new Error("fetch must not run");
   };
-  await assert.rejects(() => new JQuantsV2ResearchProvider(undefined, neverFetch).loadDailyBars(request), /JQUANTS_API_KEY/);
+  // Pass an explicit empty value so the test remains isolated when Bun auto-loads
+  // a repository .env file into process.env.
+  await assert.rejects(() => new JQuantsV2ResearchProvider("", neverFetch).loadDailyBars(request), /JQUANTS_API_KEY/);
   await assert.rejects(
     () => new JQuantsV2ResearchProvider("key", neverFetch).loadDailyBars({ ...request, symbol: "130" }),
     /four-digit numeric or five-character alphanumeric security code/,

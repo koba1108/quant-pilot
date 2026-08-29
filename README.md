@@ -134,7 +134,7 @@ O-001候補を、機能、Point-in-Time availability／revision、複数source�
 bun run provider-evaluation --config=research/provider-evaluation/o001-candidates.json
 ```
 
-2026-08-29 snapshotでは、J-Quants＋EODHDとJ-Quants＋Twelve Dataの両bundleが`blocked`、`selection=not_selected`、`canEnableEtfRealistic=false`となる。これはAPIが全く利用できないという意味ではなく、production証拠に必要なTotal Return、PIT改訂、ETF event、東京ETF quote、保存・監査権、実credentialed sampleが揃っていないという意味である。候補調査と次のsample計画は [`docs/provider-evaluation.md`](./docs/provider-evaluation.md) を参照する。
+2026-08-29 snapshotでは、J-Quants＋EODHDとJ-Quants＋Twelve Dataの両bundleが`blocked`、`selection=not_selected`、`canEnableEtfRealistic=false`となる。J-Quantsは5銘柄（1308/1348/1473/1597/2510）の2026-04-20..22 credentialed captureに成功し、rawをGit管理外のowner-only artifactへ保存した。EODHDは現アカウントでJapan/XJPX/Tokyo exchangeなし、同じ5銘柄の`.TSE` requestがすべてHTTP 404、`search/1308`に日本結果なしだったため、JPX daily-price comparatorとしては扱わず海外ETF/FX候補に限定する。これはEODHD全体の恒久的な日本非対応を意味しない。Total Return、PIT改訂、ETF event、東京ETF quote、cross-source value reconciliationは未完了であり、O-001は未選択のままである。候補調査と証拠計画は [`docs/provider-evaluation.md`](./docs/provider-evaluation.md) を参照する。
 
 ## Credentialed sample capture contract
 
@@ -152,7 +152,7 @@ bun run credentialed-sample \
   --replay-artifact=sha256:<64-hex-digits>
 ```
 
-fixtureは常に`research_only`、`failClosed=true`、`canEnableEtfRealistic=false`である。実credential、費用、raw保存、license retentionの承認はまだなく、live実行は4つの設定記録と4つの実行時flagが揃うまでネットワークへ進まない。artifactはGit管理外の`data/generated/`へ保存する。仕様と残るGate G1/G2は [`docs/credentialed-sample.md`](./docs/credentialed-sample.md) を参照する。
+fixtureは常に`research_only`、`failClosed=true`、`canEnableEtfRealistic=false`である。G1/G2承認後のlive auditも、EODHD 5件の404を`providerFailures`として保存した`captureStatus=partial`であり、終了コード1のままfail closedする。live artifactはGit管理外の`data/generated/`へowner-onlyで保存し、vendor response本文やキーはコミットしない。仕様と残る証拠ギャップは [`docs/credentialed-sample.md`](./docs/credentialed-sample.md) を参照する。
 
 ## Strategy A/B robustness grid
 

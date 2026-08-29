@@ -187,7 +187,6 @@ export async function captureJsonResponse(
   assertNonEmpty(input.providerLabel, "Provider label");
 
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const text = decodeUtf8(bytes);
   const capture: CapturedProviderHttpResponse = {
     schemaVersion: PROVIDER_HTTP_CAPTURE_SCHEMA_VERSION,
     page: input.page,
@@ -207,7 +206,9 @@ export async function captureJsonResponse(
   // unit tests and can collide with ordinary JSON field names such as
   // `pagination_key`, so raw substring scanning begins at eight characters.
   const shouldScanCredential = input.credentialValue.length >= 8;
-  if (shouldScanCredential && (text.includes(input.credentialValue)
+  const responseContainsCredential = shouldScanCredential
+    && Buffer.from(bytes).includes(Buffer.from(input.credentialValue, "utf8"));
+  if (shouldScanCredential && (responseContainsCredential
     || Object.values(capture.request.query).some((value) => value.includes(input.credentialValue))
     || Object.values(capture.response.headers).some((value) => value.includes(input.credentialValue)))) {
     throw new Error(`${input.providerLabel} response or retained metadata echoed a credential; refusing to retain it.`);
@@ -219,7 +220,7 @@ export async function captureJsonResponse(
     );
   }
   try {
-    return { capture, payload: JSON.parse(text) as unknown };
+    return { capture, payload: JSON.parse(decodeUtf8(bytes)) as unknown };
   } catch (error) {
     throw new CapturedProviderResponseError(`${input.providerLabel} returned malformed JSON.`, capture, { cause: error });
   }

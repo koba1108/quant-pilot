@@ -74,7 +74,9 @@ test("EODHD requires credentials and rejects unsafe hosts or symbols before netw
     throw new Error("fetch must not run");
   };
   await assert.rejects(
-    () => new EodhdEodResearchProvider(undefined, neverFetch).loadDailyBars(request),
+    // Pass an explicit empty value so the test remains isolated when Bun auto-loads
+    // a repository .env file into process.env.
+    () => new EodhdEodResearchProvider("", neverFetch).loadDailyBars(request),
     /EODHD_API_TOKEN is required/,
   );
   for (const baseUrl of [

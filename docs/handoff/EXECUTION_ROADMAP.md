@@ -40,9 +40,9 @@ This milestone proves implementation behavior. It does not prove an investable d
 
 ### M1 — Credentialed data slice
 
-Status: **NOW**
+Status: **EXIT CRITERIA MET ON CURRENT BRANCH; MERGE PENDING**
 
-Software checkpoint: the fixture-tested `capture -> immutable artifact -> reconciliation -> offline replay` spine is implemented on `ykoba/pre-forward-credentialed-data-slice`. M1 remains active because no credentialed vendor sample, entitlement/cost evidence, or retention confirmation exists yet.
+Software checkpoint: the fixture-tested `capture -> immutable artifact -> reconciliation -> offline replay` spine is on `main` through PR #10. On `ykoba/fix-credentialed-provider-coverage`, an authorized bounded live run retained five successful J-Quants responses and five EODHD HTTP 404 responses as an immutable partial audit, then reproduced it offline. This closes the M1 executable evidence path with an explicit blocked comparison result; it does not close O-001 or authorize production data.
 
 Goal: turn provider research into a small, reproducible, license-permitted evidence path.
 
@@ -50,7 +50,7 @@ Implementation package:
 
 - add a credentialed-sample runner without committing secrets;
 - capture request parameters, retrieval time, raw response hash, provider/adapter version, and artifact lineage;
-- ingest the same 5–10 representative JPX ETFs from the candidate primary and comparison source;
+- ingest a bounded set of representative JPX ETFs from the candidate primary; record comparison-provider coverage failures explicitly rather than treating an unavailable EODHD JPX path as a successful second source;
 - cover daily prices, calendar/listing state, distributions/Corporate Actions where entitled, trading value, and available quote-quality evidence;
 - preserve missing fields and disagreements instead of selecting or filling a winner;
 - generate field-specific reconciliation and an updated provider-readiness report;
@@ -202,11 +202,11 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 
 ## Current checkpoint
 
-- Current milestone: **M1 — Credentialed data slice**
-- Completed software outcome: fixture-tested J-Quants/EODHD credentialed-sample capture/audit/replay command for the same five synthetic JPX mappings
-- Next evidence outcome: an explicitly authorized 5–10 ETF real sample, including entitled lifecycle/event/calendar/quote fields where available
-- Current external gate: permission to use credentials/incur cost and confirmation of permitted raw-response retention
-- Next runnable milestone: **M2 — Manual Pre-Forward vertical slice**
+- Current milestone: **M1 — Credentialed data slice, merge pending**
+- Completed software outcome: fixture and live partial capture/audit/replay for five JPX mappings; the live audit retained J-Quants bars and explicit EODHD failures outside Git
+- Next evidence outcome: merge the M1 fix, then start M2 with the retained J-Quants evidence labeled `credentialed_sample_unverified` and every missing production capability preserved
+- Current external gate: any larger or paid provider request needs separately scoped approval; no provider response body or key enters Git, and O-001 remains unselected
+- Next runnable milestone: **M2 — Manual Pre-Forward vertical slice after merge**
 - Formal Forward-Test clock: **not started**
 
 ## Progress log
@@ -214,4 +214,6 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 | Date | Evidence | Milestone result | Next checkpoint |
 |---|---|---|---|
 | 2026-08-29 | PR #9 merged; provider evaluation remains fail-closed; 152 tests passed in PR verification | M0 complete, M1 active | Build the credentialed-sample capture path without secrets, then request G1/G2 for the real sample |
-| 2026-08-29 | PR #10 opened: `credentialed-sample-v1` fixture capture and offline replay produce the same immutable fail-closed audit for five mappings across J-Quants/EODHD contracts | M1 software spine complete; real evidence still absent | Review and merge PR #10, then stop at G1/G2 until credential, cost, entitlement, and retention are explicitly approved |
+| 2026-08-29 | PR #10 merged: `credentialed-sample-v1` fixture capture and offline replay produce the same immutable fail-closed audit for five mappings across J-Quants/EODHD contracts | M1 software spine complete; real evidence gate authorized but partial audit pending | Persist a redacted partial audit; preserve EODHD JPX coverage failure and do not treat it as a JPX comparator |
+| 2026-08-29 | Bounded direct probes: J-Quants succeeded for five JPX codes over 2026-04-20..22; EODHD exchange/search/EOD probes found no tested JPX path | M1 evidence incomplete; O-001 remains open | Retain permitted metadata/artifact lineage, then reassess comparison coverage without selecting a provider |
+| 2026-08-29 | Authorized live audit retained 10 raw responses, five J-Quants daily artifacts with 15 bars, five EODHD 404 failures, 60 field observations, and one partial audit; offline replay was canonical-equal | M1 executable exit criteria met on current branch; O-001 remains open and production blocked | Merge the M1 fix, then build the manual M2 Pre-Forward cycle without weakening data gates |

@@ -141,24 +141,25 @@ PR #9 provider-evaluation verification now present on `main`:
 - `provider-evaluation-v1` rejects unknown fields, ambiguous selection, invalid evidence dates, duplicate capabilities, missing evidence references, fake/unbound or capability-incompatible sample artifacts, same-group pseudo-independent sources, unbound official/terms snapshots, weak approved policies, and every `status=verified` claim until a future payload-specific schema binds real reconciliation
 - reports bind evidence/candidate/bundle fingerprints and are re-evaluated from the input config, so re-fingerprinted output tampering is rejected
 - schema v1 remains `selection=not_selected`, `failClosed=true`, `canEnableEtfRealistic=false`; URL/version-only terms evidence keeps license overall `unknown`, and no capability can become `verified` until a real reconciliation report and typed payload validation are bound
-- the committed O-001 snapshot evaluates J-Quants＋EODHD and J-Quants＋Twelve Data as blocked pending credentialed samples, PIT/revision proof, event/quote coverage, license rights, cost approval, and human selection
+- the committed O-001 snapshot evaluates J-Quants＋EODHD and J-Quants＋Twelve Data as blocked. A bounded direct J-Quants credentialed probe succeeded for five JPX codes over 2026-04-20..22, while the current-account EODHD probe found no Japan/XJPX/Tokyo exchange, HTTP 404 for `1308.TSE`, and no Japanese `search/1308` result. EODHD remains an overseas/FX candidate, not a JPX daily-price comparator; PIT/revision proof, event/quote coverage, license rights, immutable artifact retention, cross-source reconciliation, and human selection remain open.
 - J-Quants adapter tests cover official-host credential confinement, pagination, header authentication, semantic dates, four/five-character code normalization, no-trade null-row exclusion, strict rows, range matching, missing optional values, repeated pages, duplicate dates, malformed JSON, and HTTP failures
-- real J-Quants credentials and downloaded provider data are not used or committed
+- real J-Quants/EODHD credentials were used only for the authorized bounded capture and are not committed; raw responses were persisted only in the owner-only Git-ignored local artifact store
 
 Active M1 credentialed-sample branch verification:
 
-- `bun test`: 195 pass / 0 fail
+- `bun test`: 198 pass / 0 fail
 - `bunx tsc --noEmit`: success
 - fixture capture: success for five mappings across J-Quants/EODHD contracts; 10 raw, 10 daily-bar, 105 observation, and one audit artifact
 - offline replay: success without provider access and byte-for-byte identical to capture output
 - fixture reconciliation: `advisory`; 15 EODHD-missing trading-value groups remain explicit `insufficient_sources`
 - `--require-live-evidence` and `--require-production`: expected nonzero status
 - Git ignore check: generated runtime artifact root is ignored
-- no real credential, provider request, paid entitlement, or retained vendor response was used
+- authorized live capture after G1/G2 approval: five J-Quants successes with 15 bars, five EODHD HTTP 404 failures, 10 raw artifacts, five daily artifacts, 60 observations, and one `captureStatus=partial` audit
+- live offline replay is canonical-equal and returns the expected nonzero status; artifacts stay outside Git with owner-only permissions, and a local scan found no credential bytes
 
 ## Next blocks
 
 1. Follow `docs/handoff/EXECUTION_ROADMAP.md`; do not begin work outside its active milestone
-2. M1: use the implemented fixture-tested credentialed-sample capture/audit command only after obtaining G1/G2 authorization for a real fetch and retained vendor response
-3. M2: deliver the manual Pre-Forward vertical slice with an idempotent virtual ledger and replayable Decision Package
+2. M1: merge the partial-failure audit/replay fix; do not treat the EODHD result as permanent global non-coverage or as a JPX comparator
+3. M2: deliver the manual Pre-Forward vertical slice with an idempotent virtual ledger and replayable Decision Package, preserving incomplete-history and incomplete-data blocks
 4. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates

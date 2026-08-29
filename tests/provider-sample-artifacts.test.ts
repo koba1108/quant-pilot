@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  CapturedProviderResponseError,
   assertCapturedProviderHttpResponse,
   captureJsonResponse,
   parseCapturedJson,
@@ -91,6 +92,31 @@ test("retains exact raw wire bytes and hash while applying response-header allow
   assert.deepEqual(parseCapturedJson(captureA), JSON.parse(body));
   assert.equal(captureA.availabilityBasis, "retrieval_time_only_not_source_native");
   assert.equal(captureA.retrievedAt, "2025-01-09T00:00:01Z");
+});
+
+test("retains non-UTF-8 HTTP error bytes as captured failure evidence", async () => {
+  const responseBytes = new Uint8Array([0xff, 0xfe, 0xfd]);
+  const error = await captureJsonResponse(
+    new Response(responseBytes, { status: 502, headers: { "content-type": "application/octet-stream" } }),
+    {
+      request,
+      page: 1,
+      retrievedAt: "2025-01-09T00:00:01Z",
+      credentialValue: "secret-jquants-token",
+      providerLabel: "J-Quants",
+    },
+  ).then(
+    () => undefined,
+    (caught: unknown) => caught,
+  );
+
+  assert.ok(error instanceof CapturedProviderResponseError);
+  assert.equal(error.capture.response.status, 502);
+  assert.equal(error.capture.response.bodyBase64, Buffer.from(responseBytes).toString("base64"));
+  assert.equal(
+    error.capture.response.bodyHash,
+    `sha256:${createHash("sha256").update(responseBytes).digest("hex")}`,
+  );
 });
 
 test("rejects non-canonical base64, incorrect hashes, and unsupported retained headers", async () => {

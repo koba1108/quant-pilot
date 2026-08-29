@@ -30,6 +30,7 @@ import {
   loadProviderHttpFixture,
 } from "./provider-http-fixture.ts";
 import {
+  CapturedProviderResponseError,
   parseCapturedJson,
   type CapturedProviderHttpResponse,
 } from "./provider-http-capture.ts";
@@ -52,8 +53,8 @@ import {
 } from "./reconciliation.ts";
 import { compareText } from "../determinism.ts";
 
-export const CREDENTIALED_SAMPLE_REPORT_SCHEMA_VERSION = "credentialed-sample-report-v1" as const;
-export const CREDENTIALED_SAMPLE_RUNNER_VERSION = "credentialed-sample-runner-v1" as const;
+export const CREDENTIALED_SAMPLE_REPORT_SCHEMA_VERSION = "credentialed-sample-report-v2" as const;
+export const CREDENTIALED_SAMPLE_RUNNER_VERSION = "credentialed-sample-runner-v2" as const;
 
 export const CREDENTIALED_SAMPLE_RECONCILIATION_POLICY: ReconciliationPolicy = {
   version: "credentialed-sample-daily-bars-v1",
@@ -85,6 +86,18 @@ export interface CredentialedSampleCoverage {
   };
 }
 
+export type CredentialedSampleProviderFailureKind = "http_error" | "malformed_json";
+
+export interface CredentialedSampleProviderFailure {
+  providerId: "jquants_v2" | "eodhd_eod";
+  source: string;
+  stableId: string;
+  providerSymbol: string;
+  failureKind: CredentialedSampleProviderFailureKind;
+  status: number;
+  rawResponseIds: readonly string[];
+}
+
 export interface CredentialedSampleAuditPayload {
   schemaVersion: typeof CREDENTIALED_SAMPLE_REPORT_SCHEMA_VERSION;
   runnerVersion: typeof CREDENTIALED_SAMPLE_RUNNER_VERSION;
@@ -96,6 +109,7 @@ export interface CredentialedSampleAuditPayload {
   failClosed: true;
   canEnableEtfRealistic: false;
   range: { start: string; end: string };
+  captureStatus: "complete" | "partial";
   providers: readonly {
     providerId: "jquants_v2" | "eodhd_eod";
     source: string;
@@ -115,6 +129,7 @@ export interface CredentialedSampleAuditPayload {
     dailyBarsIds: readonly string[];
     observationIds: readonly string[];
   };
+  providerFailures: readonly CredentialedSampleProviderFailure[];
   coverage: readonly CredentialedSampleCoverage[];
   reconciliation: ReconciliationReport;
   missingCapabilities: readonly string[];
@@ -369,6 +384,7 @@ function reportWithoutFingerprint(
   rawArtifacts: readonly VersionedDataArtifact<CapturedProviderHttpResponse>[],
   dailyArtifacts: readonly VersionedDataArtifact<CapturedDailyBarsPayload>[],
   observations: readonly ComparableObservation[],
+  providerFailures: readonly CredentialedSampleProviderFailure[],
   reconciliation: ReconciliationReport,
 ): Omit<CredentialedSampleAuditPayload, "fingerprint"> {
   return {
@@ -382,6 +398,7 @@ function reportWithoutFingerprint(
     failClosed: true,
     canEnableEtfRealistic: false,
     range: config.range,
+    captureStatus: providerFailures.length === 0 ? "complete" : "partial",
     providers: config.providers.map((provider) => ({
       providerId: provider.providerId,
       source: provider.source,
@@ -401,6 +418,9 @@ function reportWithoutFingerprint(
       dailyBarsIds: dailyArtifacts.map((artifact) => artifact.provenance.artifactId).sort(compareText),
       observationIds: observations.map((observation) => observation.artifact.provenance.artifactId).sort(compareText),
     },
+    providerFailures: [...providerFailures].sort((left, right) => (
+      compareText(left.providerId, right.providerId) || compareText(left.stableId, right.stableId)
+    )),
     coverage: coverage(config, dailyArtifacts),
     reconciliation,
     missingCapabilities: [...MISSING_CAPABILITIES],
@@ -416,9 +436,17 @@ function buildReport(
   rawArtifacts: readonly VersionedDataArtifact<CapturedProviderHttpResponse>[],
   dailyArtifacts: readonly VersionedDataArtifact<CapturedDailyBarsPayload>[],
   observations: readonly ComparableObservation[],
+  providerFailures: readonly CredentialedSampleProviderFailure[],
   reconciliation: ReconciliationReport,
 ): CredentialedSampleAuditPayload {
-  const body = reportWithoutFingerprint(config, rawArtifacts, dailyArtifacts, observations, reconciliation);
+  const body = reportWithoutFingerprint(
+    config,
+    rawArtifacts,
+    dailyArtifacts,
+    observations,
+    providerFailures,
+    reconciliation,
+  );
   return { ...body, fingerprint: sha256Canonical(body) };
 }
 
@@ -452,6 +480,9 @@ export function assertCredentialedSampleAuditPayload(payload: CredentialedSample
     || !isCanonicalIsoDate(payload.range?.end)
     || payload.range.start > payload.range.end) {
     throw new Error("Credentialed-sample report range must contain ordered ISO dates.");
+  }
+  if (payload.captureStatus !== "complete" && payload.captureStatus !== "partial") {
+    throw new Error("Credentialed-sample report captureStatus must be complete or partial.");
   }
   const authorization = payload.authorizationRecord;
   if (authorization === null || typeof authorization !== "object") {
@@ -507,6 +538,75 @@ export function assertCredentialedSampleAuditPayload(payload: CredentialedSample
   if (payload.mode === "live" && (payload.instrumentIds.length < 5 || payload.instrumentIds.length > 10)) {
     throw new Error("Live credentialed-sample reports require 5 to 10 instruments.");
   }
+  if (payload.artifacts === null || typeof payload.artifacts !== "object" || Array.isArray(payload.artifacts)
+    || canonicalJson(Object.keys(payload.artifacts).sort(compareText))
+      !== canonicalJson(["dailyBarsIds", "observationIds", "rawResponseIds"])) {
+    throw new Error("Credentialed-sample report artifacts must contain the exact artifact manifests.");
+  }
+  for (const field of ["rawResponseIds", "dailyBarsIds", "observationIds"] as const) {
+    const ids = payload.artifacts[field];
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !/^sha256:[0-9a-f]{64}$/.test(id))) {
+      throw new Error(`Credentialed-sample report ${field} contains an invalid artifact id.`);
+    }
+    if (new Set(ids).size !== ids.length || [...ids].sort(compareText).some((id, index) => id !== ids[index])) {
+      throw new Error(`Credentialed-sample report ${field} must be unique and sorted.`);
+    }
+  }
+  if (!Array.isArray(payload.providerFailures)) {
+    throw new Error("Credentialed-sample report providerFailures must be an array.");
+  }
+  const instrumentIdSet = new Set(payload.instrumentIds);
+  const providerSourceById = new Map(payload.providers.map((provider) => [provider.providerId, provider.source]));
+  const rawResponseIdSet = new Set(payload.artifacts.rawResponseIds);
+  const failureRawResponseIds = new Set<string>();
+  const failurePairs = new Set<string>();
+  let previousFailurePair: string | undefined;
+  for (const [index, value] of payload.providerFailures.entries()) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Credentialed-sample report providerFailures[${index}] must be an object.`);
+    }
+    const failure = value as CredentialedSampleProviderFailure;
+    if (failure.providerId !== "eodhd_eod" && failure.providerId !== "jquants_v2") {
+      throw new Error("Credentialed-sample report provider failure providerId is unsupported.");
+    }
+    if (typeof failure.source !== "string" || !/^[a-z0-9][a-z0-9._:-]*$/.test(failure.source)
+      || providerSourceById.get(failure.providerId) !== failure.source) {
+      throw new Error("Credentialed-sample report provider failure source is not bound to its provider.");
+    }
+    if (typeof failure.stableId !== "string" || !instrumentIdSet.has(failure.stableId)) {
+      throw new Error("Credentialed-sample report provider failure stableId is not configured.");
+    }
+    if (typeof failure.providerSymbol !== "string" || failure.providerSymbol.trim() === "") {
+      throw new Error("Credentialed-sample report provider failure providerSymbol must be non-empty.");
+    }
+    if (failure.failureKind !== "http_error" && failure.failureKind !== "malformed_json") {
+      throw new Error("Credentialed-sample report provider failure kind is unsupported.");
+    }
+    if (!Number.isInteger(failure.status) || failure.status < 100 || failure.status > 599) {
+      throw new Error("Credentialed-sample report provider failure status is invalid.");
+    }
+    if (!Array.isArray(failure.rawResponseIds) || failure.rawResponseIds.length !== 1
+      || failure.rawResponseIds.some((id) => typeof id !== "string" || !/^sha256:[0-9a-f]{64}$/.test(id))
+      || new Set(failure.rawResponseIds).size !== failure.rawResponseIds.length
+      || [...failure.rawResponseIds].sort(compareText).some((id, idIndex) => id !== failure.rawResponseIds[idIndex])) {
+      throw new Error("Credentialed-sample report provider failure rawResponseIds are invalid.");
+    }
+    for (const rawResponseId of failure.rawResponseIds) {
+      if (!rawResponseIdSet.has(rawResponseId) || failureRawResponseIds.has(rawResponseId)) {
+        throw new Error("Credentialed-sample report provider failure rawResponseIds must be unique members of the raw manifest.");
+      }
+      failureRawResponseIds.add(rawResponseId);
+    }
+    const pair = `${failure.providerId}:${failure.stableId}`;
+    if (failurePairs.has(pair) || (previousFailurePair !== undefined && compareText(previousFailurePair, pair) >= 0)) {
+      throw new Error("Credentialed-sample report provider failures must be unique and canonically ordered.");
+    }
+    failurePairs.add(pair);
+    previousFailurePair = pair;
+  }
+  if ((payload.captureStatus === "complete") !== (payload.providerFailures.length === 0)) {
+    throw new Error("Credentialed-sample report captureStatus does not match providerFailures.");
+  }
   if (canonicalJson(payload.missingCapabilities) !== canonicalJson(MISSING_CAPABILITIES)) {
     throw new Error("Credentialed-sample report must retain the complete missing-capability list.");
   }
@@ -523,18 +623,12 @@ export function assertCredentialedSampleAuditPayload(payload: CredentialedSample
   const { fingerprint, ...body } = payload;
   if (fingerprint !== sha256Canonical(body)) throw new Error("Credentialed-sample report fingerprint is invalid.");
   assertReconciliationReportIntegrity(payload.reconciliation);
-  for (const [field, ids] of Object.entries(payload.artifacts)) {
-    if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !/^sha256:[0-9a-f]{64}$/.test(id))) {
-      throw new Error(`Credentialed-sample report ${field} contains an invalid artifact id.`);
-    }
-    if (new Set(ids).size !== ids.length || [...ids].sort(compareText).some((id, index) => id !== ids[index])) {
-      throw new Error(`Credentialed-sample report ${field} must be unique and sorted.`);
-    }
-  }
   const expectedDailyArtifacts = payload.providers.length * payload.instrumentIds.length;
   if (payload.artifacts.rawResponseIds.length < expectedDailyArtifacts
-    || payload.artifacts.dailyBarsIds.length !== expectedDailyArtifacts
-    || payload.artifacts.observationIds.length === 0) {
+    || payload.artifacts.dailyBarsIds.length + payload.providerFailures.length !== expectedDailyArtifacts
+    || (payload.artifacts.dailyBarsIds.length === 0
+      ? payload.artifacts.observationIds.length !== 0
+      : payload.artifacts.observationIds.length === 0)) {
     throw new Error("Credentialed-sample report artifact manifest is incomplete.");
   }
 }
@@ -566,6 +660,14 @@ export async function loadCredentialedSampleConfig(path: string): Promise<Creden
   return validateCredentialedSampleConfig(JSON.parse(await readFile(path, "utf8")) as unknown);
 }
 
+function latestRawEvidenceDate(
+  rawArtifacts: readonly VersionedDataArtifact<CapturedProviderHttpResponse>[],
+): string {
+  const latest = rawArtifacts.map((artifact) => artifact.provenance.availableAt).sort(compareText).at(-1);
+  if (latest === undefined) throw new Error("Credentialed-sample capture retained no provider response evidence.");
+  return latest;
+}
+
 export async function captureCredentialedSample(
   configPath: string,
   options: CredentialedSampleRunOptions = {},
@@ -582,17 +684,12 @@ export async function captureCredentialedSample(
   const rawArtifacts: VersionedDataArtifact<CapturedProviderHttpResponse>[] = [];
   const dailyArtifacts: VersionedDataArtifact<CapturedDailyBarsPayload>[] = [];
   const observations: ComparableObservation[] = [];
+  const providerFailures: CredentialedSampleProviderFailure[] = [];
 
   for (const providerConfig of [...config.providers].sort((left, right) => compareText(left.providerId, right.providerId))) {
     const runtime = await buildProviderRuntime(config, providerConfig, options, cwd);
     for (const instrument of [...config.instruments].sort((left, right) => compareText(left.stableId, right.stableId))) {
       const mapping = instrument.mappings.find((item) => item.providerId === providerConfig.providerId)!;
-      const result = await runtime.provider.captureDailyBars({
-        code: instrument.stableId,
-        symbol: mapping.providerSymbol,
-        start: config.range.start,
-        end: config.range.end,
-      });
       const metadata: ProviderSampleArtifactMetadata = {
         ...runtime.metadata,
         credentialEnvVar: providerConfig.credentialEnvVar,
@@ -602,6 +699,36 @@ export async function captureCredentialedSample(
         currency: instrument.currency,
         range: config.range,
       };
+      let result: Awaited<ReturnType<CapturingMarketDataProvider["captureDailyBars"]>>;
+      try {
+        result = await runtime.provider.captureDailyBars({
+          code: instrument.stableId,
+          symbol: mapping.providerSymbol,
+          start: config.range.start,
+          end: config.range.end,
+        });
+      } catch (error) {
+        // A captured provider response is durable evidence even when the
+        // provider rejects the request. Other failures (network, schema, or
+        // local processing errors) remain fatal and are not downgraded.
+        if (!(error instanceof CapturedProviderResponseError)) throw error;
+        const capturedFailure = buildRawProviderResponseArtifact(error.capture, metadata);
+        await store.put(capturedFailure);
+        rawArtifacts.push(capturedFailure);
+        providerFailures.push({
+          providerId: providerConfig.providerId,
+          source: providerConfig.source,
+          stableId: instrument.stableId,
+          providerSymbol: mapping.providerSymbol,
+          failureKind: capturedFailure.payload.response.status >= 200
+            && capturedFailure.payload.response.status <= 299
+            ? "malformed_json"
+            : "http_error",
+          status: capturedFailure.payload.response.status,
+          rawResponseIds: [capturedFailure.provenance.artifactId],
+        });
+        continue;
+      }
       const capturedRaw = result.responses.map((response) => buildRawProviderResponseArtifact(response, metadata));
       for (const artifact of capturedRaw) await store.put(artifact);
       rawArtifacts.push(...capturedRaw);
@@ -615,13 +742,13 @@ export async function captureCredentialedSample(
     runtime.assertConsumed?.();
   }
 
-  const decisionDate = dailyArtifacts.map((artifact) => artifact.provenance.availableAt).sort().at(-1)!;
+  const decisionDate = latestRawEvidenceDate(rawArtifacts);
   const reconciliation = reconcileComparableObservations(
     observations,
     decisionDate,
     CREDENTIALED_SAMPLE_RECONCILIATION_POLICY,
   );
-  const payload = buildReport(config, rawArtifacts, dailyArtifacts, observations, reconciliation);
+  const payload = buildReport(config, rawArtifacts, dailyArtifacts, observations, providerFailures, reconciliation);
   const auditArtifact = buildAuditArtifact(payload, decisionDate);
   await store.put(auditArtifact);
   return auditArtifact;
@@ -654,7 +781,6 @@ export async function replayCredentialedSample(
   const rawArtifacts = await Promise.all(auditArtifact.payload.artifacts.rawResponseIds.map(async (id) => {
     const artifact = await store.read<CapturedProviderHttpResponse>(id);
     assertRawProviderResponseArtifact(artifact);
-    parseCapturedJson(artifact.payload);
     return artifact;
   }));
   const dailyArtifacts = await Promise.all(auditArtifact.payload.artifacts.dailyBarsIds.map(async (id) => {
@@ -678,6 +804,7 @@ export async function replayCredentialedSample(
     }] as const;
     })),
   );
+  const rawById = new Map(rawArtifacts.map((artifact) => [artifact.provenance.artifactId, artifact]));
   const seenPairs = new Set<string>();
   for (const artifact of dailyArtifacts) {
     const pair = `${artifact.payload.providerId}:${artifact.payload.stableId}`;
@@ -691,14 +818,20 @@ export async function replayCredentialedSample(
     }
     for (const rawId of artifact.payload.rawArtifactIds) {
       if (!expectedRawIds.has(rawId)) throw new Error("Daily-bars artifact references raw lineage outside the replay manifest.");
-      const rawArtifact = rawArtifacts.find((item) => item.provenance.artifactId === rawId)!;
+      const rawArtifact = rawById.get(rawId)!;
+      if (auditArtifact.payload.providerFailures.some((failure) => failure.rawResponseIds.includes(rawId))) {
+        throw new Error("Daily-bars artifact references a provider-failure response.");
+      }
       if (rawArtifact.provenance.source !== artifact.provenance.source) {
         throw new Error("Daily-bars artifact references raw lineage from a different source.");
+      }
+      if (referencedRawIds.has(rawId)) {
+        throw new Error("Daily-bars raw lineage is referenced more than once.");
       }
       referencedRawIds.add(rawId);
     }
     const lineageArtifacts = artifact.payload.rawArtifactIds.map((rawId) => (
-      rawArtifacts.find((item) => item.provenance.artifactId === rawId)!
+      rawById.get(rawId)!
     ));
     const captures = lineageArtifacts.map((rawArtifact) => rawArtifact.payload);
     const replayRequest = {
@@ -727,6 +860,64 @@ export async function replayCredentialedSample(
       throw new Error(`Normalized daily-bars artifact does not match retained raw responses and config: ${pair}.`);
     }
   }
+  for (const failure of auditArtifact.payload.providerFailures) {
+    const pair = `${failure.providerId}:${failure.stableId}`;
+    const expectedPair = expectedPairs.get(pair);
+    if (expectedPair === undefined || seenPairs.has(pair)) {
+      throw new Error(`Replay contains an unexpected or duplicate provider/instrument failure: ${pair}.`);
+    }
+    seenPairs.add(pair);
+    if (failure.source !== expectedPair.provider.source || failure.providerSymbol !== expectedPair.symbol) {
+      throw new Error(`Replay provider-failure metadata does not match config: ${pair}.`);
+    }
+    for (const rawId of failure.rawResponseIds) {
+      if (!expectedRawIds.has(rawId)) {
+        throw new Error("Provider failure references raw lineage outside the replay manifest.");
+      }
+      if (referencedRawIds.has(rawId)) {
+        throw new Error("Provider failure raw lineage is referenced more than once.");
+      }
+      const rawArtifact = rawById.get(rawId)!;
+      const expectedRawArtifact = buildRawProviderResponseArtifact(
+        rawArtifact.payload,
+        {
+          ...providerArtifactContract(failure.providerId),
+          credentialEnvVar: expectedPair.provider.credentialEnvVar,
+          source: expectedPair.provider.source,
+          stableId: failure.stableId,
+          providerSymbol: expectedPair.symbol,
+          currency: expectedPair.currency,
+          range: config.range,
+        },
+      );
+      if (canonicalJson(expectedRawArtifact) !== canonicalJson(rawArtifact)) {
+        throw new Error(`Provider-failure raw response does not match config lineage: ${pair}.`);
+      }
+      if (rawArtifact.payload.response.status !== failure.status) {
+        throw new Error(`Provider-failure status does not match retained raw response: ${pair}.`);
+      }
+      if (failure.failureKind === "http_error") {
+        if (failure.status >= 200 && failure.status <= 299) {
+          throw new Error(`Provider-failure HTTP status is successful: ${pair}.`);
+        }
+      } else {
+        if (failure.status < 200 || failure.status > 299) {
+          throw new Error(`Provider-failure malformed_json status is not successful: ${pair}.`);
+        }
+        try {
+          parseCapturedJson(rawArtifact.payload);
+        } catch (error) {
+          if (error instanceof CapturedProviderResponseError) {
+            referencedRawIds.add(rawId);
+            continue;
+          }
+          throw error;
+        }
+        throw new Error(`Provider-failure malformed_json response parses successfully: ${pair}.`);
+      }
+      referencedRawIds.add(rawId);
+    }
+  }
   if (seenPairs.size !== expectedPairs.size) throw new Error("Replay is missing a configured provider/instrument pair.");
   if (referencedRawIds.size !== expectedRawIds.size) throw new Error("Replay manifest contains unreferenced raw artifacts.");
   const rebuiltObservations = dailyArtifacts.flatMap((artifact) => buildDailyBarComparableObservations(artifact));
@@ -745,10 +936,7 @@ export async function replayCredentialedSample(
   if (rebuiltById.size !== rebuiltObservations.length) {
     throw new Error("Rebuilt reconciliation observations contain duplicate artifact identifiers.");
   }
-  const derivedDecisionDate = dailyArtifacts
-    .map((artifact) => artifact.provenance.availableAt)
-    .sort()
-    .at(-1)!;
+  const derivedDecisionDate = latestRawEvidenceDate(rawArtifacts);
   if (auditArtifact.payload.reconciliation.decisionDate !== derivedDecisionDate) {
     throw new Error("Retained reconciliation decisionDate does not match the latest evidence availability.");
   }
@@ -757,7 +945,14 @@ export async function replayCredentialedSample(
     derivedDecisionDate,
     auditArtifact.payload.reconciliation.policy,
   );
-  const expectedPayload = buildReport(config, rawArtifacts, dailyArtifacts, retainedObservations, reconciliation);
+  const expectedPayload = buildReport(
+    config,
+    rawArtifacts,
+    dailyArtifacts,
+    retainedObservations,
+    auditArtifact.payload.providerFailures,
+    reconciliation,
+  );
   if (canonicalJson(expectedPayload) !== canonicalJson(auditArtifact.payload)) {
     throw new Error("Replayed credentialed-sample report does not match the retained audit artifact.");
   }
@@ -776,6 +971,7 @@ export function credentialedSampleExitCode(
   assertCredentialedSampleAuditPayload(payload);
   if (requireProduction) return 1;
   if (requireLiveEvidence && payload.mode !== "live") return 1;
+  if (payload.captureStatus === "partial") return 1;
   return 0;
 }
 
