@@ -42,6 +42,8 @@ This milestone proves implementation behavior. It does not prove an investable d
 
 Status: **NOW**
 
+Software checkpoint: the fixture-tested `capture -> immutable artifact -> reconciliation -> offline replay` spine is implemented on `ykoba/pre-forward-credentialed-data-slice`. M1 remains active because no credentialed vendor sample, entitlement/cost evidence, or retention confirmation exists yet.
+
 Goal: turn provider research into a small, reproducible, license-permitted evidence path.
 
 Implementation package:
@@ -201,7 +203,8 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 ## Current checkpoint
 
 - Current milestone: **M1 — Credentialed data slice**
-- Next implementation outcome: fixture-tested credentialed-sample capture/audit command, followed by an authorized 5–10 ETF real sample
+- Completed software outcome: fixture-tested J-Quants/EODHD credentialed-sample capture/audit/replay command for the same five synthetic JPX mappings
+- Next evidence outcome: an explicitly authorized 5–10 ETF real sample, including entitled lifecycle/event/calendar/quote fields where available
 - Current external gate: permission to use credentials/incur cost and confirmation of permitted raw-response retention
 - Next runnable milestone: **M2 — Manual Pre-Forward vertical slice**
 - Formal Forward-Test clock: **not started**
@@ -211,3 +214,4 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 | Date | Evidence | Milestone result | Next checkpoint |
 |---|---|---|---|
 | 2026-08-29 | PR #9 merged; provider evaluation remains fail-closed; 152 tests passed in PR verification | M0 complete, M1 active | Build the credentialed-sample capture path without secrets, then request G1/G2 for the real sample |
+| 2026-08-29 | `credentialed-sample-v1` fixture capture and offline replay produce the same immutable fail-closed audit for five mappings across J-Quants/EODHD contracts | M1 software spine complete; real evidence still absent | Merge the implementation PR, then stop at G1/G2 until credential, cost, entitlement, and retention are explicitly approved |

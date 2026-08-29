@@ -9,7 +9,7 @@
 
 No evaluated individual provider or two-source bundle is ready to enable `etf_realistic`. The current machine evaluation is `blocked`, remains fail-closed, and deliberately cannot select a provider. J-Quants plus EODHD is the strongest next **private-research sample configuration**, while J-Quants plus Twelve Data is the alternative; neither is an approved production source.
 
-The immediate blockers are not ordinary API plumbing. They are missing proof of an official Total Return construction, source-native Point-in-Time availability and revisions, complete ETF distribution and Corporate Action coverage, historical Tokyo ETF bid/ask evidence, durable audit-reproduction rights, and credentialed sample artifacts. `AdjustedClose` and `adjust=all` are therefore never relabeled as Total Return.
+The capture/replay plumbing now has a fixture-tested executable path. The remaining blockers are missing real credentialed artifacts plus proof of an official Total Return construction, source-native Point-in-Time availability and revisions, complete ETF distribution and Corporate Action coverage, historical Tokyo ETF bid/ask evidence, and durable audit-reproduction rights. `AdjustedClose` and `adjust=all` are therefore never relabeled as Total Return.
 
 The report uses tables instead of a numeric chart because the evidence is categorical and incomplete. A numerical provider score would imply precision and automatic ranking that O-001 does not authorize.
 
@@ -32,7 +32,7 @@ Legend: `documented` means an official page describes the capability; `partial` 
 | Row-level `availableAt` | unknown | unknown | unknown |
 | Immutable revision history | unsupported in the evaluated J-Quants individual contract; corrections overwrite prior values | unknown | unknown |
 | Private-research licensing | public terms indicate private-use restrictions; machine overall remains unknown without a terms snapshot | public terms indicate private-use and post-termination restrictions; machine overall remains unknown without a terms snapshot | public terms indicate personal/internal-use restrictions; machine overall remains unknown without a terms snapshot |
-| Current adapter proof | fixture contract only; no real credential used | not implemented | not implemented |
+| Current adapter proof | fixture capture/replay contract only; no real credential used | fixture capture/replay contract only; no real credential used | not implemented |
 
 Primary evidence:
 
@@ -46,7 +46,7 @@ The acceptance unit is a versioned source bundle, not necessarily one vendor. A 
 
 | Research bundle | Intended responsibility | Current disposition | Why it remains closed |
 |---|---|---|---|
-| J-Quants + EODHD | J-Quants for TSE prices/calendar/listed snapshots; EODHD for overseas ETFs, FX, delisted history, and comparison | blocked | no credentialed samples; incomplete ETF event/PIT/spread proof; J-Quants source-native revision chain unavailable; license retention unresolved |
+| J-Quants + EODHD | J-Quants for TSE prices/calendar/listed snapshots; EODHD for overseas ETFs, FX, delisted history, and comparison | blocked | no real credentialed sample; incomplete ETF event/PIT/spread proof; J-Quants source-native revision chain unavailable; license retention unresolved |
 | J-Quants + Twelve Data | J-Quants for TSE primary data; Twelve Data for adjustment-mode comparison and FX | blocked | same J-Quants PIT blocker; Twelve Data listing lifecycle, Tokyo quote quality, and audit rights remain unknown |
 
 The first bundle is the recommended **next experiment**, not the adopted provider. O-001 stays in `OPEN_DECISIONS.md` until samples, rights, costs, and the proposed gate receive human approval.
@@ -113,7 +113,7 @@ The adapter deliberately does not:
 
 Official no-trade rows with null prices are explicitly excluded rather than filled with zero or a prior value. An inconsistent partially-null price row is rejected, and a response containing no usable bars fails with an explicit no-data error.
 
-Contract tests use mocked responses only. No credentialed J-Quants request or provider-to-provider market-data reconciliation was performed in this PR.
+Contract tests use mocked responses only. The M1 `credentialed-sample-v1` path now retains exact fixture response bytes, normalizes daily bars, reconciles five mappings against an EODHD fixture contract, and replays offline. This is provider-to-provider **software-contract** evidence only; no credentialed J-Quants/EODHD request or vendor-data reconciliation has been performed.
 
 ## Limitations and robustness
 
@@ -129,7 +129,7 @@ Contract tests use mocked responses only. No credentialed J-Quants request or pr
 
 1. Obtain explicit approval before purchasing or using any paid plan.
 2. With approved credentials, request the same 5–10 representative JPX ETFs from J-Quants and EODHD: live, recently listed, delisted, distributed, split/changed, and thinly traded examples.
-3. Save permitted raw responses as immutable artifacts with request/retrieval hashes; never overwrite earlier observations.
+3. Use the implemented credentialed-sample runner to save permitted raw responses as immutable artifacts with request/retrieval hashes; never overwrite earlier observations.
 4. Reconcile raw close, adjustment factor, distribution amount/dates, lifecycle dates, calendar state, volume/trading value, and quote-quality fields without selecting a source winner.
 5. Obtain written confirmation for ETF coverage, revision semantics, storage/retention, derived results, private audit replay, cancellation handling, and exact plan costs.
 6. Add a separate official FX/fixing sample and calendar/lifecycle artifact where the market-data bundle is incomplete.

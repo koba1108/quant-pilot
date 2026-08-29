@@ -134,7 +134,25 @@ O-001候補を、機能、Point-in-Time availability／revision、複数source�
 bun run provider-evaluation --config=research/provider-evaluation/o001-candidates.json
 ```
 
-2026-08-29 snapshotでは、J-Quants＋EODHDとJ-Quants＋Twelve Dataの両bundleが`blocked`、`selection=not_selected`、`canEnableEtfRealistic=false`となる。これはAPIが全く利用できないという意味ではなく、production証拠に必要なTotal Return、PIT改訂、ETF event、東京ETF quote、保存・監査権、credentialed sampleが揃っていないという意味である。候補調査と次のsample計画は [`docs/provider-evaluation.md`](./docs/provider-evaluation.md) を参照する。
+2026-08-29 snapshotでは、J-Quants＋EODHDとJ-Quants＋Twelve Dataの両bundleが`blocked`、`selection=not_selected`、`canEnableEtfRealistic=false`となる。これはAPIが全く利用できないという意味ではなく、production証拠に必要なTotal Return、PIT改訂、ETF event、東京ETF quote、保存・監査権、実credentialed sampleが揃っていないという意味である。候補調査と次のsample計画は [`docs/provider-evaluation.md`](./docs/provider-evaluation.md) を参照する。
+
+## Credentialed sample capture contract
+
+M1の最小縦切りは、J-QuantsとEODHDの同一5銘柄fixtureを、redacted request、raw response byte hash、immutable artifact、field別reconciliation、offline replayまで接続する。
+
+```bash
+bun run credentialed-sample --config=research/provider-samples/fixture.config.json
+```
+
+出力されたaudit artifact IDを使い、providerへ接続せず再計算できる。
+
+```bash
+bun run credentialed-sample \
+  --config=research/provider-samples/fixture.config.json \
+  --replay-artifact=sha256:<64-hex-digits>
+```
+
+fixtureは常に`research_only`、`failClosed=true`、`canEnableEtfRealistic=false`である。実credential、費用、raw保存、license retentionの承認はまだなく、live実行は4つの設定記録と4つの実行時flagが揃うまでネットワークへ進まない。artifactはGit管理外の`data/generated/`へ保存する。仕様と残るGate G1/G2は [`docs/credentialed-sample.md`](./docs/credentialed-sample.md) を参照する。
 
 ## Strategy A/B robustness grid
 

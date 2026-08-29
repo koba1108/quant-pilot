@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "credentialed-sample-v1",
+  "mode": "fixture",
+  "range": {
+    "start": "2025-01-06",
+    "end": "2025-01-08"
+  },
+  "artifactRoot": {
+    "kind": "relative",
+    "path": "data/generated/provider-samples/fixture-v1"
+  },
+  "providers": [
+    {
+      "providerId": "jquants_v2",
+      "source": "jquants-fixture",
+      "independenceGroup": "jpx-fixture",
+      "credentialEnvVar": "JQUANTS_API_KEY",
+      "fixtureFile": "tests/fixtures/provider-samples/jquants-v2.json"
+    },
+    {
+      "providerId": "eodhd_eod",
+      "source": "eodhd-fixture",
+      "independenceGroup": "eodhd-fixture",
+      "credentialEnvVar": "EODHD_API_TOKEN",
+      "fixtureFile": "tests/fixtures/provider-samples/eodhd-eod.json"
+    }
+  ],
+  "instruments": [
+    {
+      "stableId": "JPX:1308",
+      "currency": "JPY",
+      "mappings": [
+        { "providerId": "jquants_v2", "providerSymbol": "1308" },
+        { "providerId": "eodhd_eod", "providerSymbol": "1308.TSE" }
+      ]
+    },
+    {
+      "stableId": "JPX:1348",
+      "currency": "JPY",
+      "mappings": [
+        { "providerId": "jquants_v2", "providerSymbol": "1348" },
+        { "providerId": "eodhd_eod", "providerSymbol": "1348.TSE" }
+      ]
+    },
+    {
+      "stableId": "JPX:1473",
+      "currency": "JPY",
+      "mappings": [
+        { "providerId": "jquants_v2", "providerSymbol": "1473" },
+        { "providerId": "eodhd_eod", "providerSymbol": "1473.TSE" }
+      ]
+    },
+    {
+      "stableId": "JPX:1597",
+      "currency": "JPY",
+      "mappings": [
+        { "providerId": "jquants_v2", "providerSymbol": "1597" },
+        { "providerId": "eodhd_eod", "providerSymbol": "1597.TSE" }
+      ]
+    },
+    {
+      "stableId": "JPX:2510",
+      "currency": "JPY",
+      "mappings": [
+        { "providerId": "jquants_v2", "providerSymbol": "2510" },
+        { "providerId": "eodhd_eod", "providerSymbol": "2510.TSE" }
+      ]
+    }
+  ],
+  "credentialUseAuthorized": false,
+  "costAuthorized": false,
+  "rawRetentionAuthorized": false,
+  "licenseRetentionConfirmed": false
+}

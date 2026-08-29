@@ -1,4 +1,5 @@
 import type { DailyBar } from "./models.ts";
+import type { CapturedProviderHttpResponse } from "./provider-http-capture.ts";
 
 export interface MarketDataRequest {
   code: string;
@@ -10,6 +11,15 @@ export interface MarketDataRequest {
 export interface MarketDataProvider {
   readonly name: string;
   loadDailyBars(request: MarketDataRequest): Promise<DailyBar[]>;
+}
+
+export interface CapturedDailyBars {
+  bars: readonly DailyBar[];
+  responses: readonly CapturedProviderHttpResponse[];
+}
+
+export interface CapturingMarketDataProvider extends MarketDataProvider {
+  captureDailyBars(request: MarketDataRequest): Promise<CapturedDailyBars>;
 }
 
 function isIsoDate(value: string): boolean {

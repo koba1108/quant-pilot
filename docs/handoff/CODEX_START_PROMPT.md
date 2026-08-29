@@ -1,4 +1,4 @@
-# Codex Start Prompt (post-PR #9 continuation)
+# Codex Start Prompt (M1 credentialed-sample continuation)
 
 Copy the following into the first task of the Codex Project opened at `/Users/ykoba/IdeaProjects/quant-pilot`.
 
@@ -24,7 +24,7 @@ Quant Pilotの実装をChatGPTから引き継いでください。
 
 - PR #9（production market-data readiness評価とJ-Quants v2 research adapter）まで `main` へマージ済みです（`9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`）。
 - 合成fixture、provider-neutralなPoint-in-Time契約、data quality、reconciliation、robustness、provider評価まで実装済みです。
-- 実credentialed sample、正式provider、Strategy C、Forward-Test persistence/schedulingは未実装です。
+- credentialed-sampleのfixture capture／immutable artifact／reconciliation／offline replayは実装済みです。実credentialed vendor sample、正式provider、Strategy C、Forward-Test persistence/schedulingは未実施です。
 - `etf_realistic` は未解禁です。
 - Active delivery milestoneは `EXECUTION_ROADMAP.md` のM1 Credentialed data sliceです。
 
@@ -34,8 +34,8 @@ Quant Pilotの実装をChatGPTから引き継いでください。
 2. `EXECUTION_ROADMAP.md` のactive milestone、exit criterion、次に実行可能にするcommand/artifactをplanへ書く
 3. 現在の作業ブランチと `main` の基準commitを確認する
 4. Node/Bunのバージョンを確認する
-5. 既存fixtureで対象runnerの検証を行う
-6. M1に直接必要なcredentialed-sample capture/audit pathだけを実装する
+5. `credentialed-sample` fixture captureとoffline replayを含む既存runnerの検証を行う
+6. M1のsoftware pathがマージ済みなら、Gate G1/G2なしにlive fetchへ進まない。未マージなら同じ縦切りだけを完了する
 7. 欠損・将来データ・不一致をfail closedで検証する
 8. `etf_realistic` が未解禁のままであることを確認する
 9. 問題があれば新しいbranchとPRで修正する

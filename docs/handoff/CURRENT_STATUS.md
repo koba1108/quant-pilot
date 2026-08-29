@@ -9,7 +9,7 @@ Snapshot date: 2026-08-29
 - Default branch: `main`
 - Latest merged PR: #9 (`feat: evaluate production market data readiness`)
 - Latest merged commit: `9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`
-- Active documentation branch: `ykoba/document-forward-test-roadmap`
+- Active implementation branch: `ykoba/pre-forward-credentialed-data-slice`
 - Active PR: none
 - Active delivery milestone: M1 — Credentialed data slice
 - Delivery roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
@@ -108,6 +108,19 @@ The machine snapshot contains no downloaded market data, credentials, private ve
 - provider-evaluation `--require-production`: expected exit code 1
 - official evidence URL reachability check: all 22 committed URLs returned HTTP 200 on 2026-08-29; this is not content immutability or contract verification
 
+## M1 credentialed-sample software checkpoint on the active branch
+
+- `bun run credentialed-sample --config=research/provider-samples/fixture.config.json` now executes one complete fixture path for five JPX mappings through the J-Quants and EODHD contracts.
+- J-Quants captures exact response bytes after header-auth requests; EODHD sends its documented query token only to the fixed HTTPS endpoint and removes it completely from retained request metadata. Both reject redirects.
+- Raw responses, normalized daily bars, field observations, and the final audit use immutable content-addressed artifacts with read/write integrity checks and atomic no-clobber storage.
+- The fixture produces 10 raw-response artifacts, 10 daily-bar artifacts, 105 field observations, and one audit artifact. Offline replay revalidates all lineage and produces byte-for-byte identical output without provider access.
+- Close, provider-adjusted close, and volume compare across both sources. EODHD daily EOD has no trading-value field, so all 15 trading-value groups remain explicit `insufficient_sources` findings.
+- The output remains `fixture_contract`, `research_only`, `selection=not_selected`, `failClosed=true`, and `canEnableEtfRealistic=false`.
+- Live mode requires 5–10 mappings, four config authorization records, the same four runtime authorization flags, and nonempty credential environment variables before directory creation or network access.
+- Current active-branch verification: `bun test` 195 pass / 0 fail; `bunx tsc --noEmit` pass; fixture capture/replay pass and are byte-for-byte identical; `--require-live-evidence` and `--require-production` return the expected nonzero status.
+- Artifact storage is owner-only on POSIX (`0700` root, `0600` files), and live config cannot redirect unrelated environment secrets into a provider request.
+- No real J-Quants/EODHD credential, paid request, vendor response, or license-restricted artifact was used or committed.
+
 ## O-001 findings preserved as open
 
 ### Individual-access candidates
@@ -137,6 +150,10 @@ No provider is selected. No cost, contract, retention policy, FX fixing, calenda
 - PASS — missing values are never implicitly replaced with zero or a prior value
 - PASS — provider-evaluation ordering is deterministic and report mutation is detected
 - PASS — J-Quants mocked adapter fails closed on unsafe response data
+- PASS — five-mapping J-Quants/EODHD fixture capture creates immutable raw/normalized/observation/audit artifacts
+- PASS — offline replay performs no fetch and is byte-for-byte deterministic
+- PASS — credential values, redirects, tracked artifact roots, independent-source duplication, range escape, and artifact tampering fail closed
+- PASS — missing EODHD trading value remains `insufficient_sources` and provider-adjusted close remains non-Total-Return
 - NOT RUN — real credentialed J-Quants API request
 - NOT RUN — real J-Quants/EODHD or J-Quants/Twelve Data reconciliation
 
@@ -161,6 +178,7 @@ No provider is selected. No cost, contract, retention policy, FX fixing, calenda
 ### Operations
 
 - Strategy C and its decision-package schema are not implemented.
+- The M1 software spine is implemented, but Gate G1/G2 is not approved and no real sample exists.
 - Forward-test persistence, scheduling, notifications, and dashboard are not implemented.
 - No brokerage connection or real-order path exists or is authorized.
 
@@ -168,7 +186,7 @@ No provider is selected. No cost, contract, retention policy, FX fixing, calenda
 
 The controlling delivery order is `docs/handoff/EXECUTION_ROADMAP.md`.
 
-1. M1 NOW: build the credentialed-sample capture/audit path without secrets, then request explicit credential/cost and retention authorization for a real 5–10 ETF sample.
+1. M1 NOW: merge the fixture-tested credentialed-sample capture/audit/replay path, then request explicit credential/cost, entitlement, and retention authorization for a real 5–10 ETF sample.
 2. M2 NEXT: connect retained real observations to a manual, replayable, idempotent Pre-Forward virtual-portfolio cycle.
 3. M3 LATER: add approved scheduling, recovery, notifications, and minimal reporting.
 4. M4 GATE: freeze provider, Universe, Strategy A/B, Strategy C, persistence, and success-threshold decisions before formal Forward Test.

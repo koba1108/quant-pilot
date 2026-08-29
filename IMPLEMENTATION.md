@@ -29,6 +29,12 @@ PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction
 - `src/data/csv.ts`: CSV fallback provider
 - `src/data/stooq.ts`: Stooq research provider
 - `src/data/jquants-v2.ts`: J-Quants API v2 read-only daily-bar adapter spike; unadjusted proxy research only
+- `src/data/eodhd-eod.ts`: EODHD EOD comparison adapter with query-token redaction and strict daily-bar parsing
+- `src/data/provider-http-capture.ts`: exact response-byte capture, credential-echo rejection, and retained-header allowlist
+- `src/data/artifact-store.ts`: immutable content-addressed filesystem artifact store
+- `src/data/provider-sample-artifacts.ts`: raw-to-daily lineage and field-specific observation artifacts
+- `src/data/credentialed-sample-config.ts`: strict fixture/live schema and G1/G2 authorization records
+- `src/data/credentialed-sample-runner.ts`: fixture/live capture, reconciliation, fail-closed audit, and offline replay CLI
 - `src/data/provider-evaluation.ts`: O-001 capability, evidence, source-bundle, license, cost-approval, and integrity evaluator
 - `src/data/provider-evaluation-runner.ts`: deterministic provider-evaluation CLI
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
@@ -38,6 +44,7 @@ PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction
 - `docs/distribution-accounting.md`: D-018 distribution-accounting semantics
 - `docs/fx-normalization.md`: JPY FX calculation, audit contract, official evidence, and limitations
 - `docs/provider-evaluation.md`: official-source provider comparison, production gate, adapter boundary, and credentialed-sample plan
+- `docs/credentialed-sample.md`: M1 executable contract, live gates, replay behavior, and remaining evidence gaps
 
 ### Backtest
 
@@ -138,9 +145,20 @@ PR #9 provider-evaluation verification now present on `main`:
 - J-Quants adapter tests cover official-host credential confinement, pagination, header authentication, semantic dates, four/five-character code normalization, no-trade null-row exclusion, strict rows, range matching, missing optional values, repeated pages, duplicate dates, malformed JSON, and HTTP failures
 - real J-Quants credentials and downloaded provider data are not used or committed
 
+Active M1 credentialed-sample branch verification:
+
+- `bun test`: 195 pass / 0 fail
+- `bunx tsc --noEmit`: success
+- fixture capture: success for five mappings across J-Quants/EODHD contracts; 10 raw, 10 daily-bar, 105 observation, and one audit artifact
+- offline replay: success without provider access and byte-for-byte identical to capture output
+- fixture reconciliation: `advisory`; 15 EODHD-missing trading-value groups remain explicit `insufficient_sources`
+- `--require-live-evidence` and `--require-production`: expected nonzero status
+- Git ignore check: generated runtime artifact root is ignored
+- no real credential, provider request, paid entitlement, or retained vendor response was used
+
 ## Next blocks
 
 1. Follow `docs/handoff/EXECUTION_ROADMAP.md`; do not begin work outside its active milestone
-2. M1: implement the credentialed-sample capture/audit command without secrets and obtain G1/G2 authorization before a real fetch or retained vendor response
+2. M1: use the implemented fixture-tested credentialed-sample capture/audit command only after obtaining G1/G2 authorization for a real fetch and retained vendor response
 3. M2: deliver the manual Pre-Forward vertical slice with an idempotent virtual ledger and replayable Decision Package
 4. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates

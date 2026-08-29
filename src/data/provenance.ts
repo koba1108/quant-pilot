@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 export const DATA_PROVENANCE_VERSION = "data-provenance-v1" as const;
 
 export type DataArtifactKind =
+  | "provider_raw_response"
   | "daily_bars"
   | "quote_quality"
   | "corporate_actions"
@@ -16,6 +17,7 @@ export type DataArtifactKind =
   | "provider_capability_evidence";
 
 const DATA_ARTIFACT_KINDS: readonly DataArtifactKind[] = [
+  "provider_raw_response",
   "daily_bars",
   "quote_quality",
   "corporate_actions",
