@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "provider-http-fixture-v1",
+  "providerId": "jquants_v2",
+  "responses": [
+    {
+      "request": {
+        "origin": "https://api.jquants.com",
+        "pathname": "/v2/equities/bars/daily",
+        "query": { "code": "13080", "from": "20250106", "to": "20250108" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": "{\n  \"data\": [\n    {\"Date\":\"2025-01-06\",\"Code\":\"13080\",\"C\":1000,\"AdjFactor\":1,\"AdjC\":1000,\"Vo\":10000,\"Va\":10000000},\n    {\"Date\":\"2025-01-07\",\"Code\":\"13080\",\"C\":1005,\"AdjFactor\":1,\"AdjC\":1005,\"Vo\":11000,\"Va\":11055000},\n    {\"Date\":\"2025-01-08\",\"Code\":\"13080\",\"C\":1002,\"AdjFactor\":1,\"AdjC\":1002,\"Vo\":9000,\"Va\":9018000}\n  ]\n}"
+      },
+      "retrievedAt": "2025-01-09T00:00:01Z"
+    },
+    {
+      "request": {
+        "origin": "https://api.jquants.com",
+        "pathname": "/v2/equities/bars/daily",
+        "query": { "code": "13480", "from": "20250106", "to": "20250108" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": "{\"data\":[{\"Date\":\"2025-01-06\",\"Code\":\"13480\",\"C\":2100,\"AdjFactor\":1,\"AdjC\":2100,\"Vo\":8000,\"Va\":16800000},{\"Date\":\"2025-01-07\",\"Code\":\"13480\",\"C\":2110,\"AdjFactor\":1,\"AdjC\":2110,\"Vo\":8500,\"Va\":17935000},{\"Date\":\"2025-01-08\",\"Code\":\"13480\",\"C\":2105,\"AdjFactor\":1,\"AdjC\":2105,\"Vo\":7800,\"Va\":16419000}]}"
+      },
+      "retrievedAt": "2025-01-09T00:00:02Z"
+    },
+    {
+      "request": {
+        "origin": "https://api.jquants.com",
+        "pathname": "/v2/equities/bars/daily",
+        "query": { "code": "14730", "from": "20250106", "to": "20250108" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": "{\"data\":[{\"Date\":\"2025-01-06\",\"Code\":\"14730\",\"C\":2850,\"AdjFactor\":1,\"AdjC\":2850,\"Vo\":3000,\"Va\":8550000},{\"Date\":\"2025-01-07\",\"Code\":\"14730\",\"C\":2860,\"AdjFactor\":1,\"AdjC\":2860,\"Vo\":3200,\"Va\":9152000},{\"Date\":\"2025-01-08\",\"Code\":\"14730\",\"C\":2855,\"AdjFactor\":1,\"AdjC\":2855,\"Vo\":3100,\"Va\":8850500}]}"
+      },
+      "retrievedAt": "2025-01-09T00:00:03Z"
+    },
+    {
+      "request": {
+        "origin": "https://api.jquants.com",
+        "pathname": "/v2/equities/bars/daily",
+        "query": { "code": "15970", "from": "20250106", "to": "20250108" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": "{\"data\":[{\"Date\":\"2025-01-06\",\"Code\":\"15970\",\"C\":1850,\"AdjFactor\":1,\"AdjC\":1850,\"Vo\":6000,\"Va\":11100000},{\"Date\":\"2025-01-07\",\"Code\":\"15970\",\"C\":1865,\"AdjFactor\":1,\"AdjC\":1865,\"Vo\":6500,\"Va\":12122500},{\"Date\":\"2025-01-08\",\"Code\":\"15970\",\"C\":1860,\"AdjFactor\":1,\"AdjC\":1860,\"Vo\":6200,\"Va\":11532000}]}"
+      },
+      "retrievedAt": "2025-01-09T00:00:04Z"
+    },
+    {
+      "request": {
+        "origin": "https://api.jquants.com",
+        "pathname": "/v2/equities/bars/daily",
+        "query": { "code": "25100", "from": "20250106", "to": "20250108" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": "{\"data\":[{\"Date\":\"2025-01-06\",\"Code\":\"25100\",\"C\":920,\"AdjFactor\":1,\"AdjC\":920,\"Vo\":4000,\"Va\":3680000},{\"Date\":\"2025-01-07\",\"Code\":\"25100\",\"C\":922,\"AdjFactor\":1,\"AdjC\":922,\"Vo\":4200,\"Va\":3872400},{\"Date\":\"2025-01-08\",\"Code\":\"25100\",\"C\":921,\"AdjFactor\":1,\"AdjC\":921,\"Vo\":3900,\"Va\":3591900}]}"
+      },
+      "retrievedAt": "2025-01-09T00:00:05Z"
+    }
+  ]
+}

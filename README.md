@@ -22,11 +22,12 @@ Codex Projectへ移行する場合は、最初に次を読んでください。
 2. [`docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`](./docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md)
 3. [`docs/handoff/DECISIONS.md`](./docs/handoff/DECISIONS.md)
 4. [`docs/handoff/CURRENT_STATUS.md`](./docs/handoff/CURRENT_STATUS.md)
-5. [`docs/handoff/OPEN_DECISIONS.md`](./docs/handoff/OPEN_DECISIONS.md)
+5. [`docs/handoff/EXECUTION_ROADMAP.md`](./docs/handoff/EXECUTION_ROADMAP.md)
+6. [`docs/handoff/OPEN_DECISIONS.md`](./docs/handoff/OPEN_DECISIONS.md)
 
 引き継ぎ資料には、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状態、未確定事項、実行手順を整理しています。
 
-PR #8（provider-neutralな正規化リターン、行単位availability、JPY換算のrunner統合）まで `main` へマージ済みです。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合と人間によるprovider承認まで実行できません。
+PR #9（production market-data readiness評価とJ-Quants v2 research adapter）まで `main` へマージ済みです。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md`、Forward Testまでの一本道と脱線防止ルールは `docs/handoff/EXECUTION_ROADMAP.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合と人間によるprovider承認まで実行できません。
 
 ## Backtest quick start
 
@@ -133,7 +134,25 @@ O-001候補を、機能、Point-in-Time availability／revision、複数source�
 bun run provider-evaluation --config=research/provider-evaluation/o001-candidates.json
 ```
 
-2026-08-29 snapshotでは、J-Quants＋EODHDとJ-Quants＋Twelve Dataの両bundleが`blocked`、`selection=not_selected`、`canEnableEtfRealistic=false`となる。これはAPIが全く利用できないという意味ではなく、production証拠に必要なTotal Return、PIT改訂、ETF event、東京ETF quote、保存・監査権、credentialed sampleが揃っていないという意味である。候補調査と次のsample計画は [`docs/provider-evaluation.md`](./docs/provider-evaluation.md) を参照する。
+2026-08-29 snapshotでは、J-Quants＋EODHDとJ-Quants＋Twelve Dataの両bundleが`blocked`、`selection=not_selected`、`canEnableEtfRealistic=false`となる。これはAPIが全く利用できないという意味ではなく、production証拠に必要なTotal Return、PIT改訂、ETF event、東京ETF quote、保存・監査権、実credentialed sampleが揃っていないという意味である。候補調査と次のsample計画は [`docs/provider-evaluation.md`](./docs/provider-evaluation.md) を参照する。
+
+## Credentialed sample capture contract
+
+M1の最小縦切りは、J-QuantsとEODHDの同一5銘柄fixtureを、redacted request、raw response byte hash、immutable artifact、field別reconciliation、offline replayまで接続する。
+
+```bash
+bun run credentialed-sample --config=research/provider-samples/fixture.config.json
+```
+
+出力されたaudit artifact IDを使い、providerへ接続せず再計算できる。
+
+```bash
+bun run credentialed-sample \
+  --config=research/provider-samples/fixture.config.json \
+  --replay-artifact=sha256:<64-hex-digits>
+```
+
+fixtureは常に`research_only`、`failClosed=true`、`canEnableEtfRealistic=false`である。実credential、費用、raw保存、license retentionの承認はまだなく、live実行は4つの設定記録と4つの実行時flagが揃うまでネットワークへ進まない。artifactはGit管理外の`data/generated/`へ保存する。仕様と残るGate G1/G2は [`docs/credentialed-sample.md`](./docs/credentialed-sample.md) を参照する。
 
 ## Strategy A/B robustness grid
 

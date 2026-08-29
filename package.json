@@ -9,6 +9,7 @@
     "backtest": "bun run src/backtest/runner.ts",
     "data-quality": "bun run src/data/data-quality-runner.ts",
     "provider-evaluation": "bun run src/data/provider-evaluation-runner.ts",
+    "credentialed-sample": "bun run src/data/credentialed-sample-runner.ts",
     "robustness": "bun run src/backtest/robustness-grid.ts"
   },
   "devDependencies": {

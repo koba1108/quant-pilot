@@ -5,11 +5,13 @@
 - Repository: `koba1108/quant-pilot`
 - Local path: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Current implementation branch: `ykoba/normalized-pit-backtest-integration`
-- Current pull request: #8 (`feat: integrate point-in-time normalized backtests`)
-- Base state: PR #7 (`feat: add point-in-time research validation`) merged into `main` at `2a522904695070a3b75770b2d1b84a459a6ebfe8`
-- PR #8 is open and not merged; do not describe the implementation as merged.
-- Handoff date: 2026-08-28
+- Current default branch state: PR #9 (`feat: evaluate production market data readiness`) merged into `main` at `9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`
+- Active implementation branch: `ykoba/pre-forward-credentialed-data-slice`
+- Active PR: #10 (`feat: add credentialed provider sample capture and replay`)
+- Current delivery milestone: M1 — Credentialed data slice
+- Current roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
+- Formal Forward-Test clock: not started
+- Handoff date: 2026-08-29
 - Primary migration instructions: `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 
 ## Mission
@@ -46,7 +48,7 @@ Decision Package / Monthly Report
 
 ## Merged foundation
 
-`main` through PR #7 contains deterministic TypeScript implementations for:
+`main` through PR #9 contains deterministic TypeScript implementations for:
 
 - Strategy A/B ranking, inverse-volatility allocation, costs, the three-holding limit, and the -30% hard stop
 - commit-safe Trend/Rotation CLI fixtures and Point-in-Time lifecycle validation
@@ -54,20 +56,22 @@ Decision Package / Monthly Report
 - D-018 distribution receivable/pay-date accounting
 - Point-in-Time non-JPY to JPY conversion
 - CSV and Stooq research providers
+- provider-neutral normalized runner integration and exact-date JPY conversion
+- fail-closed provider evaluation and a mocked J-Quants v2 daily-price adapter contract
 
-PR #7 (`feat: add point-in-time research validation`) was merged on 2026-08-28 at merge commit `2a522904695070a3b75770b2d1b84a459a6ebfe8`. Its pre-merge verification passed 105 Bun tests, TypeScript checking, strict-Universe Trend/Rotation CLIs, data-quality CLI, and the robustness grid; these results are now part of `main`.
+PR #9 was merged on 2026-08-29. Its pre-merge verification passed 152 Bun tests, TypeScript checking, raw/normalized Trend/Rotation CLIs, data-quality, robustness, deterministic provider evaluation, and the expected fail-closed production exit.
 
 ## Current post-merge work
 
-The current implementation block is PR review of the provider-neutral normalized Point-in-Time returns, row-level availability, and JPY conversion integration:
+The active work is M1 of `EXECUTION_ROADMAP.md`: a credentialed, reproducible, license-permitted provider sample path.
 
-1. `backtest-summary-v3` and `robustness-grid-v2` preserve the existing strict versioned Point-in-Time Universe and per-decision-date provenance;
-2. consume normalized-return, `ReturnEventCoverage.availableAt`, and FX contracts without silently filling missing data;
-3. retain `research_only` output and reject `etf_realistic` until production data layers are approved and integrated.
+1. implemented and fixture-tested capture/audit tooling without secrets;
+2. bound request, retrieval, exact raw response bytes, source version, hashes, normalized artifacts, and observations;
+3. added deterministic J-Quants/EODHD five-mapping reconciliation plus offline replay;
+4. stop at Gate G1/G2 until the user explicitly approves credentials, cost/entitlement, and raw-response retention, then obtain the real sample;
+5. return O-001 evidence to the user without auto-selecting a provider.
 
-The normalized frame builder resolves signal and forward endpoints on each asset's actual last trading date, pins the full signal-time bar/FX prefix into the forward resolution, rejects partial final months, and separates realized-return `start/end` from `signalStart/signalEnd`. Worst-year output discloses incomplete calendar years.
-
-The branch intentionally does not implement Strategy C, operational scheduling, a dashboard, a production provider, or brokerage/order behavior.
+Strategy C, formal operational scheduling, a dashboard, a production provider, and brokerage/order behavior remain outside M1.
 
 ## Important data boundaries
 
@@ -82,7 +86,7 @@ The branch intentionally does not implement Strategy C, operational scheduling, 
 
 ## Verification snapshot
 
-- `bun test`: 131 pass / 0 fail (current branch implementation verification)
+- `bun test`: 152 pass / 0 fail (PR #9 verification now on `main`)
 - `bunx tsc --noEmit`: pass
 - Trend with strict v1 Universe: pass
 - Rotation with strict v1 Universe: pass
@@ -91,20 +95,21 @@ The branch intentionally does not implement Strategy C, operational scheduling, 
 - robustness grid: 16 completed supported cells and 16 explicit unsupported cells (PR #7 baseline)
 - final all-CLI audit: pass
 - normalized Trend and Rotation repeated outputs: byte-for-byte identical
+- active M1 branch: `bun test` 195 pass / 0 fail; TypeScript pass; credentialed-sample fixture capture/replay byte-for-byte identical; live/production requirement flags fail closed as expected
 
 See `CURRENT_STATUS.md` for commands, outputs, and current limitations.
 
 ## Next implementation sequence
 
-1. Complete review of the normalized Point-in-Time integration and merge only with explicit user approval.
-2. Research production-grade Universe, exchange-calendar, and data-provider sources without settling O-001 arbitrarily.
-3. Add remaining execution-timing, replacement/hysteresis, crisis-period, and benchmark-comparison robustness axes without resolving O-005/O-006 by implementation convenience.
-4. Define the Strategy C decision-package schema while preserving O-012/O-013 as open.
-5. Add forward-test persistence, scheduling, reporting, and notifications only within the approved research/forward-test boundaries.
+1. M1 NOW: credentialed sample capture and audit.
+2. M2 NEXT: manual, replayable, idempotent Pre-Forward virtual-portfolio cycle.
+3. M3 LATER: approved scheduling, recovery, notifications, and minimal reporting.
+4. M4 GATE: freeze provider, Universe, strategies, persistence, and success thresholds before formal Forward Test.
+5. Follow `EXECUTION_ROADMAP.md`; do not begin later work because it is locally interesting.
 
 ## Working rules
 
-- Read `AGENTS.md`, `CODEX_PROJECT_INSTRUCTIONS.md`, and `DECISIONS.md` before changing behavior.
+- Read `AGENTS.md`, `CODEX_PROJECT_INSTRUCTIONS.md`, `DECISIONS.md`, and `EXECUTION_ROADMAP.md` before changing behavior.
 - Do not reinterpret the original interview questions. Only approved decisions in this repository are binding.
 - Keep deterministic finance logic and hard safety constraints in TypeScript.
 - Log assumptions and limitations whenever market data is incomplete.

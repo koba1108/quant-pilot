@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "provider-http-fixture-v1",
+  "providerId": "eodhd_eod",
+  "responses": [
+    {
+      "request": {
+        "origin": "https://eodhd.com",
+        "pathname": "/api/eod/1308.TSE",
+        "query": { "from": "2025-01-06", "to": "2025-01-08", "period": "d", "order": "a", "fmt": "json" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json", "x-ratelimit-limit": "1000", "x-ratelimit-remaining": "999" },
+        "body": "[{\"date\":\"2025-01-06\",\"open\":998,\"high\":1002,\"low\":997,\"close\":1000,\"adjusted_close\":1000,\"volume\":10000},{\"date\":\"2025-01-07\",\"open\":1001,\"high\":1007,\"low\":1000,\"close\":1005,\"adjusted_close\":1005,\"volume\":11000},{\"date\":\"2025-01-08\",\"open\":1004,\"high\":1006,\"low\":1000,\"close\":1002,\"adjusted_close\":1002,\"volume\":9000}]"
+      },
+      "retrievedAt": "2025-01-09T00:01:01Z"
+    },
+    {
+      "request": {
+        "origin": "https://eodhd.com",
+        "pathname": "/api/eod/1348.TSE",
+        "query": { "from": "2025-01-06", "to": "2025-01-08", "period": "d", "order": "a", "fmt": "json" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json", "x-ratelimit-remaining": "998" },
+        "body": "[{\"date\":\"2025-01-06\",\"close\":2100,\"adjusted_close\":2100,\"volume\":8000},{\"date\":\"2025-01-07\",\"close\":2110,\"adjusted_close\":2110,\"volume\":8500},{\"date\":\"2025-01-08\",\"close\":2105,\"adjusted_close\":2105,\"volume\":7800}]"
+      },
+      "retrievedAt": "2025-01-09T00:01:02Z"
+    },
+    {
+      "request": {
+        "origin": "https://eodhd.com",
+        "pathname": "/api/eod/1473.TSE",
+        "query": { "from": "2025-01-06", "to": "2025-01-08", "period": "d", "order": "a", "fmt": "json" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json", "x-ratelimit-remaining": "997" },
+        "body": "[{\"date\":\"2025-01-06\",\"close\":2850,\"adjusted_close\":2850,\"volume\":3000},{\"date\":\"2025-01-07\",\"close\":2860,\"adjusted_close\":2860,\"volume\":3200},{\"date\":\"2025-01-08\",\"close\":2855,\"adjusted_close\":2855,\"volume\":3100}]"
+      },
+      "retrievedAt": "2025-01-09T00:01:03Z"
+    },
+    {
+      "request": {
+        "origin": "https://eodhd.com",
+        "pathname": "/api/eod/1597.TSE",
+        "query": { "from": "2025-01-06", "to": "2025-01-08", "period": "d", "order": "a", "fmt": "json" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json", "x-ratelimit-remaining": "996" },
+        "body": "[{\"date\":\"2025-01-06\",\"close\":1850,\"adjusted_close\":1850,\"volume\":6000},{\"date\":\"2025-01-07\",\"close\":1865,\"adjusted_close\":1865,\"volume\":6500},{\"date\":\"2025-01-08\",\"close\":1860,\"adjusted_close\":1860,\"volume\":6200}]"
+      },
+      "retrievedAt": "2025-01-09T00:01:04Z"
+    },
+    {
+      "request": {
+        "origin": "https://eodhd.com",
+        "pathname": "/api/eod/2510.TSE",
+        "query": { "from": "2025-01-06", "to": "2025-01-08", "period": "d", "order": "a", "fmt": "json" }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json", "x-ratelimit-remaining": "995" },
+        "body": "[{\"date\":\"2025-01-06\",\"close\":920,\"adjusted_close\":920,\"volume\":4000},{\"date\":\"2025-01-07\",\"close\":922,\"adjusted_close\":922,\"volume\":4200},{\"date\":\"2025-01-08\",\"close\":921,\"adjusted_close\":921,\"volume\":3900}]"
+      },
+      "retrievedAt": "2025-01-09T00:01:05Z"
+    }
+  ]
+}
