@@ -10,7 +10,7 @@ Snapshot date: 2026-08-29
 - Latest merged PR: #10 (`feat: add credentialed provider sample capture and replay`)
 - Latest merged commit: `eba3cdcf24397adbad349eea8648e5239debd7b1`
 - Active implementation branch: `ykoba/fix-credentialed-provider-coverage`
-- Delivery state: M1 live-evidence fix under local verification; PR not yet opened
+- Active PR: #11 (`fix: retain partial credentialed provider evidence`)
 - Active delivery milestone: M1 — Credentialed data slice
 - Delivery roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
 - Formal Forward-Test clock: not started
