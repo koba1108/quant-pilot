@@ -10,6 +10,7 @@ Snapshot date: 2026-08-29
 - Latest merged PR: #8 (`feat: integrate point-in-time normalized backtests`)
 - Latest merged commit: `12ad9fe1519cb2bf38aac72297bd76ec3f92a817`
 - Active branch: `ykoba/evaluate-production-market-data`
+- Active PR: #9 (`feat: evaluate production market data readiness`)
 - Active work: O-001 official-evidence evaluation, fail-closed source-bundle contract, and J-Quants v2 read-only adapter spike
 - Merge status: current branch is not merged; do not merge without user approval
 
