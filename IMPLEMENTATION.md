@@ -2,11 +2,11 @@
 
 Pythonで作っていた初期骨格はTypeScriptへ全面移行した。Python依存はない。
 
-Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`、現在の詳細状態は `docs/handoff/CURRENT_STATUS.md` を参照すること。
+Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`、現在の詳細状態は `docs/handoff/CURRENT_STATUS.md`、Forward Testまでのdelivery順序は `docs/handoff/EXECUTION_ROADMAP.md` を参照すること。
 
 ## Implemented baseline and current branch
 
-PR #8までの基盤は`main`に含まれる。現在の`ykoba/evaluate-production-market-data`ブランチでは、O-001を確定せずにproduction provider候補をfail-closed評価する契約、公式URL/evaluation snapshot、J-Quants v2 read-only research adapterを追加している。
+PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction provider候補をfail-closed評価する契約、公式URL/evaluation snapshot、J-Quants v2 read-only research adapterまでマージ済みである。現在のdelivery milestoneはM1 Credentialed data sliceである。
 
 ### Strategy
 
@@ -100,11 +100,11 @@ Stooq is a research plumbing provider only. Do not interpret Stooq-only OHLCV re
 
 ## Verification state
 
-On `main` through merged PR #8:
+On `main` through merged PR #9:
 
 - Runtime: Node.js `v26.7.0`, Bun `1.3.14`
 - `bun install`: success, no dependency changes
-- `bun test`: 131 pass / 0 fail
+- `bun test`: 152 pass / 0 fail
 - `bunx tsc --noEmit`: success
 - raw strict-Universe Trend and Rotation fixture CLIs: success
 - normalized Trend and Rotation fixture CLIs: success and byte-for-byte reproducible
@@ -125,7 +125,7 @@ The committed fixtures are synthetic unadjusted Price data. They validate code b
 
 The normalized Trend/Rotation fixtures use `synthetic_same_day_close_v1` and remain synthetic research evidence, not investment evidence. PR #8 is merged as commit `12ad9fe1519cb2bf38aac72297bd76ec3f92a817`.
 
-On the current provider-evaluation branch:
+PR #9 provider-evaluation verification now present on `main`:
 
 - `bun test`: 152 pass / 0 fail
 - `bunx tsc --noEmit`: success
@@ -140,8 +140,7 @@ On the current provider-evaluation branch:
 
 ## Next blocks
 
-1. Review the O-001 evidence contract and proposed production gate without selecting a provider or merging without approval
-2. After explicit credential/cost authorization, capture the same small J-Quants＋EODHD sample as permitted immutable artifacts and run field-specific reconciliation
-3. Bring instrument coverage, PIT/revision behavior, retention rights, exact costs, and sample results to the user for O-001 approval
-4. Only after approval, implement the selected Point-in-Time production adapters; keep `etf_realistic` rejected until the selected-bundle contract is bound
-5. Continue remaining robustness axes, Strategy C decision-package schema, and forward-test operations without resolving unrelated open decisions by assumption
+1. Follow `docs/handoff/EXECUTION_ROADMAP.md`; do not begin work outside its active milestone
+2. M1: implement the credentialed-sample capture/audit command without secrets and obtain G1/G2 authorization before a real fetch or retained vendor response
+3. M2: deliver the manual Pre-Forward vertical slice with an idempotent virtual ledger and replayable Decision Package
+4. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates

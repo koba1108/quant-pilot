@@ -5,7 +5,7 @@
 Before changing code or documentation:
 
 1. Read `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`.
-2. Read `docs/handoff/DECISIONS.md`, `docs/handoff/CURRENT_STATUS.md`, and `docs/handoff/OPEN_DECISIONS.md`.
+2. Read `docs/handoff/DECISIONS.md`, `docs/handoff/CURRENT_STATUS.md`, `docs/handoff/EXECUTION_ROADMAP.md`, and `docs/handoff/OPEN_DECISIONS.md`.
 3. Read `investment_policy.md`, `strategy_spec.md`, `backtest_spec.md`, and `IMPLEMENTATION.md` as relevant to the task.
 4. Inspect the current Git branch, worktree, and related pull request before editing.
 
@@ -32,3 +32,4 @@ The original ChatGPT question sequence is not a specification. Do not restore ab
 - For an approved implementation task, proceed autonomously within scope and report changes, tests, and limitations.
 - Run `bun test` and the relevant executable path before declaring implementation complete. If execution is unavailable, state that clearly.
 - Do not merge a pull request, expose secrets, or commit downloaded market-data caches unless explicitly requested.
+- Before starting an implementation branch, name the active roadmap milestone, the exit criterion being advanced, and the new executable path or artifact. Do not add speculative foundation work without a consumer in the current milestone.

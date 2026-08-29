@@ -7,14 +7,15 @@ Snapshot date: 2026-08-29
 - Repository: `koba1108/quant-pilot`
 - Local checkout: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Latest merged PR: #8 (`feat: integrate point-in-time normalized backtests`)
-- Latest merged commit: `12ad9fe1519cb2bf38aac72297bd76ec3f92a817`
-- Active branch: `ykoba/evaluate-production-market-data`
-- Active PR: #9 (`feat: evaluate production market data readiness`)
-- Active work: O-001 official-evidence evaluation, fail-closed source-bundle contract, and J-Quants v2 read-only adapter spike
-- Merge status: current branch is not merged; do not merge without user approval
+- Latest merged PR: #9 (`feat: evaluate production market data readiness`)
+- Latest merged commit: `9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`
+- Active documentation branch: `ykoba/document-forward-test-roadmap`
+- Active PR: none
+- Active delivery milestone: M1 — Credentialed data slice
+- Delivery roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
+- Formal Forward-Test clock: not started
 
-## Implemented on main through PR #8
+## Implemented on main through PR #9
 
 ### Deterministic Strategy A/B engine
 
@@ -50,7 +51,7 @@ Snapshot date: 2026-08-29
 
 All end-to-end fixtures on main are synthetic research evidence. They do not prove investable returns, provider quality, or executable market conditions. `etf_realistic` remains rejected.
 
-## Current branch implementation
+## Provider evaluation implemented by PR #9
 
 ### O-001 provider-evaluation contract
 
@@ -94,7 +95,7 @@ The machine snapshot contains no downloaded market data, credentials, private ve
 - It compares individual and institutional candidates, defines evidence status, explains the production gate and bundle model, documents the adapter boundary, and specifies the credentialed sample plan.
 - The Data Analytics portable HTML packager was attempted from a canonical artifact, but its shared reader remained in fallback state during static-chart extraction. No HTML file was published; the Markdown report is the current durable artifact.
 
-### Current branch verification
+### PR #9 verification now on main
 
 - `bun test`: 152 pass / 0 fail
 - `bunx tsc --noEmit`: pass
@@ -165,10 +166,10 @@ No provider is selected. No cost, contract, retention policy, FX fixing, calenda
 
 ## Next implementation sequence
 
-1. Review and merge the current branch only after user approval; do not treat the proposed provider policy as adopted.
-2. Ask for explicit authorization before purchasing a plan or using credentials.
-3. Retrieve the same small 5–10 ETF sample from J-Quants and EODHD, retaining only license-permitted immutable artifacts with request/retrieval fingerprints.
-4. Reconcile price, adjustment, event, lifecycle, calendar, trading-value, and quote-quality fields without selecting a source winner.
-5. Obtain written confirmation for coverage, PIT revisions, retention/audit rights, cancellation behavior, exact entitlements, and cost.
-6. Present the evidence to the user for O-001 approval; only then add a selected-bundle schema and production Point-in-Time adapters.
-7. Continue robustness, Strategy C, and forward-test work without resolving unrelated open decisions by assumption.
+The controlling delivery order is `docs/handoff/EXECUTION_ROADMAP.md`.
+
+1. M1 NOW: build the credentialed-sample capture/audit path without secrets, then request explicit credential/cost and retention authorization for a real 5–10 ETF sample.
+2. M2 NEXT: connect retained real observations to a manual, replayable, idempotent Pre-Forward virtual-portfolio cycle.
+3. M3 LATER: add approved scheduling, recovery, notifications, and minimal reporting.
+4. M4 GATE: freeze provider, Universe, Strategy A/B, Strategy C, persistence, and success-threshold decisions before formal Forward Test.
+5. Do not implement real orders, brokerage integration, or O-016 operations.

@@ -22,11 +22,12 @@ Codex Projectへ移行する場合は、最初に次を読んでください。
 2. [`docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`](./docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md)
 3. [`docs/handoff/DECISIONS.md`](./docs/handoff/DECISIONS.md)
 4. [`docs/handoff/CURRENT_STATUS.md`](./docs/handoff/CURRENT_STATUS.md)
-5. [`docs/handoff/OPEN_DECISIONS.md`](./docs/handoff/OPEN_DECISIONS.md)
+5. [`docs/handoff/EXECUTION_ROADMAP.md`](./docs/handoff/EXECUTION_ROADMAP.md)
+6. [`docs/handoff/OPEN_DECISIONS.md`](./docs/handoff/OPEN_DECISIONS.md)
 
 引き継ぎ資料には、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状態、未確定事項、実行手順を整理しています。
 
-PR #8（provider-neutralな正規化リターン、行単位availability、JPY換算のrunner統合）まで `main` へマージ済みです。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合と人間によるprovider承認まで実行できません。
+PR #9（production market-data readiness評価とJ-Quants v2 research adapter）まで `main` へマージ済みです。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md`、Forward Testまでの一本道と脱線防止ルールは `docs/handoff/EXECUTION_ROADMAP.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合と人間によるprovider承認まで実行できません。
 
 ## Backtest quick start
 

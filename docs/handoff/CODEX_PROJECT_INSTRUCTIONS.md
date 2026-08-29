@@ -16,8 +16,8 @@ Codexは、過去の候補・提案・途中案ではなく、リポジトリ内
 - Runtime: TypeScript + Bun
 - Node.js requirement: repositoryで指定された最新バージョン
 - Python dependency: 禁止。ユーザーの明示的な方針変更がある場合のみ再検討
-- Current state: PR #8は `main` へマージ済み（merge commit `12ad9fe1519cb2bf38aac72297bd76ec3f92a817`）
-- Important caveat: PR #8までのend-to-end検証は合成・research-onlyデータ中心であり、実運用可能な `etf_realistic` 証拠ではない
+- Current state: PR #9は `main` へマージ済み（merge commit `9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`）
+- Important caveat: PR #9までのend-to-end backtest検証は合成・research-onlyデータ中心であり、実運用可能な `etf_realistic` 証拠ではない
 
 ## 3. 最初に読むファイル
 
@@ -27,13 +27,14 @@ Codexは、過去の候補・提案・途中案ではなく、リポジトリ内
 2. `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 3. `docs/handoff/DECISIONS.md`
 4. `docs/handoff/CURRENT_STATUS.md`
-5. `docs/handoff/OPEN_DECISIONS.md`
-6. `investment_policy.md`
-7. `strategy_spec.md`
-8. `backtest_spec.md`
-9. `IMPLEMENTATION.md`
-10. `README.md`
-11. `universe_master.csv`
+5. `docs/handoff/EXECUTION_ROADMAP.md`
+6. `docs/handoff/OPEN_DECISIONS.md`
+7. `investment_policy.md`
+8. `strategy_spec.md`
+9. `backtest_spec.md`
+10. `IMPLEMENTATION.md`
+11. `README.md`
+12. `universe_master.csv`
 
 優先順位は次の通りです。
 
@@ -43,6 +44,8 @@ Codexは、過去の候補・提案・途中案ではなく、リポジトリ内
 4. Current Statusと既存実装
 
 文書間に矛盾がある場合は、最新の明示的指示と `DECISIONS.md` を優先し、矛盾を報告して文書も修正してください。
+
+`EXECUTION_ROADMAP.md` は承認済み投資方針ではなく、現在のdelivery順序と集中ルールです。実装を始める前に、active milestone、進めるexit criterion、新しく実行可能になるcommand/artifact、対象外をplanへ書いてください。現在のmilestoneにconsumerがない土台追加は行いません。
 
 ## 4. Projectの目的
 
@@ -109,13 +112,15 @@ AIはハード制約を上書きできません。数値不足を推測で埋め
 
 ## 7. 現在の実装状態
 
-PR #8までに以下が `main` に入りました。
+PR #9までに以下が `main` に入りました。
 
 - `MarketDataProvider` abstraction
 - CSV provider
 - Stooq research provider
+- J-Quants v2 read-only research adapter
 - daily barsからmonthly frameを生成する処理
 - Strategy A/B CLI runner
+- fail-closed production-provider evaluation CLI
 - example config
 - frame-builder test
 - Codex handoff documents
@@ -178,11 +183,13 @@ bun run backtest --config=<rotation用fixture設定>
 - `IMPLEMENTATION.md`
 - 必要なら `README.md`
 
-PR #8はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
+PR #9はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
 
 ## 9. 検証後の実装順序
 
 Phase 0が通ったら、次の順で進めます。
+
+実際のdelivery順序、NOW/NEXT/LATER、各milestoneのexit criteria、判断gateは `EXECUTION_ROADMAP.md` を正とします。以下のPhase一覧は能力領域の整理であり、Roadmapより先に別Phaseへ着手する許可ではありません。
 
 ### Phase 1: データを金融的に正しくする
 
