@@ -10,7 +10,7 @@ Snapshot date: 2026-08-29
 - Latest merged PR: #9 (`feat: evaluate production market data readiness`)
 - Latest merged commit: `9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`
 - Active implementation branch: `ykoba/pre-forward-credentialed-data-slice`
-- Active PR: none
+- Active PR: #10 (`feat: add credentialed provider sample capture and replay`)
 - Active delivery milestone: M1 — Credentialed data slice
 - Delivery roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
 - Formal Forward-Test clock: not started

@@ -7,6 +7,7 @@
 - Default branch: `main`
 - Current default branch state: PR #9 (`feat: evaluate production market data readiness`) merged into `main` at `9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`
 - Active implementation branch: `ykoba/pre-forward-credentialed-data-slice`
+- Active PR: #10 (`feat: add credentialed provider sample capture and replay`)
 - Current delivery milestone: M1 — Credentialed data slice
 - Current roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
 - Formal Forward-Test clock: not started

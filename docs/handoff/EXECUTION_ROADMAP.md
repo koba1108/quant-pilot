@@ -214,4 +214,4 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 | Date | Evidence | Milestone result | Next checkpoint |
 |---|---|---|---|
 | 2026-08-29 | PR #9 merged; provider evaluation remains fail-closed; 152 tests passed in PR verification | M0 complete, M1 active | Build the credentialed-sample capture path without secrets, then request G1/G2 for the real sample |
-| 2026-08-29 | `credentialed-sample-v1` fixture capture and offline replay produce the same immutable fail-closed audit for five mappings across J-Quants/EODHD contracts | M1 software spine complete; real evidence still absent | Merge the implementation PR, then stop at G1/G2 until credential, cost, entitlement, and retention are explicitly approved |
+| 2026-08-29 | PR #10 opened: `credentialed-sample-v1` fixture capture and offline replay produce the same immutable fail-closed audit for five mappings across J-Quants/EODHD contracts | M1 software spine complete; real evidence still absent | Review and merge PR #10, then stop at G1/G2 until credential, cost, entitlement, and retention are explicitly approved |
