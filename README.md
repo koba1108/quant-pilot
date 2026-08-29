@@ -26,7 +26,7 @@ Codex Projectへ移行する場合は、最初に次を読んでください。
 
 引き継ぎ資料には、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状態、未確定事項、実行手順を整理しています。
 
-PR #7（Point-in-Time Universe、データ品質・照合、Strategy A/B robustness foundation）は `main` へマージ済みです。現在の作業ブランチでは、provider-neutral な正規化リターン、行単位 availability、JPY換算をbacktest runnerへ統合しています。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合完了まで実行できません。
+PR #8（provider-neutralな正規化リターン、行単位availability、JPY換算のrunner統合）まで `main` へマージ済みです。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合と人間によるprovider承認まで実行できません。
 
 ## Backtest quick start
 
@@ -50,14 +50,23 @@ bun run backtest --config=backtest.config.json
 
 CLI出力は `backtest-summary-v3`。通常のraw CSV/Stooq経路は `returnNormalization.status=not_normalized`、`evidenceDisposition=research_only` と警告を出す。`price_return` / `total_return` は明示的なopt-in経路で、`ReturnEventCoverage.availableAt`、signal/forward別PIT snapshot、signal prefixの固定、exact-date JPY換算、full fingerprintsを適用する。全月次実行の `end` は暦月末を必須とし、normalized経路では各資産のsnapshot cutoffにその月の実際の最終取引日を使う。出力の `start` / `end` は実現リターン期間、`signalStart` / `signalEnd` は判断期間を表す。`cumulativePortfolioReturn` はポートフォリオの累積損益であり、入力系列がTotal Returnであることを意味しない。`etf_realistic` は引き続き実行を拒否する。
 
-Stooqを使う場合はAPIキーを設定してproviderを切り替える。
+Stooqを使う場合はAPIキーを設定し、設定ファイル側で `provider=stooq` を明示する。
 
 ```bash
 export STOOQ_API_KEY=...
-bun run backtest --config=backtest.config.json --provider=stooq
+bun run backtest --config=<provider=stooqの設定>
 ```
 
-Stooq利用時は設定の `returnBasis` を `unadjusted_price` にする。現在のadapterは未調整Closeだけを返す。Stooqは研究用OHLCV providerとして扱い、分配金込みTotal Returnや公式な実取引検証は別のデータ源で再検証する。
+Stooq利用時は設定の `returnBasis` を `unadjusted_price`、`researchLayer` を `proxy` にする。設定に明示したproviderと異なるCLI overrideは、入力sourceと研究層の誤表示を防ぐため拒否する。現在のadapterは未調整Closeだけを返す。Stooqは研究用OHLCV providerとして扱い、分配金込みTotal Returnや公式な実取引検証は別のデータ源で再検証する。
+
+J-Quants v2の日次価格adapter spikeも、読み取り専用の研究経路として用意している。
+
+```bash
+export JQUANTS_API_KEY=...
+bun run backtest --config=<provider=jquants_v2の設定>
+```
+
+この経路は `returnBasis=unadjusted_price` と `researchLayer=proxy` を必須とする。J-Quantsのsecurity codeは4桁数字または5桁英数を使い、4桁はAPI仕様の5桁codeへ正規化する。adjusted fieldをPrice Return／Total Returnとは認定せず、行単位availability、改訂履歴、分配金、FX、歴史Universeを暗黙生成しない。実API credentialを使った検証済みfixtureはコミットしていない。
 
 ### 再現可能なfixture検証
 
@@ -115,6 +124,16 @@ bun run data-quality --config=tests/fixtures/configs/data-quality.json
 ```
 
 fixtureは意図どおり `research_only` になる。詳細は [`docs/data-quality.md`](./docs/data-quality.md) を参照する。
+
+## Production provider evaluation
+
+O-001候補を、機能、Point-in-Time availability／revision、複数source照合、ライセンス、コスト承認、credentialed artifactの有無でfail-closed評価する。
+
+```bash
+bun run provider-evaluation --config=research/provider-evaluation/o001-candidates.json
+```
+
+2026-08-29 snapshotでは、J-Quants＋EODHDとJ-Quants＋Twelve Dataの両bundleが`blocked`、`selection=not_selected`、`canEnableEtfRealistic=false`となる。これはAPIが全く利用できないという意味ではなく、production証拠に必要なTotal Return、PIT改訂、ETF event、東京ETF quote、保存・監査権、credentialed sampleが揃っていないという意味である。候補調査と次のsample計画は [`docs/provider-evaluation.md`](./docs/provider-evaluation.md) を参照する。
 
 ## Strategy A/B robustness grid
 

@@ -6,7 +6,7 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 
 ## Implemented baseline and current branch
 
-PR #7までの基盤は`main`に含まれる。`src/data/point-in-time-return-source.ts`とnormalized runner統合は現在の`ykoba/normalized-pit-backtest-integration`ブランチ上にあり、PRレビュー・マージ前である。
+PR #8までの基盤は`main`に含まれる。現在の`ykoba/evaluate-production-market-data`ブランチでは、O-001を確定せずにproduction provider候補をfail-closed評価する契約、公式URL/evaluation snapshot、J-Quants v2 read-only research adapterを追加している。
 
 ### Strategy
 
@@ -28,12 +28,16 @@ PR #7までの基盤は`main`に含まれる。`src/data/point-in-time-return-so
 - `src/data/provider.ts`: `MarketDataProvider` abstraction and daily-bar validation
 - `src/data/csv.ts`: CSV fallback provider
 - `src/data/stooq.ts`: Stooq research provider
+- `src/data/jquants-v2.ts`: J-Quants API v2 read-only daily-bar adapter spike; unadjusted proxy research only
+- `src/data/provider-evaluation.ts`: O-001 capability, evidence, source-bundle, license, cost-approval, and integrity evaluator
+- `src/data/provider-evaluation-runner.ts`: deterministic provider-evaluation CLI
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
 - `src/data/fx-normalization.ts`: Point-in-Time FX observations, revisions, exact-date amount conversion, and unhedged JPY return normalization
 - `src/data/point-in-time-return-source.ts`: provider-neutral Point-in-Time normalized return source with signal-prefix pinning, signal/forward snapshots, revision selection, and full fingerprints
 - `docs/return-normalization.md`: return-normalization semantics and explicit policy boundaries
 - `docs/distribution-accounting.md`: D-018 distribution-accounting semantics
 - `docs/fx-normalization.md`: JPY FX calculation, audit contract, official evidence, and limitations
+- `docs/provider-evaluation.md`: official-source provider comparison, production gate, adapter boundary, and credentialed-sample plan
 
 ### Backtest
 
@@ -47,7 +51,7 @@ PR #7までの基盤は`main`に含まれる。`src/data/point-in-time-return-so
 
 - `src/ai/`: Strategy C area. PM / Macro Analyst / Risk-Critic will consume validated, timestamped inputs. Strategy C is not implemented yet.
 
-## Included on `main` by PR #7
+## Included on `main` through PR #8
 
 ### Point-in-Time Universe
 
@@ -96,11 +100,11 @@ Stooq is a research plumbing provider only. Do not interpret Stooq-only OHLCV re
 
 ## Verification state
 
-On `main` through merged PR #7:
+On `main` through merged PR #8:
 
 - Runtime: Node.js `v26.7.0`, Bun `1.3.14`
 - `bun install`: success, no dependency changes
-- `bun test`: 131 pass / 0 fail (current branch implementation verification)
+- `bun test`: 131 pass / 0 fail
 - `bunx tsc --noEmit`: success
 - raw strict-Universe Trend and Rotation fixture CLIs: success
 - normalized Trend and Rotation fixture CLIs: success and byte-for-byte reproducible
@@ -119,12 +123,25 @@ PR #7 verification (completed before merge; now present on `main`):
 
 The committed fixtures are synthetic unadjusted Price data. They validate code behavior, not investable historical performance, production data quality, or a final provider choice.
 
-The normalized Trend/Rotation fixtures use `synthetic_same_day_close_v1` and remain synthetic research evidence, not investment evidence. The final all-CLI audit passed on this branch. The branch is not merged.
+The normalized Trend/Rotation fixtures use `synthetic_same_day_close_v1` and remain synthetic research evidence, not investment evidence. PR #8 is merged as commit `12ad9fe1519cb2bf38aac72297bd76ec3f92a817`.
+
+On the current provider-evaluation branch:
+
+- `bun test`: 152 pass / 0 fail
+- `bunx tsc --noEmit`: success
+- all existing raw/normalized backtest, data-quality, and robustness executable paths still pass
+- provider-evaluation output is deterministic; normal audit execution succeeds while `--require-production` returns the expected nonzero status
+- `provider-evaluation-v1` rejects unknown fields, ambiguous selection, invalid evidence dates, duplicate capabilities, missing evidence references, fake/unbound or capability-incompatible sample artifacts, same-group pseudo-independent sources, unbound official/terms snapshots, weak approved policies, and every `status=verified` claim until a future payload-specific schema binds real reconciliation
+- reports bind evidence/candidate/bundle fingerprints and are re-evaluated from the input config, so re-fingerprinted output tampering is rejected
+- schema v1 remains `selection=not_selected`, `failClosed=true`, `canEnableEtfRealistic=false`; URL/version-only terms evidence keeps license overall `unknown`, and no capability can become `verified` until a real reconciliation report and typed payload validation are bound
+- the committed O-001 snapshot evaluates J-Quants＋EODHD and J-Quants＋Twelve Data as blocked pending credentialed samples, PIT/revision proof, event/quote coverage, license rights, cost approval, and human selection
+- J-Quants adapter tests cover official-host credential confinement, pagination, header authentication, semantic dates, four/five-character code normalization, no-trade null-row exclusion, strict rows, range matching, missing optional values, repeated pages, duplicate dates, malformed JSON, and HTTP failures
+- real J-Quants credentials and downloaded provider data are not used or committed
 
 ## Next blocks
 
-1. Review and merge the normalized Point-in-Time integration only after PR approval; keep O-001/O-003/O-004 unresolved and `etf_realistic` rejected
-2. Connect production-grade versioned Universe and multiple-source provider adapters only after O-001 research and approval
-3. Implement the remaining rebalance-date, execution-timing, replacement/hysteresis, and crisis/benchmark robustness axes without silently selecting O-005/O-006 values
-4. Define the Strategy C decision-package schema while leaving O-012/O-013 unresolved
-5. Add forward-test persistence, scheduling, notifications, and dashboard within the approved research/forward-test scope
+1. Review the O-001 evidence contract and proposed production gate without selecting a provider or merging without approval
+2. After explicit credential/cost authorization, capture the same small J-Quants＋EODHD sample as permitted immutable artifacts and run field-specific reconciliation
+3. Bring instrument coverage, PIT/revision behavior, retention rights, exact costs, and sample results to the user for O-001 approval
+4. Only after approval, implement the selected Point-in-Time production adapters; keep `etf_realistic` rejected until the selected-bundle contract is bound
+5. Continue remaining robustness axes, Strategy C decision-package schema, and forward-test operations without resolving unrelated open decisions by assumption
