@@ -21,6 +21,8 @@ Implementation note: `src/data/fx-normalization.ts` defines a provider-neutral P
 
 Implementation note: `src/data/provenance.ts`, `src/data/data-quality.ts`, and `src/data/reconciliation.ts` define versioned evidence and comparison contracts. They deliberately do not approve a provider, preferred source, license, or automatic conflict winner. The committed quality fixture is synthetic and single-source.
 
+Implementation note (2026-08-29): `src/data/provider-evaluation.ts` and `research/provider-evaluation/o001-candidates.json` evaluate explicit source bundles without scoring or selecting a winner. Official-material research retained J-Quants＋EODHD as the next private-research sample configuration and J-Quants＋Twelve Data as the alternative, but both are currently `blocked`, `selection=not_selected`, and unable to enable `etf_realistic`. `src/data/jquants-v2.ts` is only a mocked-contract, unadjusted proxy adapter; no credentialed sample, production license, or provider choice is approved. See `docs/provider-evaluation.md`.
+
 ## O-003 — Exact ETF eligibility thresholds
 
 Need evidence-backed thresholds for core and theme ETFs, including:

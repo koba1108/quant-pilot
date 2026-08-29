@@ -1,170 +1,173 @@
 # Current Status
 
-Snapshot date: 2026-08-28
+Snapshot date: 2026-08-29
 
 ## Repository state
 
 - Repository: `koba1108/quant-pilot`
 - Local checkout: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Latest merged PR: #7 (`feat: add point-in-time research validation`)
-- Latest `main` commit: `2a522904695070a3b75770b2d1b84a459a6ebfe8`
-- Active branch: `ykoba/normalized-pit-backtest-integration`
-- Active PR: #8 (`feat: integrate point-in-time normalized backtests`)
-- This branch contains the post-PR #7 provider-neutral normalized Point-in-Time backtest integration. PR #8 is open and not merged.
+- Latest merged PR: #8 (`feat: integrate point-in-time normalized backtests`)
+- Latest merged commit: `12ad9fe1519cb2bf38aac72297bd76ec3f92a817`
+- Active branch: `ykoba/evaluate-production-market-data`
+- Active work: O-001 official-evidence evaluation, fail-closed source-bundle contract, and J-Quants v2 read-only adapter spike
+- Merge status: current branch is not merged; do not merge without user approval
 
-## Implemented on main through PR #7
+## Implemented on main through PR #8
 
-### Deterministic research engine
+### Deterministic Strategy A/B engine
 
-- Strategy A Trend and Strategy B Cross-Asset Rotation ranking
+- Trend and Cross-Asset Rotation ranking
 - inverse-volatility allocation with a hard maximum of three holdings
 - turnover-aware transaction costs, including stop liquidation
 - -30% high-water-mark hard stop and ending-cash behavior
-- daily-bar to monthly-frame construction with explicit missing-history diagnostics
-- CSV and Stooq research providers
-- config-driven Strategy A/B CLI and commit-safe synthetic fixtures
+- strict monthly signal/forward-frame construction with explicit missing-history diagnostics
+- config-driven CSV and Stooq research paths with commit-safe synthetic fixtures
 
-### Financial-data foundations
+### Point-in-Time financial-data foundations
 
 - versioned Price Return / Total Return normalization
 - explicit distribution and Corporate Action coverage/provenance checks
 - D-018 ex-date research return and separate receivable/pay-date virtual-account ledger
-- Point-in-Time exact-date non-JPY to JPY conversion and corrected-observation chains
+- exact-date non-JPY to JPY normalization with corrected-observation chains
+- provider-neutral bar/event/FX observation source with row-level availability, revision resolution, signal-prefix pinning, and separate signal/forward snapshots
+- strict `universe-master-v1` loader with corrections, lifecycle, status, currency, provenance, and D-003 product gates
+- data-quality and field-specific source-reconciliation contracts
+- Strategy A/B robustness grid without automatic parameter selection
 
 ### Main verification baseline
 
 - Node.js: `v26.7.0`
 - Bun: `1.3.14`
 - `bun install`: pass, no dependency changes
-- `bun test`: 105 pass / 0 fail (PR #7 pre-merge baseline)
+- `bun test`: 131 pass / 0 fail
 - `bunx tsc --noEmit`: pass
-- Trend CLI: pass
-- Rotation CLI: pass
-- exact repeated-run fixture reproducibility: pass
+- raw strict-Universe Trend and Rotation CLIs: pass
+- normalized Trend and Rotation CLIs: pass and byte-for-byte reproducible
+- data-quality CLI: pass with expected `research_only`
+- robustness CLI: pass; 16 completed cells and 16 explicit unsupported cells
 
-## Included in main from PR #7
+All end-to-end fixtures on main are synthetic research evidence. They do not prove investable returns, provider quality, or executable market conditions. `etf_realistic` remains rejected.
 
-### Point-in-Time Universe master
+## Current branch implementation
 
-- `src/data/universe-master.ts` adds a strict `universe-master-v1` CSV contract.
-- Instrument observations have stable IDs, explicit correction chains, listing and inclusive `last_eligible_date`, availability timestamps, source provenance, and explicit D-003 product-class flags.
-- The resolver selects only metadata available by each decision cutoff and records applied observation IDs.
-- The backtest runner can opt into the master with `universeMasterPath`; lifecycle overrides in the ordinary asset config are then rejected, and the current runner fails closed on non-JPY or prohibited/non-ETF products.
-- Universe membership is resolved for every monthly signal frame, not only once at the backtest end date.
-- Signal and forward-return endpoints both enforce lifecycle, status, product, and currency eligibility. A newly ineligible endpoint stops frame construction rather than consuming that return.
-- Execution revalidates the config and fingerprints of the loaded master, status policy, and bar inputs so callers cannot mutate validated inputs or silently change the requested window.
-- The repository-root `universe_master.csv` remains a legacy candidate catalog and is intentionally rejected by the strict loader because it lacks safe Point-in-Time fields.
-- The config-only compatibility path requires `researchLayer=synthetic_fixture` or `researchLayer=proxy`; it cannot masquerade as ETF-realistic D-003/D-006 evidence.
+### O-001 provider-evaluation contract
 
-### Data provenance, quality, and source comparison
+- `src/data/provider-evaluation.ts` defines strict candidate, evidence, capability, source-bundle, license-right, cost-approval, and proposed-policy contracts.
+- Input rejects unknown fields, invalid/future evidence dates, duplicate IDs/capabilities, references to unknown evidence IDs, malformed hashes, ambiguous selection, fake/unbound or capability-incompatible sample artifacts, same-group pseudo-independent sources, unbound official/terms snapshots, weak approved policies, and every `status=verified` claim until a future schema supplies typed payload validation and bound reconciliation.
+- Output uses deterministic `pass` / `research_only` / `unknown` / `blocked` dispositions plus canonical evidence, config, candidate, bundle, and report fingerprints. Integrity validation re-evaluates the result from its config, so merely recomputing a forged output fingerprint is insufficient.
+- A source bundle is the acceptance unit; capabilities have explicit provider responsibilities and independent-source requirements.
+- The evaluator never computes a provider score, selects a winner, fills missing capabilities, or chooses a conflicting source.
+- Schema v1 permits only `selection=not_selected`, counts no source as payload-verified, always emits a research-only reconciliation boundary, and remains `failClosed=true` with `canEnableEtfRealistic=false` until a real reconciliation report and separate human-approved O-001 selection are implemented.
+- `src/data/provider-evaluation-runner.ts` and `bun run provider-evaluation` provide a deterministic JSON CLI. `--require-production` returns nonzero while the report is fail-closed or cannot enable `etf_realistic`, even if a future bundle satisfies the evidence checks.
 
-- `src/data/provenance.ts` adds canonical hashes and versioned artifact lineage.
-- `src/data/data-quality.ts` emits deterministic `pass`, `research_only`, or `blocked` reports rather than filling missing data.
-- `src/data/reconciliation.ts` binds comparable observations to parent artifacts, field-specific semantics, availability, and policy fingerprints; consumers recompute group results/issues from the embedded evidence and never silently select a source winner.
-- `src/data/data-quality-runner.ts` provides the `bun run data-quality` executable path.
-- The committed single-source unadjusted fixture correctly reports `research_only`; it is not presented as production evidence.
+### Official evidence snapshot
 
-### Strategy A/B robustness grid
+`research/provider-evaluation/o001-candidates.json` records official-material claims checked on 2026-08-29 for:
 
-- `src/backtest/robustness-grid.ts` runs deterministic combinations of Strategy A/B weights/filter choices, transaction costs, maximum holdings, and volatility windows.
-- Results include return/risk, drawdown, turnover, cost, cash-ratio, worst-month, and worst-year metrics.
-- Rebalance timing and replacement/hysteresis values not implemented by the simulator are explicit `unsupported` cells, never substituted silently.
-- Output contains stability ranges and no automatic best-cell or approved-parameter selection.
-- Grid output itself carries `evidenceDisposition=research_only`, its return basis, and `returnNormalization.status=not_normalized`.
+- J-Quants API individual access
+- EOD Historical Data individual access
+- Twelve Data individual access
 
-## PR #7 verification now present on main
+It evaluates two research bundles:
 
-Commands:
+- J-Quants primary plus EODHD complement
+- J-Quants primary plus Twelve Data complement
 
-```bash
-bun test
-bunx tsc --noEmit
-bun run backtest --config=tests/fixtures/configs/trend-universe.json
-bun run backtest --config=tests/fixtures/configs/rotation-universe.json
-bun run data-quality --config=tests/fixtures/configs/data-quality.json
-bun run robustness --config=tests/fixtures/configs/robustness-grid.json
-```
+Both bundles currently report `blocked`, `selection=not_selected`, `failClosed=true`, and `canEnableEtfRealistic=false`. J-Quants＋EODHD is the recommended next private-research sample configuration, not an adopted provider.
 
-PR #7 verification results (completed before merge and now present on `main`):
+The machine snapshot contains no downloaded market data, credentials, private vendor responses, or contract documents. Official URLs, checked dates, and explicit unversioned-page labels are discovery evidence, not immutable sample artifacts. Accordingly, all three machine-readable overall license assessments remain `unknown`; the human report separately records restrictions visible in the public terms.
 
-- `bun test`: 105 pass / 0 fail
+### J-Quants adapter spike
+
+- `src/data/jquants-v2.ts` calls the official v2 daily-bars endpoint with `x-api-key` header authentication and pagination.
+- It restricts credentialed requests to the official HTTPS host and validates four/five-character security codes, provider/internal-code mapping, semantic request bounds/dates, raw/adjusted prices, adjustment factor, volume, trading value, malformed JSON, HTTP failures, pagination loops, and duplicate dates.
+- Official no-trade rows with null prices are explicitly excluded; inconsistent partial nulls are rejected. Missing optional volume/trading value remains `undefined`; no missing value is replaced with zero or a prior value.
+- Runner use is restricted to `provider=jquants_v2`, `returnBasis=unadjusted_price`, and `researchLayer=proxy`.
+- The adapter does not treat `AdjC` as normalized Price Return or Total Return and does not invent availability, revisions, distributions, FX, Universe, or calendar evidence.
+- Tests use mocked API responses only. No real `JQUANTS_API_KEY` execution has been performed.
+
+### Technical report
+
+- `docs/provider-evaluation.md` is the versioned answer-first report.
+- It compares individual and institutional candidates, defines evidence status, explains the production gate and bundle model, documents the adapter boundary, and specifies the credentialed sample plan.
+- The Data Analytics portable HTML packager was attempted from a canonical artifact, but its shared reader remained in fallback state during static-chart extraction. No HTML file was published; the Markdown report is the current durable artifact.
+
+### Current branch verification
+
+- `bun test`: 152 pass / 0 fail
 - `bunx tsc --noEmit`: pass
-- strict v1 Universe Trend CLI: pass
-- strict v1 Universe Rotation CLI: pass
-- repeated CLI output: deterministic
-- data-quality CLI: pass, disposition `research_only` as expected
-- robustness CLI: pass, 32 cells total; 16 completed and 16 explicitly unsupported
-- completed cells preserve the three-holding cap, cost drag, and -30% stop
-- every ordinary backtest result is explicitly `research_only`; `etf_realistic` is rejected until its required data layers are integrated
+- raw strict-Universe Trend and Rotation: pass; 18 months, final equity `833426`, max holdings 3, modeled cost rate approximately `0.002`, stop `2025-02`, `research_only`
+- normalized Trend and Rotation: pass; `price_return`, 18 months, final equity `833426`, max holdings 1, modeled cost rate `0.002`, stop `2025-02`, `research_only`
+- normalized repeated output: byte-for-byte deterministic for both strategies
+- data-quality CLI: pass; `research_only`, no cross-source reconciliation
+- robustness CLI: pass; 32 cells, 16 completed and 16 explicit unsupported, `research_only`
+- provider-evaluation CLI: pass as an audit command; both bundles `blocked`, repeated output byte-for-byte deterministic; config fingerprint `sha256:9f635ad2a0bc5db89e2a62a17474e37610b3658070779251c0fe00e03c2408ee`
+- provider-evaluation `--require-production`: expected exit code 1
+- official evidence URL reachability check: all 22 committed URLs returned HTTP 200 on 2026-08-29; this is not content immutability or contract verification
 
-The Trend and Rotation strict-Universe fixtures use the same synthetic daily Price series as the legacy integration fixture. Both produce 18 monthly frames, final value `833426`, cumulative portfolio return approximately `-0.1665735`, modeled cost rate approximately `0.002`, maximum three holdings, and a stop after `2025-02`.
+## O-001 findings preserved as open
 
-## Current branch implementation verification
+### Individual-access candidates
 
-The current branch adds `backtest-summary-v3`, `robustness-grid-v2`, and a provider-neutral `src/data/point-in-time-return-source.ts`. The runner now supports explicit `price_return` / `total_return` opt-in, separate signal/forward Point-in-Time snapshots, `ReturnEventCoverage.availableAt`, exact-date non-JPY to JPY conversion, and full input/resolution fingerprints. A forward resolution pins every signal-time bar/FX observation, so a later correction cannot replace the historical entry prefix. Signal and endpoint snapshots are re-resolved at each asset's actual last trading date; calendar-month-end information released after that trading date cannot leak into the frame. All monthly configs require a calendar-month-end `end`, avoiding partial-month annualization in raw and normalized paths.
+- J-Quants is the strongest TSE primary-data candidate and has transparent individual pricing, but adjusted prices are not proven Total Return, JPY FX is absent, ETF distribution completeness is unverified, corrections overwrite older values, and private-use retention/redistribution rules are restrictive.
+- EODHD is the strongest low-cost overseas/FX complement, but Japanese ETF event completeness, Tokyo quote history, source-native PIT/revisions, plan entitlement, and durable retention remain unverified.
+- Twelve Data is an alternative for explicit adjustment modes and FX, but listing/delisting history, Tokyo quote quality, ETF distribution lifecycle fields, PIT revisions, and long-term audit rights remain weaker or unknown.
 
-Synthetic normalized fixtures use `synthetic_same_day_close_v1`; Trend and Rotation normalized configs execute reproducibly. Summary `start` / `end` now describe realized-return months (`2024-01` through `2025-06` in the fixture), while `signalStart` / `signalEnd` describe decision months (`2023-12` through `2025-05`). Realized-return labels and corrected worst-month/worst-year and hard-stop labels are included; incomplete calendar years carry `observedMonths` and `complete=false`, and the fixture stop is labeled `2025-02`.
+### Institutional comparison
 
-Latest implementation verification is `bun test`: 131 pass / 0 fail and `bunx tsc --noEmit`: pass. `bun install` completed without dependency changes. Raw strict-Universe Trend/Rotation, normalized Trend/Rotation, data-quality, and robustness CLIs all pass. Both normalized CLI outputs are byte-for-byte reproducible. This branch is not merged.
+- LSEG DataScope Select/Plus is the strongest published technical candidate, subject to Japan ETF sample, PIT/revision, contract, and price verification.
+- SIX Web API/VDF/Ultumus offers a useful trial/contact path, subject to Japan coverage, PIT, license, and price confirmation.
+- Bloomberg Data License remains a high-quality benchmark/future candidate; public materials do not establish the exact Japan ETF entitlement, minimum agreement, or complete required contract.
+
+No provider is selected. No cost, contract, retention policy, FX fixing, calendar policy, or production source priority is approved.
 
 ## Required validation coverage
 
-- PASS — Trend and Rotation both execute
+- PASS — Trend and Rotation both execute on committed fixtures
 - PASS — identical input/config produces identical output
 - PASS — insufficient history is an explicit exclusion
 - PASS — pre-listing and post-last-eligible bars are not used
-- PASS — signals use no data after the monthly decision point
+- PASS — signals use no data after the asset-specific decision point
 - PASS — transaction costs reduce portfolio results
 - PASS — maximum holdings remain three or fewer
 - PASS — -30% high-water-mark stop is enforced
-- PASS — missing data is never implicitly replaced with zero or the prior value
+- PASS — missing values are never implicitly replaced with zero or a prior value
+- PASS — provider-evaluation ordering is deterministic and report mutation is detected
+- PASS — J-Quants mocked adapter fails closed on unsafe response data
+- NOT RUN — real credentialed J-Quants API request
+- NOT RUN — real J-Quants/EODHD or J-Quants/Twelve Data reconciliation
 
 ## Known limitations and risks
 
 ### Data correctness
 
-- All committed end-to-end fixtures are synthetic. They prove implementation behavior, not investable performance.
-- The fixture is unadjusted Price data with no real distributions, Corporate Actions, FX, spreads, depth, or fund-structure evidence.
-- No production market-data, Corporate Action, FX, historical-Universe, or second-source adapter is connected.
-- The quality/reconciliation layer is a provider-neutral foundation; production source identity and metadata must come from a trusted adapter rather than a user assertion.
-- Row-level `availableAt` is now consumed by the normalized opt-in runner path; ordinary raw daily-bar paths remain `not_normalized` and are not a production-ready per-bar Point-in-Time quality gate.
-- Calendar-month-end config validation prevents known partial final months, but production exchange-calendar completeness still requires an approved provider/calendar adapter.
-- Stooq remains research plumbing and cannot be the sole final investment basis.
+- All committed end-to-end price/return fixtures are synthetic.
+- No production market-data, distribution, Corporate Action, FX, historical-Universe, quote, or calendar artifact has passed the proposed gate.
+- No evaluated provider proves an official complete Total Return series; adjusted-close fields must not be relabeled.
+- Source publication schedules must not be treated as row-level `availableAt`.
+- Self-captured raw snapshots may preserve observed revisions, but whether that is sufficient for production PIT and permitted retention remains an O-001/O-014 decision.
+- Legal delisting date, last trading date, trust termination, and settlement date must remain separate.
 
-### Universe correctness
+### Policy and licensing
 
-- The strict v1 fixture is synthetic. The legacy root catalog has not been converted into a verified historical master.
-- Status values are explicitly opted into by research config; no final Universe member or production status policy is approved.
-- Product-class booleans are fail-closed gates, but production correctness still depends on a trusted source populating them accurately.
-- Exact eligibility and liquidity thresholds remain O-003; missing required evidence is not fabricated.
-
-### Robustness completeness
-
-- Current grid supports only the parameter axes the simulator can apply deterministically today.
-- Nearby rebalance dates, next-open execution, hysteresis/minimum holding periods, and cost-aware no-trade bands remain explicit unsupported cells under O-006.
-- Crisis-window, benchmark-correlation, and complementarity reports are not yet implemented.
-- No parameter combination is approved; O-005 remains open.
+- `o001-production-readiness-proposed-v1` is proposed engineering policy, not an approved investment decision.
+- Personal-plan pricing and generic exchange coverage do not prove target-instrument entitlement.
+- Private-use, storage, derived-result, cancellation, and audit-replay rights require plan-specific confirmation.
+- O-003/O-004 remain open; sample instruments are coverage probes, not final Universe selection.
 
 ### Operations
 
 - Strategy C and its decision-package schema are not implemented.
 - Forward-test persistence, scheduling, notifications, and dashboard are not implemented.
-- No brokerage connection or real-order path exists and none should be added in the current phase.
-
-## Open decisions preserved
-
-- O-001: production providers and licensing
-- O-003/O-004: exact ETF eligibility thresholds and final members
-- O-005/O-006: approved Strategy A/B parameters and trading rules
-- O-007 through O-016: cash, caps, AI policy, evaluation, persistence, and real-money details
-
-PR #7 adds evidence-producing contracts and executable research tooling. It does not resolve these decisions.
+- No brokerage connection or real-order path exists or is authorized.
 
 ## Next implementation sequence
 
-1. Complete PR review for the current normalized Point-in-Time integration while keeping `etf_realistic` fail-closed; do not merge without user approval.
-2. Research production providers, licensing, and exchange-calendar evidence under O-001 before connecting any production adapter.
-3. Add remaining timing/replacement, crisis-period, and benchmark-comparison robustness axes without selecting O-005/O-006 parameters.
-4. Define the Strategy C decision-package schema without resolving O-012/O-013 by assumption.
-5. Implement forward-test persistence, scheduled execution, notification, and dashboard layers after the relevant open decisions remain explicitly bounded.
+1. Review and merge the current branch only after user approval; do not treat the proposed provider policy as adopted.
+2. Ask for explicit authorization before purchasing a plan or using credentials.
+3. Retrieve the same small 5–10 ETF sample from J-Quants and EODHD, retaining only license-permitted immutable artifacts with request/retrieval fingerprints.
+4. Reconcile price, adjustment, event, lifecycle, calendar, trading-value, and quote-quality fields without selecting a source winner.
+5. Obtain written confirmation for coverage, PIT revisions, retention/audit rights, cancellation behavior, exact entitlements, and cost.
+6. Present the evidence to the user for O-001 approval; only then add a selected-bundle schema and production Point-in-Time adapters.
+7. Continue robustness, Strategy C, and forward-test work without resolving unrelated open decisions by assumption.

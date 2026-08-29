@@ -16,8 +16,8 @@ Codexは、過去の候補・提案・途中案ではなく、リポジトリ内
 - Runtime: TypeScript + Bun
 - Node.js requirement: repositoryで指定された最新バージョン
 - Python dependency: 禁止。ユーザーの明示的な方針変更がある場合のみ再検討
-- Current state: PR #7は `main` へマージ済み（merge commit `2a522904695070a3b75770b2d1b84a459a6ebfe8`）
-- Important caveat: PR #7の検証は合成・research-onlyデータ中心であり、実運用可能な `etf_realistic` 証拠ではない
+- Current state: PR #8は `main` へマージ済み（merge commit `12ad9fe1519cb2bf38aac72297bd76ec3f92a817`）
+- Important caveat: PR #8までのend-to-end検証は合成・research-onlyデータ中心であり、実運用可能な `etf_realistic` 証拠ではない
 
 ## 3. 最初に読むファイル
 
@@ -109,7 +109,7 @@ AIはハード制約を上書きできません。数値不足を推測で埋め
 
 ## 7. 現在の実装状態
 
-PR #7までに以下が `main` に入りました。
+PR #8までに以下が `main` に入りました。
 
 - `MarketDataProvider` abstraction
 - CSV provider
@@ -120,7 +120,7 @@ PR #7までに以下が `main` に入りました。
 - frame-builder test
 - Codex handoff documents
 
-ただし、正規化 `price_return` / `total_return`、行単位 availability、JPY換算は明示的な research-only opt-in 経路に統合済みです。通常のraw経路は `not_normalized` のままで、`etf_realistic` は未解禁です。
+正規化 `price_return` / `total_return`、行単位availability、signal/forward別snapshot、JPY換算は明示的なresearch-only opt-in経路に統合済みです。通常のraw経路は `not_normalized` のままで、`etf_realistic` は未解禁です。
 
 Stooqは研究用OHLCVの接続確認に使うだけで、最終的なTotal Returnや実弾判断の根拠にはしません。
 
@@ -178,7 +178,7 @@ bun run backtest --config=<rotation用fixture設定>
 - `IMPLEMENTATION.md`
 - 必要なら `README.md`
 
-PR #7はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
+PR #8はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
 
 ## 9. 検証後の実装順序
 
@@ -186,10 +186,11 @@ Phase 0が通ったら、次の順で進めます。
 
 ### Phase 1: データを金融的に正しくする
 
-1. 現在のprovider-neutralな正規化 runner統合のPRレビューを完了（最終全CLI監査は131 testsと各CLIでpass済み）
-2. Total Return / 分配金 / corporate actionの実データ接続はO-001のprovider調査後に行う
-3. `universe-master-v1` の検証済みデータ接続はO-003/O-004を確定せずに行う
-4. 残りのrebalance/replacement等robustness axesを比較実験として追加
+1. O-001 provider候補を公式資料、credentialed sample、Point-in-Time改訂、license、costで評価する。評価コードはproviderを自動選定してはならない
+2. 明示承認後に小さな同一銘柄sampleを複数sourceから取得・保存・照合し、O-001を人間判断へ戻す
+3. Total Return / 分配金 / corporate actionのproduction接続はO-001承認後に行う
+4. `universe-master-v1` の検証済みデータ接続はO-003/O-004を確定せずに行う
+5. 残りのrebalance/replacement等robustness axesを比較実験として追加
 
 ### Phase 2: バックテストを頑健にする
 

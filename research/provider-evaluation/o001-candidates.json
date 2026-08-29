@@ -1,0 +1,704 @@
+{
+  "schemaVersion": "provider-evaluation-v1",
+  "evaluatedAt": "2026-08-29",
+  "selection": "not_selected",
+  "policy": {
+    "version": "o001-production-readiness-proposed-v1",
+    "status": "proposed",
+    "requiredCapabilities": [
+      "daily_prices",
+      "adjustment_factors",
+      "distributions",
+      "corporate_actions",
+      "jpy_fx",
+      "historical_universe",
+      "listing_delisting",
+      "quote_quality",
+      "exchange_calendar",
+      "row_level_availability",
+      "revision_history",
+      "reproducible_access"
+    ],
+    "rowLevelRequiredCapabilities": [
+      "daily_prices",
+      "distributions",
+      "corporate_actions",
+      "jpy_fx",
+      "historical_universe",
+      "listing_delisting",
+      "quote_quality",
+      "exchange_calendar"
+    ],
+    "minIndependentSources": [
+      { "capability": "daily_prices", "count": 2 },
+      { "capability": "adjustment_factors", "count": 2 },
+      { "capability": "distributions", "count": 2 },
+      { "capability": "corporate_actions", "count": 2 },
+      { "capability": "jpy_fx", "count": 2 },
+      { "capability": "listing_delisting", "count": 2 },
+      { "capability": "quote_quality", "count": 2 }
+    ],
+    "requireOfficialEvidence": true,
+    "requireVersionedArtifacts": true
+  },
+  "evidence": [
+    {
+      "evidenceId": "jq-bars",
+      "kind": "official_documentation",
+      "publisher": "JPX Market Innovation & Research",
+      "title": "J-Quants API daily quotes",
+      "url": "https://jpx-jquants.com/en/spec/eq-bars-daily",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The v2 daily-bars API documents TSE daily prices, volume, trading value, adjustment factors, and adjusted fields. The adjustment contract is not an official Total Return series."
+    },
+    {
+      "evidenceId": "jq-calendar",
+      "kind": "official_documentation",
+      "publisher": "JPX Market Innovation & Research",
+      "title": "J-Quants API trading calendar",
+      "url": "https://jpx-jquants.com/en/spec/mkt-cal",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The v2 calendar API documents TSE and OSE business-day classifications, but not a complete security-specific halt and early-close history."
+    },
+    {
+      "evidenceId": "jq-dividend",
+      "kind": "official_documentation",
+      "publisher": "JPX Market Innovation & Research",
+      "title": "J-Quants API dividend data",
+      "url": "https://jpx-jquants.com/en/spec/fin-dividend",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The Premium plan documents dividend fields and correction status, but the public material does not prove complete ETF distribution coverage."
+    },
+    {
+      "evidenceId": "jq-master",
+      "kind": "official_documentation",
+      "publisher": "JPX Market Innovation & Research",
+      "title": "J-Quants API listed issue information",
+      "url": "https://jpx-jquants.com/en/spec/eq-master",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The API documents date-scoped listed-issue snapshots; it does not by itself document a complete immutable listing and delisting revision chain."
+    },
+    {
+      "evidenceId": "jq-updates",
+      "kind": "official_documentation",
+      "publisher": "JPX Market Innovation & Research",
+      "title": "J-Quants API data updates",
+      "url": "https://jpx-jquants.com/en/spec/data-update",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The official update notes describe scheduled publication and overwrite-style corrections without a source-native historical version chain or completion API."
+    },
+    {
+      "evidenceId": "jq-pricing",
+      "kind": "official_documentation",
+      "publisher": "JPX Market Innovation & Research",
+      "title": "J-Quants plans and pricing",
+      "url": "https://jpx-jquants.com/en",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The individual service publishes plan prices, history depth, rate limits, and Premium-only dividend access."
+    },
+    {
+      "evidenceId": "jq-terms",
+      "kind": "official_terms",
+      "publisher": "JPX Market Innovation & Research",
+      "title": "J-Quants usage rules",
+      "url": "https://jpx-jquants.com/en/help/usage",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "Individual access is limited to private use and restricts redistribution, application provision, and retention after cancellation or plan downgrade."
+    },
+    {
+      "evidenceId": "jpx-quote-quality",
+      "kind": "official_documentation",
+      "publisher": "Japan Exchange Group",
+      "title": "ETF quoting data",
+      "url": "https://www.jpx.co.jp/english/equities/products/etfs/quoting-data/",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "JPX publishes ETF quote-quality files separately from the J-Quants daily-bars API; this is not proof of historical point-in-time bid and ask availability through the adapter."
+    },
+    {
+      "evidenceId": "eod-prices",
+      "kind": "official_documentation",
+      "publisher": "EOD Historical Data",
+      "title": "Historical data API",
+      "url": "https://eodhd.com/financial-apis/api-for-historical-data-and-volumes",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The API documents historical OHLCV and adjusted-close access. Adjusted close is not treated here as a proven official Total Return series."
+    },
+    {
+      "evidenceId": "eod-ca",
+      "kind": "official_documentation",
+      "publisher": "EOD Historical Data",
+      "title": "Bulk dividends and splits API",
+      "url": "https://eodhd.com/financial-apis/bulk-api-eod-splits-dividends",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The API documents generic dividend and split fields, but public material does not prove complete Japanese ETF event coverage or point-in-time revision semantics."
+    },
+    {
+      "evidenceId": "eod-delisted",
+      "kind": "official_documentation",
+      "publisher": "EOD Historical Data",
+      "title": "Delisted companies data",
+      "url": "https://eodhd.com/financial-apis/delisted-stock-companies-data-2",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The API documents delisted-instrument access with coverage limitations; complete historical ETF lifecycle revisions remain unverified."
+    },
+    {
+      "evidenceId": "eod-fx",
+      "kind": "official_documentation",
+      "publisher": "EOD Historical Data",
+      "title": "Supported forex currencies",
+      "url": "https://eodhd.com/financial-apis/list-supported-forex-currencies",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The provider documents broad FX-pair access, including pairs usable for JPY conversion; fixing policy and point-in-time revisions remain unverified."
+    },
+    {
+      "evidenceId": "eod-exchanges",
+      "kind": "official_documentation",
+      "publisher": "EOD Historical Data",
+      "title": "Exchanges, tickers and trading hours",
+      "url": "https://eodhd.com/financial-apis/exchanges-api-list-of-tickers-and-trading-hours",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The provider documents Tokyo exchange metadata and ticker discovery, but not a proven immutable security-level calendar history."
+    },
+    {
+      "evidenceId": "eod-pricing",
+      "kind": "official_documentation",
+      "publisher": "EOD Historical Data",
+      "title": "EODHD plans and pricing",
+      "url": "https://eodhd.com/",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "Published plans begin with low-cost individual access, but exact endpoint entitlements require plan verification."
+    },
+    {
+      "evidenceId": "eod-terms",
+      "kind": "official_terms",
+      "publisher": "EOD Historical Data",
+      "title": "Terms and conditions",
+      "url": "https://eodhd.com/financial-apis/terms-conditions",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "Non-professional access permits private non-commercial analysis with redistribution and post-termination retention restrictions."
+    },
+    {
+      "evidenceId": "td-time-series",
+      "kind": "official_documentation",
+      "publisher": "Twelve Data",
+      "title": "Advanced API parameters",
+      "url": "https://twelvedata.com/docs/advanced",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The time-series API documents explicit adjustment modes and date-scoped access; adjust=all is not treated here as a proven official Total Return series."
+    },
+    {
+      "evidenceId": "td-fundamentals",
+      "kind": "official_documentation",
+      "publisher": "Twelve Data",
+      "title": "Fundamentals and market coverage",
+      "url": "https://twelvedata.com/fundamentals",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The coverage page lists XJPX and ETF data, subject to instrument-level and plan-level sample verification."
+    },
+    {
+      "evidenceId": "td-fx",
+      "kind": "official_documentation",
+      "publisher": "Twelve Data",
+      "title": "Twelve Data coverage overview",
+      "url": "https://support.twelvedata.com/en/articles/5544954-twelve-data-overview",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The provider documents broad forex coverage, while the required JPY fixing and historical revision contract remains unverified."
+    },
+    {
+      "evidenceId": "td-freshness",
+      "kind": "official_documentation",
+      "publisher": "Twelve Data",
+      "title": "Corporate-action update guidance",
+      "url": "https://support.twelvedata.com/en/articles/5609168-introduction-to-twelve-data",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The provider describes typical corporate-action update timing, but not immutable row-level availability or a historical revision chain."
+    },
+    {
+      "evidenceId": "td-pricing",
+      "kind": "official_documentation",
+      "publisher": "Twelve Data",
+      "title": "Twelve Data pricing",
+      "url": "https://twelvedata.com/pricing",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The provider publishes individual plan prices; international market entitlements still require instrument-level verification."
+    },
+    {
+      "evidenceId": "td-usage",
+      "kind": "official_terms",
+      "publisher": "Twelve Data",
+      "title": "Commercial and personal usage",
+      "url": "https://support.twelvedata.com/en/articles/5332349-commercial-and-personal-usage",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "Individual plans are for personal internal non-commercial use, with commercial display and redistribution requiring other rights."
+    },
+    {
+      "evidenceId": "td-terms",
+      "kind": "official_terms",
+      "publisher": "Twelve Data",
+      "title": "Twelve Data terms",
+      "url": "https://twelvedata.com/terms",
+      "checkedAt": "2026-08-29",
+      "version": "unversioned-web-page checked 2026-08-29",
+      "claim": "The terms are the governing evidence for storage, derived use, display, and redistribution rights; project-specific rights remain unconfirmed."
+    }
+  ],
+  "candidates": [
+    {
+      "providerId": "jquants-individual",
+      "independenceGroup": "jpx-market-innovation-and-research",
+      "displayName": "J-Quants API (individual)",
+      "accessModel": "personal_subscription",
+      "capabilities": [
+        {
+          "capability": "daily_prices",
+          "status": "documented",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "fixture_contract",
+          "evidenceIds": ["jq-bars"],
+          "artifactIds": [],
+          "limitations": ["No credentialed sample artifact is committed.", "Adjusted fields are not Total Return evidence."]
+        },
+        {
+          "capability": "adjustment_factors",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "fixture_contract",
+          "evidenceIds": ["jq-bars"],
+          "artifactIds": [],
+          "limitations": ["Published adjustment semantics do not cover every cash distribution or Corporate Action."]
+        },
+        {
+          "capability": "distributions",
+          "status": "partial",
+          "availabilityModel": "dataset_level",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["jq-dividend"],
+          "artifactIds": [],
+          "limitations": ["Premium access is required and complete ETF distribution coverage is unverified."]
+        },
+        {
+          "capability": "corporate_actions",
+          "status": "partial",
+          "availabilityModel": "dataset_level",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["jq-bars", "jq-dividend"],
+          "artifactIds": [],
+          "limitations": ["Individual API coverage is not a complete event ledger."]
+        },
+        {
+          "capability": "jpy_fx",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["No official JPY FX dataset was identified in the evaluated individual API catalog."]
+        },
+        {
+          "capability": "historical_universe",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["jq-master"],
+          "artifactIds": [],
+          "limitations": ["Date-scoped listed snapshots do not prove a full immutable historical membership chain."]
+        },
+        {
+          "capability": "listing_delisting",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["jq-master"],
+          "artifactIds": [],
+          "limitations": ["Listing date, last trading date, delisting date, and revisions require additional evidence."]
+        },
+        {
+          "capability": "quote_quality",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["jpx-quote-quality"],
+          "artifactIds": [],
+          "limitations": ["JPX files are separate from the API and do not prove point-in-time historical bid and ask coverage."]
+        },
+        {
+          "capability": "exchange_calendar",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["jq-calendar"],
+          "artifactIds": [],
+          "limitations": ["Security-specific halts, early closes, and ETF last-trading dates require separate evidence."]
+        },
+        {
+          "capability": "row_level_availability",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["Publication schedules must not be substituted for source-native row-level availableAt."]
+        },
+        {
+          "capability": "revision_history",
+          "status": "unsupported",
+          "availabilityModel": "none",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["jq-updates"],
+          "artifactIds": [],
+          "limitations": ["Corrections overwrite prior data; the individual service does not expose an immutable source-native revision chain."]
+        },
+        {
+          "capability": "reproducible_access",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "fixture_contract",
+          "evidenceIds": ["jq-bars", "jq-updates"],
+          "artifactIds": [],
+          "limitations": ["Requests are reproducible, but future responses are not guaranteed immutable; raw snapshots must be retained separately."]
+        }
+      ],
+      "license": {
+        "overall": "unknown",
+        "privateResearch": "confirmed",
+        "persistentStorage": "restricted",
+        "derivedResults": "restricted",
+        "auditReproduction": "restricted",
+        "redistribution": "prohibited",
+        "evidenceIds": ["jq-terms"],
+        "limitations": ["Private individual use only.", "Cancellation and downgrade retention rules conflict with indefinite audit replay unless separately resolved."]
+      },
+      "commercial": {
+        "status": "published",
+        "humanApproved": false,
+        "summary": "Published individual pricing exists; Premium is required for dividend data and no purchase is approved.",
+        "evidenceIds": ["jq-pricing"]
+      }
+    },
+    {
+      "providerId": "eodhd-individual",
+      "independenceGroup": "eod-historical-data",
+      "displayName": "EOD Historical Data (individual)",
+      "accessModel": "personal_subscription",
+      "capabilities": [
+        {
+          "capability": "daily_prices",
+          "status": "documented",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-prices", "eod-exchanges"],
+          "artifactIds": [],
+          "limitations": ["Target Japanese ETF symbols and plan entitlements require a credentialed sample."]
+        },
+        {
+          "capability": "adjustment_factors",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-prices", "eod-ca"],
+          "artifactIds": [],
+          "limitations": ["Adjusted close is not accepted as Total Return without event-level reconciliation."]
+        },
+        {
+          "capability": "distributions",
+          "status": "documented",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-ca"],
+          "artifactIds": [],
+          "limitations": ["Complete Japanese ETF distribution coverage and revisions are unverified."]
+        },
+        {
+          "capability": "corporate_actions",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-ca"],
+          "artifactIds": [],
+          "limitations": ["Documented splits and dividends do not prove complete product-specific Corporate Action coverage."]
+        },
+        {
+          "capability": "jpy_fx",
+          "status": "documented",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-fx"],
+          "artifactIds": [],
+          "limitations": ["JPY direction, fixing, holiday alignment, availability, and revision semantics require a sample contract."]
+        },
+        {
+          "capability": "historical_universe",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-delisted", "eod-exchanges"],
+          "artifactIds": [],
+          "limitations": ["Current and delisted listings do not prove a complete point-in-time historical ETF universe."]
+        },
+        {
+          "capability": "listing_delisting",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-delisted"],
+          "artifactIds": [],
+          "limitations": ["Coverage dates and symbol-change support are incomplete outside documented markets."]
+        },
+        {
+          "capability": "quote_quality",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["Historical Tokyo ETF bid and ask coverage was not confirmed."]
+        },
+        {
+          "capability": "exchange_calendar",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-exchanges"],
+          "artifactIds": [],
+          "limitations": ["Trading-hours metadata does not prove a complete immutable exchange and security calendar history."]
+        },
+        {
+          "capability": "row_level_availability",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["Source-native row-level availableAt was not confirmed."]
+        },
+        {
+          "capability": "revision_history",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["Immutable historical revisions and supersession semantics were not confirmed."]
+        },
+        {
+          "capability": "reproducible_access",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["eod-prices"],
+          "artifactIds": [],
+          "limitations": ["Date-scoped requests are documented, but immutable replay requires self-retained raw artifacts and compatible license rights."]
+        }
+      ],
+      "license": {
+        "overall": "unknown",
+        "privateResearch": "confirmed",
+        "persistentStorage": "restricted",
+        "derivedResults": "confirmed",
+        "auditReproduction": "restricted",
+        "redistribution": "prohibited",
+        "evidenceIds": ["eod-terms"],
+        "limitations": ["Individual use is non-commercial and private.", "Post-termination deletion requirements constrain durable audit replay."]
+      },
+      "commercial": {
+        "status": "published",
+        "humanApproved": false,
+        "summary": "Published entry pricing exists, but required endpoint and exchange entitlements have not been purchased or approved.",
+        "evidenceIds": ["eod-pricing"]
+      }
+    },
+    {
+      "providerId": "twelve-data-individual",
+      "independenceGroup": "twelve-data",
+      "displayName": "Twelve Data (individual)",
+      "accessModel": "personal_subscription",
+      "capabilities": [
+        {
+          "capability": "daily_prices",
+          "status": "documented",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-time-series", "td-fundamentals"],
+          "artifactIds": [],
+          "limitations": ["Target XJPX ETF symbols and individual-plan entitlement require credentialed sampling."]
+        },
+        {
+          "capability": "adjustment_factors",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-time-series"],
+          "artifactIds": [],
+          "limitations": ["Explicit adjustment modes are useful, but adjust=all is not accepted as Total Return evidence."]
+        },
+        {
+          "capability": "distributions",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-time-series", "td-freshness"],
+          "artifactIds": [],
+          "limitations": ["Public dividend fields do not prove complete ETF coverage or declaration, record, and payment dates."]
+        },
+        {
+          "capability": "corporate_actions",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-time-series", "td-freshness"],
+          "artifactIds": [],
+          "limitations": ["Splits and dividends do not prove complete ETF Corporate Action coverage."]
+        },
+        {
+          "capability": "jpy_fx",
+          "status": "documented",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-fx"],
+          "artifactIds": [],
+          "limitations": ["Required JPY direction, fixing, exact-date alignment, and revision semantics need a credentialed sample."]
+        },
+        {
+          "capability": "historical_universe",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["A point-in-time historical ETF membership endpoint was not confirmed."]
+        },
+        {
+          "capability": "listing_delisting",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["Complete historical listing and delisting lifecycle access was not confirmed."]
+        },
+        {
+          "capability": "quote_quality",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["Historical Tokyo ETF bid and ask coverage was not confirmed."]
+        },
+        {
+          "capability": "exchange_calendar",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": [],
+          "artifactIds": [],
+          "limitations": ["An immutable venue and security calendar contract was not confirmed."]
+        },
+        {
+          "capability": "row_level_availability",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-freshness"],
+          "artifactIds": [],
+          "limitations": ["Typical update timing must not be substituted for row-level availableAt."]
+        },
+        {
+          "capability": "revision_history",
+          "status": "unknown",
+          "availabilityModel": "unknown",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-freshness"],
+          "artifactIds": [],
+          "limitations": ["Immutable historical revisions and supersession semantics were not confirmed."]
+        },
+        {
+          "capability": "reproducible_access",
+          "status": "partial",
+          "availabilityModel": "ingest_observed",
+          "adapterStatus": "not_implemented",
+          "evidenceIds": ["td-time-series"],
+          "artifactIds": [],
+          "limitations": ["Date-scoped requests are documented, but response immutability and retained audit replay are unverified."]
+        }
+      ],
+      "license": {
+        "overall": "unknown",
+        "privateResearch": "confirmed",
+        "persistentStorage": "unknown",
+        "derivedResults": "restricted",
+        "auditReproduction": "unknown",
+        "redistribution": "prohibited",
+        "evidenceIds": ["td-terms", "td-usage"],
+        "limitations": ["Individual plans are non-commercial and internal.", "Project-specific storage and long-term audit reproduction rights require written confirmation."]
+      },
+      "commercial": {
+        "status": "published",
+        "humanApproved": false,
+        "summary": "Published individual pricing exists, but XJPX ETF entitlement and required endpoints are not approved.",
+        "evidenceIds": ["td-pricing"]
+      }
+    }
+  ],
+  "bundles": [
+    {
+      "bundleId": "jquants-eodhd-research",
+      "displayName": "J-Quants primary plus EODHD complement",
+      "sourceIds": ["jquants-individual", "eodhd-individual"],
+      "responsibilities": [
+        { "capability": "daily_prices", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "adjustment_factors", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "distributions", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "corporate_actions", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "jpy_fx", "providerIds": ["eodhd-individual"] },
+        { "capability": "historical_universe", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "listing_delisting", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "quote_quality", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "exchange_calendar", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "row_level_availability", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "revision_history", "providerIds": ["jquants-individual", "eodhd-individual"] },
+        { "capability": "reproducible_access", "providerIds": ["jquants-individual", "eodhd-individual"] }
+      ]
+    },
+    {
+      "bundleId": "jquants-twelve-data-research",
+      "displayName": "J-Quants primary plus Twelve Data complement",
+      "sourceIds": ["jquants-individual", "twelve-data-individual"],
+      "responsibilities": [
+        { "capability": "daily_prices", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "adjustment_factors", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "distributions", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "corporate_actions", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "jpy_fx", "providerIds": ["twelve-data-individual"] },
+        { "capability": "historical_universe", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "listing_delisting", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "quote_quality", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "exchange_calendar", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "row_level_availability", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "revision_history", "providerIds": ["jquants-individual", "twelve-data-individual"] },
+        { "capability": "reproducible_access", "providerIds": ["jquants-individual", "twelve-data-individual"] }
+      ]
+    }
+  ]
+}

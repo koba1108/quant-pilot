@@ -10,7 +10,10 @@ export type DataArtifactKind =
   | "fx_rates"
   | "universe"
   | "normalized_returns"
-  | "reconciliation_observation";
+  | "reconciliation_observation"
+  | "exchange_calendar"
+  | "provider_document"
+  | "provider_capability_evidence";
 
 const DATA_ARTIFACT_KINDS: readonly DataArtifactKind[] = [
   "daily_bars",
@@ -21,6 +24,9 @@ const DATA_ARTIFACT_KINDS: readonly DataArtifactKind[] = [
   "universe",
   "normalized_returns",
   "reconciliation_observation",
+  "exchange_calendar",
+  "provider_document",
+  "provider_capability_evidence",
 ];
 
 export interface SourceProvenance {

@@ -242,6 +242,32 @@ test("CLI config validation rejects relaxed hard constraints", () => {
     () => validateBacktestConfig({ ...base, provider: "stooq", returnBasis: "provider_adjusted" }),
     /Stooq currently supports only unadjusted_price/,
   );
+  assert.throws(
+    () => validateBacktestConfig({ ...base, provider: "jquants_v2", returnBasis: "provider_adjusted" }),
+    /J-Quants v2 research access currently supports only unadjusted_price/,
+  );
+  assert.throws(
+    () => validateBacktestConfig({ ...base, provider: "jquants_v2", returnBasis: "unadjusted_price" }),
+    /must be explicitly labeled researchLayer=proxy/,
+  );
+  assert.throws(
+    () => validateBacktestConfig({ ...base, provider: "stooq", returnBasis: "unadjusted_price" }),
+    /provider=stooq must be explicitly labeled researchLayer=proxy/,
+  );
+  assert.doesNotThrow(() => validateBacktestConfig({
+    ...base,
+    end: "2025-01-31",
+    provider: "stooq",
+    returnBasis: "unadjusted_price",
+    researchLayer: "proxy",
+  }));
+  assert.equal(validateBacktestConfig({
+    ...base,
+    end: "2025-01-31",
+    provider: "jquants_v2",
+    returnBasis: "unadjusted_price",
+    researchLayer: "proxy",
+  }).provider, "jquants_v2");
   assert.throws(() => validateBacktestConfig({ ...base, unexpected: true }), /unknown fields/);
   assert.throws(
     () => validateBacktestConfig({ ...base, universeMasterPath: "master.csv" }),
@@ -264,6 +290,37 @@ test("CLI config validation rejects relaxed hard constraints", () => {
   assert.throws(
     () => validateBacktestConfig(unlabeledLegacy),
     /config-only asset path is limited to explicitly labeled/,
+  );
+});
+
+test("provider overrides cannot replace an explicitly configured provider or escape proxy boundaries", async () => {
+  const explicitProvider = {
+    strategy: "trend" as const,
+    start: "2024-01-01",
+    end: "2025-01-31",
+    provider: "csv" as const,
+    returnBasis: "unadjusted_price" as const,
+    researchLayer: "proxy" as const,
+    csvRoot: "tests/fixtures/market-data",
+    assets: [{ code: "A", symbol: "a" }],
+  };
+  await assert.rejects(
+    () => loadBacktestInputs(explicitProvider, "stooq"),
+    /provider override stooq does not match explicitly configured provider csv/,
+  );
+
+  const syntheticWithoutProvider = {
+    ...explicitProvider,
+    provider: undefined,
+    researchLayer: "synthetic_fixture" as const,
+  };
+  await assert.rejects(
+    () => loadBacktestInputs(syntheticWithoutProvider, "stooq"),
+    /provider=stooq must be explicitly labeled researchLayer=proxy/,
+  );
+  await assert.rejects(
+    () => loadBacktestInputs(syntheticWithoutProvider, "jquants_v2"),
+    /provider=jquants_v2 must be explicitly labeled researchLayer=proxy/,
   );
 });
 

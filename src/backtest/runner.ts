@@ -26,6 +26,7 @@ import type {
 } from "../data/return-normalization.ts";
 import type { FxRateCoverage, FxRateObservation } from "../data/fx-normalization.ts";
 import { StooqMarketDataProvider } from "../data/stooq.ts";
+import { JQuantsV2ResearchProvider } from "../data/jquants-v2.ts";
 import {
   assertUniverseMasterIntegrity,
   evaluateUniverseMembership,
@@ -49,7 +50,7 @@ import {
 import { runMonthlyStrategy, type SimulationResult } from "./simulator.ts";
 import { compareText } from "../determinism.ts";
 
-type ProviderName = "csv" | "stooq";
+type ProviderName = "csv" | "stooq" | "jquants_v2";
 export type RawBacktestReturnBasis = "unadjusted_price" | "provider_adjusted";
 export type BacktestReturnBasis = RawBacktestReturnBasis | NormalizedReturnBasis;
 export type ResearchLayer = "synthetic_fixture" | "proxy" | "etf_realistic";
@@ -378,8 +379,11 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
   if (!isIsoDate(value.start) || !isIsoDate(value.end) || value.start > value.end) {
     throw new Error(`start/end must be valid ISO dates with start <= end; received ${String(value.start)}..${String(value.end)}.`);
   }
-  if (value.provider !== undefined && value.provider !== "csv" && value.provider !== "stooq") {
-    throw new Error(`provider must be "csv" or "stooq"; received ${String(value.provider)}.`);
+  if (value.provider !== undefined
+    && value.provider !== "csv"
+    && value.provider !== "stooq"
+    && value.provider !== "jquants_v2") {
+    throw new Error(`provider must be "csv", "stooq", or "jquants_v2"; received ${String(value.provider)}.`);
   }
   if (value.returnBasis !== undefined
     && value.returnBasis !== "unadjusted_price"
@@ -394,6 +398,11 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
   if (value.provider === "stooq" && returnBasis !== "unadjusted_price") {
     throw new Error("Stooq currently supports only unadjusted_price returnBasis.");
   }
+  if (value.provider === "jquants_v2" && returnBasis !== "unadjusted_price") {
+    throw new Error(
+      "J-Quants v2 research access currently supports only unadjusted_price; adjusted fields are not accepted as normalized Price Return or Total Return.",
+    );
+  }
   if (value.csvRoot !== undefined && (typeof value.csvRoot !== "string" || value.csvRoot.trim() === "")) {
     throw new Error("csvRoot must be a non-empty string when provided.");
   }
@@ -407,6 +416,12 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
     throw new Error(
       "researchLayer=etf_realistic is not executable until production row-level provenance, normalized data-quality/reconciliation, and realistic ETF/FX execution inputs are integrated.",
     );
+  }
+  if (value.provider === "jquants_v2" && value.researchLayer !== "proxy") {
+    throw new Error("provider=jquants_v2 must be explicitly labeled researchLayer=proxy.");
+  }
+  if (value.provider === "stooq" && value.researchLayer !== "proxy") {
+    throw new Error("provider=stooq must be explicitly labeled researchLayer=proxy.");
   }
   if (isNormalizedReturnBasis(returnBasis) && value.researchLayer !== "synthetic_fixture") {
     throw new Error(
@@ -544,7 +559,9 @@ export function validateBacktestConfig(value: unknown): BacktestConfig {
 
 function resolveProviderName(value: string | undefined): ProviderName | undefined {
   if (value === undefined) return undefined;
-  if (value !== "csv" && value !== "stooq") throw new Error(`provider must be "csv" or "stooq"; received ${value}.`);
+  if (value !== "csv" && value !== "stooq" && value !== "jquants_v2") {
+    throw new Error(`provider must be "csv", "stooq", or "jquants_v2"; received ${value}.`);
+  }
   return value;
 }
 
@@ -690,14 +707,31 @@ export async function loadBacktestInputs(
   providerOverride?: string,
 ): Promise<LoadedBacktestInput> {
   config = validateBacktestConfig(config);
-  const providerName = resolveProviderName(providerOverride) ?? config.provider ?? "csv";
+  const resolvedOverride = resolveProviderName(providerOverride);
+  if (resolvedOverride !== undefined && config.provider !== undefined && config.provider !== resolvedOverride) {
+    throw new Error(
+      `provider override ${resolvedOverride} does not match explicitly configured provider ${config.provider}.`,
+    );
+  }
+  const providerName = resolvedOverride ?? config.provider ?? "csv";
   const returnBasis = config.returnBasis ?? "provider_adjusted";
   const normalizedReturnBasis = isNormalizedReturnBasis(returnBasis) ? returnBasis : undefined;
   if (providerName === "stooq" && returnBasis !== "unadjusted_price") {
     throw new Error("Stooq currently supports only unadjusted_price returnBasis.");
   }
+  if (providerName === "stooq" && config.researchLayer !== "proxy") {
+    throw new Error("provider=stooq must be explicitly labeled researchLayer=proxy.");
+  }
+  if (providerName === "jquants_v2" && returnBasis !== "unadjusted_price") {
+    throw new Error("J-Quants v2 research access currently supports only unadjusted_price returnBasis.");
+  }
+  if (providerName === "jquants_v2" && config.researchLayer !== "proxy") {
+    throw new Error("provider=jquants_v2 must be explicitly labeled researchLayer=proxy.");
+  }
   const provider: MarketDataProvider = providerName === "stooq"
     ? new StooqMarketDataProvider()
+    : providerName === "jquants_v2"
+    ? new JQuantsV2ResearchProvider()
     : new CsvMarketDataProvider(config.csvRoot ?? "data/raw", returnBasis === "provider_adjusted");
   const universeMaster = config.universeMasterPath === undefined ? undefined : await loadUniverseMaster(config.universeMasterPath);
   const universeStatuses = config.universeStatuses === undefined ? undefined : new Set(config.universeStatuses);
