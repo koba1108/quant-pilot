@@ -187,11 +187,15 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     assert.ok(second.results.every((result) => result.idempotent && !result.stateTransitionApplied));
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
     await assert.rejects(
-      () => runPreForward(configPath, "2025-01-08T00:00:00Z", { cwd: root }),
+      () => runPreForward(configPath, "2025-02-01T00:00:00+14:00", { cwd: root }),
       /Monthly Pre-Forward cycle 2025-01 already uses cutoff.*intramonth reassessment/,
     );
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
+    const unrelatedLedgerPath = join(root, "later-config-ledger.sqlite");
+    const relocatedConfigValue = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    relocatedConfigValue.ledgerPath = { kind: "absolute", path: unrelatedLedgerPath };
+    await writeFile(configPath, `${JSON.stringify(relocatedConfigValue, null, 2)}\n`, "utf8");
     const replayed = await runPreForward(configPath, fixtureAsOf, {
       cwd: root,
       replayDecisionArtifactId: first.results[0]!.decisionArtifactId,
@@ -200,6 +204,10 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     assert.equal(replayed.results[0]!.decisionArtifactId, first.results[0]!.decisionArtifactId);
     assert.equal(replayed.results[0]!.stateTransitionApplied, false);
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+    await assert.rejects(
+      () => lstat(unrelatedLedgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
 
     const store = new FileArtifactStore(artifactRoot);
     for (const result of first.results) {

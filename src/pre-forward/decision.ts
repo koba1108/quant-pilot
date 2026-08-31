@@ -33,12 +33,21 @@ import {
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
 export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v7" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v8" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v9" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
+export const PRE_FORWARD_MARKET_TIME_ZONE = "Asia/Tokyo" as const;
 
 const ARTIFACT_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
+const TOKYO_MARKET_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  calendar: "iso8601",
+  numberingSystem: "latn",
+  timeZone: PRE_FORWARD_MARKET_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 export interface VirtualPosition {
   code: string;
@@ -445,12 +454,12 @@ function heldIntervalHasCompleteSyntheticEventCoverage(
   if (series === undefined || previousAsOf === undefined || latestTradingDate === undefined) return false;
   const coverage = series.returnEventCoverage;
   if (coverage === undefined) return false;
-  const previousDate = previousAsOf.slice(0, 10);
+  const previousDate = preForwardMarketDate(previousAsOf);
   return coverage.basis === "synthetic_complete_no_events_v1"
     && coverage.corporateActions === "complete"
     && coverage.distributions === "complete"
     && coverage.startDate <= previousDate
-    && coverage.endDate >= asOf.slice(0, 10)
+    && coverage.endDate >= preForwardMarketDate(asOf)
     && Date.parse(coverage.availableAt) <= Date.parse(asOf);
 }
 
@@ -853,9 +862,18 @@ function withStateMetadata(
   });
 }
 
+export function preForwardMarketDate(asOf: string): string {
+  if (!isIsoDateTime(asOf)) throw new Error("Pre-forward market date requires an ISO timestamp with timezone.");
+  const parts = new Map(
+    TOKYO_MARKET_DATE_FORMATTER.formatToParts(new Date(asOf)).map((part) => [part.type, part.value]),
+  );
+  const date = `${parts.get("year")}-${parts.get("month")}-${parts.get("day")}`;
+  if (!isIsoDate(date)) throw new Error("Pre-forward market date could not be resolved in Asia/Tokyo.");
+  return date;
+}
+
 export function preForwardCycleId(asOf: string): string {
-  if (!isIsoDateTime(asOf)) throw new Error("Pre-forward cycle requires an ISO timestamp with timezone.");
-  return asOf.slice(0, 7);
+  return preForwardMarketDate(asOf).slice(0, 7);
 }
 
 export function buildPreForwardRunKey(strategy: PreForwardStrategyConfig, asOf: string): string {
@@ -911,7 +929,7 @@ export function buildPreForwardDecisionPackage(
     throw new Error("Pre-forward Universe master must be bound to its retained snapshot artifact.");
   }
   if (request.universeMaster !== undefined) assertUniverseMasterIntegrity(request.universeMaster);
-  const asOfDate = request.asOf.slice(0, 10);
+  const asOfDate = preForwardMarketDate(request.asOf);
   if (!isIsoDate(asOfDate)) throw new Error("Pre-forward asOf does not contain a valid declared market date.");
   const cycleId = preForwardCycleId(request.asOf);
   const runKey = buildPreForwardRunKey(request.strategy, request.asOf);
@@ -1205,7 +1223,7 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
     throw new Error("Pre-forward Decision Package identity is invalid.");
   }
   if (!isIsoDateTime(payload.asOf)
-    || payload.asOf.slice(0, 10) !== payload.asOfDate
+    || preForwardMarketDate(payload.asOf) !== payload.asOfDate
     || !isIsoDate(payload.asOfDate)
     || payload.cycleId !== preForwardCycleId(payload.asOf)
     || !isIsoDateTime(payload.createdAt)

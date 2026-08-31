@@ -12,6 +12,7 @@ import type {
   TrendStrategyParameters,
 } from "../strategies/types.ts";
 import { isIsoDateTime } from "../data/provenance.ts";
+import { oneWayCostRate } from "../portfolio/costs.ts";
 
 export const PRE_FORWARD_CONFIG_SCHEMA_VERSION = "pre-forward-config-v2" as const;
 export const PRE_FORWARD_MODE = "pre_forward_dry_run" as const;
@@ -300,6 +301,12 @@ function validateExecution(value: unknown): PreForwardExecutionConfig {
     throw new Error("execution.priceSource must be latest_unadjusted_close_proxy.");
   }
   if (value.fxConversionBps !== 0) throw new Error("M2 JPY-only execution requires execution.fxConversionBps=0.");
+  const commissionBps = validateBps(value.commissionBps, "execution.commissionBps");
+  const slippageBps = validateBps(value.slippageBps, "execution.slippageBps");
+  const fallbackHalfSpreadBps = validateBps(
+    value.fallbackHalfSpreadBps,
+    "execution.fallbackHalfSpreadBps",
+  );
   if (!Array.isArray(value.instruments)) throw new Error("execution.instruments must be an array.");
   const instruments = value.instruments.map((item, index) => {
     const field = `execution.instruments[${index}]`;
@@ -346,6 +353,17 @@ function validateExecution(value: unknown): PreForwardExecutionConfig {
   if (new Set(instruments.map((item) => item.code)).size !== instruments.length) {
     throw new Error("execution.instruments code values must be unique.");
   }
+  for (const instrument of instruments) {
+    const costRate = oneWayCostRate(instrument.spreadBps, {
+      commissionBps,
+      slippageBps,
+      fallbackHalfSpreadBps,
+      fxConversionBps: 0,
+    });
+    if (costRate >= 1) {
+      throw new Error(`execution aggregate one-way cost for ${instrument.code} must be below 100%.`);
+    }
+  }
   const safetyMarginBps = validateBps(
     value.benefitGate.safetyMarginBps,
     "execution.benefitGate.safetyMarginBps",
@@ -360,9 +378,9 @@ function validateExecution(value: unknown): PreForwardExecutionConfig {
       safetyMarginBps,
     },
     priceSource: "latest_unadjusted_close_proxy",
-    commissionBps: validateBps(value.commissionBps, "execution.commissionBps"),
-    slippageBps: validateBps(value.slippageBps, "execution.slippageBps"),
-    fallbackHalfSpreadBps: validateBps(value.fallbackHalfSpreadBps, "execution.fallbackHalfSpreadBps"),
+    commissionBps,
+    slippageBps,
+    fallbackHalfSpreadBps,
     fxConversionBps: 0,
     instruments,
   };

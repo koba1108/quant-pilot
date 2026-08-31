@@ -35,6 +35,7 @@ import {
   buildPreForwardDecisionArtifact,
   buildPreForwardDecisionPackage,
   buildPreForwardRunKey,
+  preForwardMarketDate,
   preForwardCycleId,
   PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION,
   type PreForwardDecisionPackage,
@@ -96,7 +97,6 @@ interface LoadedRuntime {
   config: PreForwardConfig;
   configFingerprint: string;
   store: FileArtifactStore;
-  ledgerPath: string;
 }
 
 async function resolveConfigPath(path: string, cwd: string): Promise<string> {
@@ -249,13 +249,11 @@ async function loadRuntime(configPath: string, options: RunPreForwardOptions): P
   const config = await loadPreForwardConfig(configPath, cwd);
   const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, cwd);
   const store = new FileArtifactStore(artifactRoot);
-  const ledgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
   return {
     cwd,
     config,
     configFingerprint: sha256Canonical(config),
     store,
-    ledgerPath,
   };
 }
 
@@ -354,7 +352,6 @@ async function loadRetainedUniverseMaster(
 
 async function replayOne(
   runtime: LoadedRuntime,
-  ledger: PreForwardLedger,
   artifact: VersionedDataArtifact<PreForwardDecisionPackage>,
   asOf: string,
 ): Promise<PreForwardStrategyRunResult> {
@@ -368,7 +365,7 @@ async function replayOne(
       && candidate.strategy === artifact.payload.strategy.name
   ));
   if (strategy === undefined) throw new Error("Retained config has no strategy matching the Decision Package.");
-  assertStrategyConfigCurrent(strategy, asOf.slice(0, 10));
+  assertStrategyConfigCurrent(strategy, preForwardMarketDate(asOf));
   assertStoredDecisionIdentity(artifact.payload, config, strategy, asOf);
   const input = await loadRuntimeInput(config, runtime.store, runtime.cwd);
   const universeMaster = await loadRetainedUniverseMaster(runtime.store, artifact.payload);
@@ -392,7 +389,13 @@ async function replayOne(
   if (canonicalJson(rebuiltArtifact) !== canonicalJson(artifact)) {
     throw new Error("Replayed Pre-Forward Decision Package artifact is not deterministic.");
   }
-  ledger.verifyDecision(artifact.payload, artifact.provenance.artifactId);
+  const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, runtime.cwd);
+  const retainedLedger = await PreForwardLedger.open(retainedLedgerPath);
+  try {
+    retainedLedger.verifyDecision(artifact.payload, artifact.provenance.artifactId);
+  } finally {
+    retainedLedger.close();
+  }
   return strategyResult(artifact.payload, artifact.provenance.artifactId, true, false);
 }
 
@@ -403,14 +406,15 @@ export async function runPreForward(
 ): Promise<PreForwardRunReport> {
   if (!isIsoDateTime(asOf)) throw new Error("--as-of must be an ISO timestamp with timezone.");
   const runtime = await loadRuntime(configPath, options);
-  const asOfDate = asOf.slice(0, 10);
-  const ledger = await PreForwardLedger.open(runtime.ledgerPath);
-  try {
-    if (options.replayDecisionArtifactId !== undefined) {
-      const artifact = await runtime.store.read<PreForwardDecisionPackage>(options.replayDecisionArtifactId);
-      return buildReport(asOf, "replay", [await replayOne(runtime, ledger, artifact, asOf)]);
-    }
+  const asOfDate = preForwardMarketDate(asOf);
+  if (options.replayDecisionArtifactId !== undefined) {
+    const artifact = await runtime.store.read<PreForwardDecisionPackage>(options.replayDecisionArtifactId);
+    return buildReport(asOf, "replay", [await replayOne(runtime, artifact, asOf)]);
+  }
 
+  const ledgerPath = await resolvePreForwardLedgerPath(runtime.config.ledgerPath, runtime.cwd);
+  const ledger = await PreForwardLedger.open(ledgerPath);
+  try {
     for (const strategy of runtime.config.strategies) assertStrategyConfigCurrent(strategy, asOfDate);
     let createdAt: string | undefined;
     let input: LoadedPreForwardInput | undefined;
@@ -424,7 +428,7 @@ export async function runPreForward(
       const existing = ledger.getExistingRun(runKey);
       if (existing !== undefined) {
         const artifact = await runtime.store.read<PreForwardDecisionPackage>(existing.decisionArtifactId);
-        results.push(await replayOne(runtime, ledger, artifact, asOf));
+        results.push(await replayOne(runtime, artifact, asOf));
         continue;
       }
       const opening = ledger.readPortfolioSnapshot(strategy.portfolioId, runtime.config.portfolio.initialCashJpy);

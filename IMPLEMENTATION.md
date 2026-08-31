@@ -175,14 +175,16 @@ Active M2 manual Pre-Forward branch verification:
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
-- explicit Decision Package replay: retained config, strategy, inputs, Universe, canonical decision/artifact, and ledger binding reproduce without another state transition
+- explicit Decision Package replay: retained config, strategy, inputs, Universe, canonical decision/artifact, and the ledger path from the retained config reproduce without another state transition
 - D-009 regression: marginal synthetic expected benefit produces no order; each executed ordinary order records a strict benefit-above-cost-plus-positive-margin pass
-- intramonth regression: a different cutoff in an already recorded calendar month is rejected rather than creating a second run
+- intramonth regression: a different cutoff in an already recorded Asia-Tokyo market calendar month is rejected even when its ISO offset displays a different month
 - provenance regression: market `asOf` remains distinct from actual Decision Package `createdAt`, and replay preserves both timestamps
 - Point-in-Time artifact regression: a daily-bars artifact cannot claim observation/availability before one of its contained trading dates, including timestamps whose UTC offset masks an earlier instant
 - lifecycle/availability regressions: signal history excludes pre-listing rows, and a same-day close is unavailable before the conservative `07:00:00Z` floor
 - execution-boundary regressions: stale validated-config fingerprints, unbound strategy overrides, and loaded-input mutation are rejected before a Decision Package is built
+- aggregate-cost regression: per-instrument one-way cost at or above 100% is rejected at config validation
 - config replay regression: a later valid execution-policy and strategy-config revision cannot change or invalidate the historical replay
+- ledger replay regression: a later current-config ledger path cannot redirect replay away from the retained config's historical ledger
 - Universe replay regression: each decision retains the exact content-addressed master snapshot, so a later valid future-dated revision cannot change or invalidate the historical replay
 - held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
 - cutoff-coverage regression: event coverage ending at the latest bar cannot authorize held-unit valuation when the decision cutoff is later
