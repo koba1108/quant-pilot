@@ -61,7 +61,10 @@ import {
   resolvePreForwardLedgerPath,
   resolveRepositoryInputFile,
 } from "./runtime-paths.ts";
-import { assertPreForwardArtifactRootBindings } from "./runtime-binding.ts";
+import {
+  resolvePreForwardRuntimeBindings,
+  type PreForwardRuntimeBinding,
+} from "./runtime-binding.ts";
 import {
   assertPreForwardUniverseSnapshotArtifact,
   buildPreForwardUniverseSnapshotArtifact,
@@ -106,6 +109,9 @@ interface LoadedRuntime {
   config: PreForwardConfig;
   configFingerprint: string;
   store: FileArtifactStore;
+  configuredLedgerPath: string;
+  boundLedgerPath: string;
+  bindingByPortfolio: ReadonlyMap<string, PreForwardRuntimeBinding>;
 }
 
 async function resolveConfigPath(path: string, cwd: string): Promise<string> {
@@ -297,17 +303,27 @@ async function loadRuntime(configPath: string, options: RunPreForwardOptions): P
   const cwd = resolve(options.cwd ?? process.cwd());
   const config = await loadPreForwardConfig(configPath, cwd);
   const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, cwd);
-  await assertPreForwardArtifactRootBindings(
+  const configuredLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
+  const bindingResolution = await resolvePreForwardRuntimeBindings(
     cwd,
     config.strategies.map((strategy) => strategy.portfolioId),
     artifactRoot,
+    configuredLedgerPath,
+    options.replayDecisionArtifactId === undefined,
   );
+  if (bindingResolution.freshInitialization) {
+    const ledger = await PreForwardLedger.open(configuredLedgerPath);
+    ledger.close();
+  }
   const store = new FileArtifactStore(artifactRoot);
   return {
     cwd,
     config,
     configFingerprint: sha256Canonical(config),
     store,
+    configuredLedgerPath,
+    boundLedgerPath: bindingResolution.boundLedgerPath,
+    bindingByPortfolio: bindingResolution.bindings,
   };
 }
 
@@ -406,58 +422,61 @@ async function loadRetainedUniverseMaster(
 
 interface RetainedDecisionIndex {
   byRunKey: Map<string, VersionedDataArtifact<PreForwardDecisionPackage>>;
-  ledgerBindingByPortfolio: Map<string, string>;
 }
 
 async function indexRetainedDecisions(
   store: FileArtifactStore,
   cwd: string,
   strategies: readonly PreForwardStrategyConfig[],
+  boundLedgerPath: string,
 ): Promise<RetainedDecisionIndex> {
-  const portfolioIds = new Set(strategies.map((strategy) => strategy.portfolioId));
   const byRunKey = new Map<string, VersionedDataArtifact<PreForwardDecisionPackage>>();
-  const ledgerBindingByPortfolio = new Map<string, string>();
-  for (const artifactId of await store.listArtifactIds()) {
-    const artifact = await store.read<unknown>(artifactId);
-    if (artifact.provenance.artifactKind !== "decision_package") continue;
-    const payload = artifact.payload;
-    if (typeof payload !== "object" || payload === null || Array.isArray(payload)
-      || typeof (payload as { portfolioId?: unknown }).portfolioId !== "string"
-      || typeof (payload as { strategy?: { name?: unknown } }).strategy?.name !== "string"
-      || !portfolioIds.has((payload as { portfolioId: string }).portfolioId)) {
-      continue;
+  const ledger = await PreForwardLedger.openExisting(boundLedgerPath);
+  try {
+    for (const strategyIdentity of strategies) {
+      for (const committedRun of ledger.listExistingRuns(strategyIdentity.portfolioId)) {
+        let decisionArtifact: VersionedDataArtifact<PreForwardDecisionPackage>;
+        try {
+          decisionArtifact = await store.read<PreForwardDecisionPackage>(committedRun.decisionArtifactId);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            throw new Error(
+              `Committed Pre-Forward Decision Package is missing for run ${committedRun.runKey}.`,
+              { cause: error },
+            );
+          }
+          throw error;
+        }
+        if (decisionArtifact.provenance.artifactKind !== "decision_package") {
+          throw new Error("Committed Pre-Forward artifact is not a Decision Package.");
+        }
+        assertPreForwardDecisionPackage(decisionArtifact.payload);
+        const config = await loadRetainedConfig(store, decisionArtifact.payload);
+        const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
+        if (retainedLedgerPath !== boundLedgerPath) {
+          throw new Error(
+            `Retained Decision Package ledger for ${decisionArtifact.payload.portfolioId} `
+              + "does not match its fixed runtime binding.",
+          );
+        }
+        const strategy = config.strategies.find((candidate) => (
+          candidate.portfolioId === decisionArtifact.payload.portfolioId
+            && candidate.strategy === decisionArtifact.payload.strategy.name
+        ));
+        if (strategy === undefined) throw new Error("Retained config has no strategy matching its Decision Package.");
+        assertStoredDecisionIdentity(decisionArtifact.payload, config, strategy, decisionArtifact.payload.asOf);
+        ledger.verifyDecision(decisionArtifact.payload, decisionArtifact.provenance.artifactId);
+        const existing = byRunKey.get(decisionArtifact.payload.runKey);
+        if (existing !== undefined && existing.provenance.artifactId !== decisionArtifact.provenance.artifactId) {
+          throw new Error(`Retained ledger contains duplicate Decision Packages for run ${decisionArtifact.payload.runKey}.`);
+        }
+        byRunKey.set(decisionArtifact.payload.runKey, decisionArtifact);
+      }
     }
-    const decisionArtifact = artifact as VersionedDataArtifact<PreForwardDecisionPackage>;
-    assertPreForwardDecisionPackage(decisionArtifact.payload);
-    const config = await loadRetainedConfig(store, decisionArtifact.payload);
-    const strategy = config.strategies.find((candidate) => (
-      candidate.portfolioId === decisionArtifact.payload.portfolioId
-        && candidate.strategy === decisionArtifact.payload.strategy.name
-    ));
-    if (strategy === undefined) throw new Error("Retained config has no strategy matching its Decision Package.");
-    assertStoredDecisionIdentity(decisionArtifact.payload, config, strategy, decisionArtifact.payload.asOf);
-    const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
-    const retainedLedger = await PreForwardLedger.openExisting(retainedLedgerPath);
-    try {
-      const committedRun = retainedLedger.getExistingRun(decisionArtifact.payload.runKey);
-      if (committedRun?.decisionArtifactId !== decisionArtifact.provenance.artifactId) continue;
-      retainedLedger.verifyDecision(decisionArtifact.payload, decisionArtifact.provenance.artifactId);
-    } finally {
-      retainedLedger.close();
-    }
-    const ledgerBinding = canonicalJson(config.ledgerPath);
-    const existingBinding = ledgerBindingByPortfolio.get(decisionArtifact.payload.portfolioId);
-    if (existingBinding !== undefined && existingBinding !== ledgerBinding) {
-      throw new Error(`Retained Decision Packages disagree on the ledger binding for ${decisionArtifact.payload.portfolioId}.`);
-    }
-    ledgerBindingByPortfolio.set(decisionArtifact.payload.portfolioId, ledgerBinding);
-    const existing = byRunKey.get(decisionArtifact.payload.runKey);
-    if (existing !== undefined && existing.provenance.artifactId !== decisionArtifact.provenance.artifactId) {
-      throw new Error(`Artifact store contains duplicate Decision Packages for run ${decisionArtifact.payload.runKey}.`);
-    }
-    byRunKey.set(decisionArtifact.payload.runKey, decisionArtifact);
+  } finally {
+    ledger.close();
   }
-  return { byRunKey, ledgerBindingByPortfolio };
+  return { byRunKey };
 }
 
 async function replayOne(
@@ -500,7 +519,14 @@ async function replayOne(
     throw new Error("Replayed Pre-Forward Decision Package artifact is not deterministic.");
   }
   const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, runtime.cwd);
-  const retainedLedger = await PreForwardLedger.openExisting(retainedLedgerPath);
+  const binding = runtime.bindingByPortfolio.get(artifact.payload.portfolioId);
+  if (binding === undefined || retainedLedgerPath !== binding.ledgerPath) {
+    throw new Error(
+      `Retained Decision Package ledger for ${artifact.payload.portfolioId} `
+        + "does not match its fixed runtime binding.",
+    );
+  }
+  const retainedLedger = await PreForwardLedger.openExisting(binding.ledgerPath);
   try {
     retainedLedger.verifyDecision(artifact.payload, artifact.provenance.artifactId);
   } finally {
@@ -523,7 +549,12 @@ export async function runPreForward(
   }
 
   for (const strategy of runtime.config.strategies) assertStrategyConfigCurrent(strategy, asOfDate);
-  const retainedIndex = await indexRetainedDecisions(runtime.store, runtime.cwd, runtime.config.strategies);
+  const retainedIndex = await indexRetainedDecisions(
+    runtime.store,
+    runtime.cwd,
+    runtime.config.strategies,
+    runtime.boundLedgerPath,
+  );
   let ledger: PreForwardLedger | undefined;
   try {
     let createdAt: string | undefined;
@@ -540,16 +571,13 @@ export async function runPreForward(
         results.push(await replayOne(runtime, retainedDecision, asOf));
         continue;
       }
-      const retainedLedgerBinding = retainedIndex.ledgerBindingByPortfolio.get(strategy.portfolioId);
-      if (retainedLedgerBinding !== undefined
-        && retainedLedgerBinding !== canonicalJson(runtime.config.ledgerPath)) {
+      if (runtime.configuredLedgerPath !== runtime.boundLedgerPath) {
         throw new Error(
           `Pre-forward ledger relocation for ${strategy.portfolioId} requires an explicit audited migration.`,
         );
       }
       if (ledger === undefined) {
-        const ledgerPath = await resolvePreForwardLedgerPath(runtime.config.ledgerPath, runtime.cwd);
-        ledger = await PreForwardLedger.open(ledgerPath);
+        ledger = await PreForwardLedger.openExistingForAppend(runtime.boundLedgerPath);
       }
       const existing = ledger.getExistingRun(runKey);
       if (existing !== undefined) {

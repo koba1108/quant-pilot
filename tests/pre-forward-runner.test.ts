@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
-import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { FileArtifactStore } from "../src/data/artifact-store.ts";
@@ -389,6 +389,83 @@ test("retained decisions fail closed without recreating a missing ledger", async
         (error: NodeJS.ErrnoException) => error.code === "ENOENT",
       );
     }
+  });
+});
+
+test("a portfolio cannot advance when a committed Decision Package is missing", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, artifactRoot, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const first = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(first.status, "executed");
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+    const missingArtifactPath = join(
+      artifactRoot,
+      `${first.results[0]!.decisionArtifactId.slice("sha256:".length)}.json`,
+    );
+    await rm(missingArtifactPath, { force: true });
+
+    await assert.rejects(
+      () => runPreForward(configPath, "2025-02-03T00:00:00Z", { cwd: root }),
+      /Committed Pre-Forward Decision Package is missing for run/,
+    );
+    await assert.rejects(
+      () => lstat(missingArtifactPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+  });
+});
+
+test("runtime binding pins the ledger before a decision and missing binding evidence blocks", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ root, configPath, ledgerPath }) => {
+    await assert.rejects(() => runPreForward(configPath, fixtureAsOf, { cwd: root }));
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 0, entries: 0 });
+
+    const originalConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    const alternateLedgerPath = join(root, "data/generated/pre-forward/alternate-ledger.sqlite");
+    const alternateConfig = structuredClone(originalConfig);
+    alternateConfig.ledgerPath = { kind: "absolute", path: alternateLedgerPath };
+    await writeFile(configPath, `${JSON.stringify(alternateConfig, null, 2)}\n`, "utf8");
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      /ledger relocation.*explicit audited migration/,
+    );
+    await assert.rejects(
+      () => lstat(alternateLedgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+
+    await writeFile(configPath, `${JSON.stringify(originalConfig, null, 2)}\n`, "utf8");
+    const bindingRoot = join(root, "data/generated/pre-forward/runtime-bindings");
+    const bindingDirectories = (await readdir(bindingRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    assert.equal(bindingDirectories.length, 2);
+    const missingBindingPath = join(bindingRoot, bindingDirectories[0]!, "runtime.binding.json");
+    await rm(missingBindingPath, { force: true });
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      /runtime binding is missing.*explicit audited process/,
+    );
+    await assert.rejects(
+      () => lstat(missingBindingPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 0, entries: 0 });
   });
 });
 

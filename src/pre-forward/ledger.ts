@@ -246,6 +246,14 @@ export class PreForwardLedger implements Disposable {
   }
 
   static async openExisting(path: string): Promise<PreForwardLedger> {
+    return PreForwardLedger.openExistingWithMode(path, true);
+  }
+
+  static async openExistingForAppend(path: string): Promise<PreForwardLedger> {
+    return PreForwardLedger.openExistingWithMode(path, false);
+  }
+
+  private static async openExistingWithMode(path: string, readOnly: boolean): Promise<PreForwardLedger> {
     try {
       await assertPrivateDatabaseFile(path);
     } catch (error) {
@@ -259,12 +267,21 @@ export class PreForwardLedger implements Disposable {
     }
     let database: Database;
     try {
-      database = new Database(path, { readonly: true, strict: true });
+      database = new Database(path, readOnly
+        ? { readonly: true, strict: true }
+        : { create: false, readwrite: true, strict: true });
     } catch (error) {
-      throw new Error("Retained pre-forward ledger could not be opened read-only.", { cause: error });
+      throw new Error(
+        `Retained pre-forward ledger could not be opened ${readOnly ? "read-only" : "without create permission"}.`,
+        { cause: error },
+      );
     }
     try {
       database.run("PRAGMA foreign_keys = ON");
+      if (!readOnly) {
+        database.run("PRAGMA journal_mode = DELETE");
+        database.run("PRAGMA synchronous = FULL");
+      }
       database.run("PRAGMA trusted_schema = OFF");
       database.run("PRAGMA busy_timeout = 5000");
       const ledger = new PreForwardLedger(path, database);
@@ -342,6 +359,30 @@ export class PreForwardLedger implements Disposable {
       beforeStateFingerprint: row.before_state_fingerprint,
       afterStateFingerprint: row.after_state_fingerprint,
     };
+  }
+
+  listExistingRuns(portfolioId: string): readonly PreForwardExistingRun[] {
+    const statement = this.database.prepare<RunRow, [string]>(
+      "SELECT * FROM pre_forward_runs WHERE portfolio_id = ? ORDER BY run_key ASC",
+    );
+    let rows: RunRow[];
+    try {
+      rows = statement.all(portfolioId);
+    } finally {
+      statement.finalize();
+    }
+    return rows.map((row) => ({
+      runKey: row.run_key,
+      portfolioId: row.portfolio_id,
+      decisionArtifactId: row.decision_artifact_id,
+      packageFingerprint: row.package_fingerprint,
+      inputFingerprint: row.input_fingerprint,
+      status: row.status,
+      ledgerHeadBefore: optionalHash(row.ledger_head_before),
+      ledgerHeadAfter: optionalHash(row.ledger_head_after),
+      beforeStateFingerprint: row.before_state_fingerprint,
+      afterStateFingerprint: row.after_state_fingerprint,
+    }));
   }
 
   readPortfolioSnapshot(portfolioId: string, initialCashJpy = 1_000_000): PreForwardLedgerSnapshot {
