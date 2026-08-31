@@ -10,7 +10,7 @@ Snapshot date: 2026-08-31
 - Latest merged PR: #11 (`fix: retain partial credentialed provider evidence`)
 - Latest merged commit: `60aa5266100945583f9dc1b4eff4d9bd70a76b52`
 - Active implementation branch: `ykoba/pre-forward-manual-cycle`
-- Active PR: not yet created at this snapshot
+- Active PR: #12 (`feat: add manual pre-forward virtual cycle`)
 - Active delivery milestone: M2 — Manual Pre-Forward vertical slice
 - Delivery roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
 - Formal Forward-Test clock: not started

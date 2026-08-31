@@ -7,7 +7,7 @@
 - Default branch: `main`
 - Current default branch state: PR #11 (`fix: retain partial credentialed provider evidence`) merged into `main` at `60aa5266100945583f9dc1b4eff4d9bd70a76b52`
 - Active implementation branch: `ykoba/pre-forward-manual-cycle`
-- Active PR: not yet created at this snapshot
+- Active PR: #12 (`feat: add manual pre-forward virtual cycle`)
 - Current delivery milestone: M2 — Manual Pre-Forward vertical slice
 - Current roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
 - Formal Forward-Test clock: not started

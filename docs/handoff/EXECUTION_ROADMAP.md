@@ -203,7 +203,7 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 ## Current checkpoint
 
 - Current milestone: **M2 — Manual Pre-Forward vertical slice**
-- Completed software outcome on `ykoba/pre-forward-manual-cycle`: dedicated explicit-`asOf` CLI, immutable Decision Package, append-only/idempotent virtual ledger, offline replay, Strategy A/B virtual execution, modeled costs, maximum-three-holding enforcement, and authoritative -30% liquidation
+- Completed software outcome on PR #12 (`ykoba/pre-forward-manual-cycle`): dedicated explicit-`asOf` CLI, immutable Decision Package, append-only/idempotent virtual ledger, offline replay, Strategy A/B virtual execution, modeled costs, maximum-three-holding enforcement, and authoritative -30% liquidation
 - Runnable acceptance outcome: the committed synthetic fixture completes both strategies; duplicate invocation and explicit replay add no second transition
 - Retained real-evidence outcome: the existing three-day J-Quants audit is consumed offline but blocks both strategies with no cash movement because history, strict Universe, and execution evidence are incomplete
 - Current external gate: a larger licensed provider capture and the required Point-in-Time Universe/execution inputs need separately scoped approval; no provider response body or key enters Git, and O-001 remains unselected
