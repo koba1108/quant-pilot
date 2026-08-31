@@ -691,6 +691,39 @@ test("the -30% high-water-mark stop liquidates when complete no-event coverage p
     assert.equal(payload.distributionAccounting.coverage, "complete_synthetic_no_events");
     assert.ok(!payload.blockedReasons.includes("portfolio:distribution_event_coverage_missing_for_held_interval"));
     assert.ok(payload.blockedReasons.includes("portfolio:cost_aware_replacement_policy_not_approved"));
+
+    const endedMasterBody = {
+      schemaVersion: universeMaster.schemaVersion,
+      records: universeMaster.records.map((record) => (
+        record.code === "ALPHA" ? { ...record, lastEligibleDate: "2025-01-06" } : record
+      )),
+    };
+    const endedUniverseMaster = {
+      ...endedMasterBody,
+      fingerprint: sha256Canonical(endedMasterBody),
+    };
+    const endedPayload = buildPreForwardDecisionPackage({
+      config,
+      configFingerprint: sha256Canonical(config),
+      configSnapshotArtifactId: configSnapshotArtifactId(config),
+      strategy: config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input,
+      universeMaster: endedUniverseMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(endedUniverseMaster),
+      beforeState,
+    });
+    assert.equal(endedPayload.status, "blocked");
+    const endedDiagnostic = endedPayload.instrumentDiagnostics.find((diagnostic) => diagnostic.code === "ALPHA")!;
+    assert.equal(endedDiagnostic.universeDecision?.reason, "past_last_eligible_date");
+    assert.equal(endedDiagnostic.dataAgeDays, 1);
+    assert.equal(endedPayload.portfolio.beforeValuation, undefined);
+    assert.equal(endedPayload.risk.hardStopTriggered, false);
+    assert.deepEqual(endedPayload.execution.orders, []);
+    assert.deepEqual(endedPayload.portfolio.afterState, beforeState);
+    assert.ok(endedPayload.blockedReasons.includes("ALPHA:universe_past_last_eligible_date"));
+    assert.ok(endedPayload.blockedReasons.includes("portfolio:held_asset_not_executable_at_cutoff"));
   });
 });
 

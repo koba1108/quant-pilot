@@ -61,7 +61,7 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 - `src/pre-forward/market-input.ts`: retained synthetic/credentialed daily-bar input classification without Total Return relabeling; synthetic v3 artifacts explicitly bind complete no-event coverage through the decision cutoff
 - `src/pre-forward/config-snapshot.ts`: exact validated config retention and content-addressed replay binding
 - `src/pre-forward/credentialed-config-snapshot.ts`: exact nested M1 credentialed-sample config retention for path-independent replay
-- `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage-gated valuation, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
+- `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage/Point-in-Time-Universe-gated held valuation, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
 - `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index and append-only hash-chained portfolio transitions
 - `src/pre-forward/runtime-binding.ts`: fixed per-portfolio physical artifact-root binding outside the configurable store, requiring an explicit audited migration before relocation
 - `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, stable artifact-root binding plus ledger-committed retained-artifact run-key lookup before ledger selection, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading
@@ -195,7 +195,7 @@ Active M2 manual Pre-Forward branch verification:
 - retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
 - ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
 - SQLite statements are explicitly finalized and append uses explicit `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` boundaries, so strict ledger shutdown succeeds on both Bun 1.2.14 and the local Bun 1.3.14 runtime
-- hard-stop integration test liquidates a held asset at -30% only when explicit complete synthetic no-event coverage proves the stored unit basis; otherwise it fails closed without a valuation or order
+- hard-stop integration test liquidates a held asset at -30% only when explicit complete synthetic no-event coverage proves the stored unit basis and the holding remains Point-in-Time Universe eligible at the cutoff; otherwise it fails closed without a valuation or order, including after `lastEligibleDate`
 - every output remains `pre_forward_dry_run`, `research_only`, and `formalForwardClockStarted=false`
 
 ## Next blocks

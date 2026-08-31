@@ -969,6 +969,15 @@ export function buildPreForwardDecisionPackage(
     && request.beforeState.positions.every((position) => (
       diagnosticResult.heldEventCoverageReadyCodes.has(position.code)
     ));
+  const diagnosticByCode = new Map(
+    diagnosticResult.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic]),
+  );
+  const heldUniverseExecutableAtCutoff = request.beforeState.positions.every((position) => (
+    diagnosticByCode.get(position.code)?.universeDecision?.eligible === true
+  ));
+  if (request.beforeState.positions.length > 0 && !heldUniverseExecutableAtCutoff) {
+    blockedReasons.push("portfolio:held_asset_not_executable_at_cutoff");
+  }
   const valuationEventCoverage = request.beforeState.positions.length === 0
     ? "not_applicable_initial_cash_cycle" as const
     : heldEventCoverageComplete
@@ -983,7 +992,7 @@ export function buildPreForwardDecisionPackage(
 
   const beforeHwm = request.beforeState.highWaterMarkJpy;
   const rawBeforeValuation = request.beforeState.positions.length === 0
-    || (chronologyValid && heldEventCoverageComplete)
+    || (chronologyValid && heldEventCoverageComplete && heldUniverseExecutableAtCutoff)
     ? valuation(request.beforeState, diagnosticResult.priceByCode, beforeHwm)
     : undefined;
   const beforeHwmAtCutoff = rawBeforeValuation === undefined
@@ -1001,12 +1010,18 @@ export function buildPreForwardDecisionPackage(
   const hardStopBefore = beforeValuation !== undefined
     && beforeValuation.drawdown <= request.config.portfolio.drawdownLimit;
   const forceCash = stoppedBefore || hardStopBefore;
-  const canLiquidate = request.beforeState.positions.every((position) => (
+  const liquidationInputsComplete = request.beforeState.positions.every((position) => (
     diagnosticResult.priceByCode.has(position.code)
       && diagnosticResult.executionByCode.has(position.code)
       && diagnosticResult.costRateByCode.has(position.code)
   ));
-  if (forceCash && !canLiquidate) blockedReasons.push("portfolio:cannot_liquidate_missing_execution_input");
+  const canLiquidate = heldUniverseExecutableAtCutoff && liquidationInputsComplete;
+  if (forceCash && !heldUniverseExecutableAtCutoff) {
+    blockedReasons.push("portfolio:cannot_liquidate_universe_not_executable_at_cutoff");
+  }
+  if (forceCash && !liquidationInputsComplete) {
+    blockedReasons.push("portfolio:cannot_liquidate_missing_execution_input");
+  }
   const uniqueBlockedReasons = [...new Set(blockedReasons)].sort(compareText);
 
   let status: PreForwardDecisionPackage["status"] = "blocked";
@@ -1310,6 +1325,20 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
       || diagnostic.signalDate === undefined && diagnostic.signalBarAvailableAt !== undefined) {
       throw new Error(`Pre-forward bar lifecycle or availability audit is invalid for ${diagnostic.code}.`);
     }
+  }
+  const heldUniverseExecutableAtCutoff = payload.portfolio.beforeState.positions.every((position) => (
+    diagnosticByCode.get(position.code)?.universeDecision?.eligible === true
+  ));
+  if (payload.portfolio.beforeState.positions.length > 0
+    && !heldUniverseExecutableAtCutoff
+    && (payload.status !== "blocked"
+      || payload.portfolio.beforeValuation !== undefined
+      || payload.portfolio.afterValuation !== undefined
+      || payload.risk.hardStopTriggered
+      || payload.execution.orders.length > 0
+      || payload.execution.executions.length > 0
+      || !payload.blockedReasons.includes("portfolio:held_asset_not_executable_at_cutoff"))) {
+    throw new Error("Pre-forward must not value or liquidate a held asset outside its Point-in-Time Universe eligibility.");
   }
   const completeHeldEventCoverage = payload.portfolio.beforeState.positions.length > 0
     && chronological
