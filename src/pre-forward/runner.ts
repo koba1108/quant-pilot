@@ -437,13 +437,7 @@ async function indexRetainedDecisions(
     if (strategy === undefined) throw new Error("Retained config has no strategy matching its Decision Package.");
     assertStoredDecisionIdentity(decisionArtifact.payload, config, strategy, decisionArtifact.payload.asOf);
     const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
-    try {
-      await lstat(retainedLedgerPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw error;
-    }
-    const retainedLedger = await PreForwardLedger.open(retainedLedgerPath);
+    const retainedLedger = await PreForwardLedger.openExisting(retainedLedgerPath);
     try {
       const committedRun = retainedLedger.getExistingRun(decisionArtifact.payload.runKey);
       if (committedRun?.decisionArtifactId !== decisionArtifact.provenance.artifactId) continue;
@@ -506,7 +500,7 @@ async function replayOne(
     throw new Error("Replayed Pre-Forward Decision Package artifact is not deterministic.");
   }
   const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, runtime.cwd);
-  const retainedLedger = await PreForwardLedger.open(retainedLedgerPath);
+  const retainedLedger = await PreForwardLedger.openExisting(retainedLedgerPath);
   try {
     retainedLedger.verifyDecision(artifact.payload, artifact.provenance.artifactId);
   } finally {

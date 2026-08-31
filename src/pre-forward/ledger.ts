@@ -39,6 +39,12 @@ interface EntryRow {
   payload_json: string;
 }
 
+interface TriggerRow {
+  name: string;
+  tbl_name: string;
+  sql: string | null;
+}
+
 export interface PreForwardLedgerTransitionPayload {
   schemaVersion: typeof PRE_FORWARD_LEDGER_TRANSITION_SCHEMA_VERSION;
   runKey: string;
@@ -126,6 +132,27 @@ function expectedEntryHash(
   return sha256Canonical({ portfolioId, sequence, previousEntryHash, payload });
 }
 
+const APPEND_ONLY_TABLES = [
+  "ledger_metadata",
+  "portfolio_ledger_entries",
+  "pre_forward_runs",
+] as const;
+
+function normalizeSql(sql: string): string {
+  return sql.replace(/\s+/g, " ").trim();
+}
+
+function expectedAppendOnlyTriggers(): readonly TriggerRow[] {
+  return APPEND_ONLY_TABLES.flatMap((table) => (["DELETE", "UPDATE"] as const).map((action) => ({
+    name: `${table}_no_${action.toLowerCase()}`,
+    tbl_name: table,
+    sql: normalizeSql(
+      `CREATE TRIGGER ${table}_no_${action.toLowerCase()} BEFORE ${action} ON ${table} `
+        + "BEGIN SELECT RAISE(ABORT, 'pre-forward ledger is append-only'); END",
+    ),
+  }))).sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+}
+
 async function assertPrivateDatabaseFile(path: string): Promise<void> {
   const metadata = await lstat(path);
   if (!metadata.isFile()) throw new Error("Pre-forward ledger must be a regular file.");
@@ -208,20 +235,41 @@ export class PreForwardLedger implements Disposable {
         "INSERT OR IGNORE INTO ledger_metadata (key, value) VALUES ('schema_version', ?)",
         [PRE_FORWARD_LEDGER_SCHEMA_VERSION],
       );
-      const metadataStatement = database.prepare<{ value: string }, [string]>(
-        "SELECT value FROM ledger_metadata WHERE key = ?",
-      );
-      let metadata: { value: string } | null;
-      try {
-        metadata = metadataStatement.get("schema_version");
-      } finally {
-        metadataStatement.finalize();
-      }
-      if (metadata?.value !== PRE_FORWARD_LEDGER_SCHEMA_VERSION) {
-        throw new Error(`Unsupported pre-forward ledger schema: ${metadata?.value ?? "missing"}.`);
-      }
       const ledger = new PreForwardLedger(path, database);
+      ledger.assertSchemaVersion();
       ledger.assertAppendOnlyGuards();
+      return ledger;
+    } catch (error) {
+      database.close(true);
+      throw error;
+    }
+  }
+
+  static async openExisting(path: string): Promise<PreForwardLedger> {
+    try {
+      await assertPrivateDatabaseFile(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(
+          "Retained pre-forward ledger is missing; execution requires explicit audited recovery.",
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+    let database: Database;
+    try {
+      database = new Database(path, { readonly: true, strict: true });
+    } catch (error) {
+      throw new Error("Retained pre-forward ledger could not be opened read-only.", { cause: error });
+    }
+    try {
+      database.run("PRAGMA foreign_keys = ON");
+      database.run("PRAGMA trusted_schema = OFF");
+      database.run("PRAGMA busy_timeout = 5000");
+      const ledger = new PreForwardLedger(path, database);
+      ledger.assertSchemaVersion();
+      ledger.assertAppendOnlyGuardDefinitions();
       return ledger;
     } catch (error) {
       database.close(true);
@@ -235,6 +283,40 @@ export class PreForwardLedger implements Disposable {
 
   [Symbol.dispose](): void {
     this.close();
+  }
+
+  private assertSchemaVersion(): void {
+    const statement = this.database.prepare<{ value: string }, [string]>(
+      "SELECT value FROM ledger_metadata WHERE key = ?",
+    );
+    let metadata: { value: string } | null;
+    try {
+      metadata = statement.get("schema_version");
+    } finally {
+      statement.finalize();
+    }
+    if (metadata?.value !== PRE_FORWARD_LEDGER_SCHEMA_VERSION) {
+      throw new Error(`Unsupported pre-forward ledger schema: ${metadata?.value ?? "missing"}.`);
+    }
+  }
+
+  private assertAppendOnlyGuardDefinitions(): void {
+    const statement = this.database.prepare<TriggerRow, [string, string, string]>(`
+      SELECT name, tbl_name, sql
+      FROM sqlite_master
+      WHERE type = 'trigger' AND tbl_name IN (?, ?, ?)
+      ORDER BY name ASC
+    `);
+    let rows: TriggerRow[];
+    try {
+      rows = statement.all(...APPEND_ONLY_TABLES);
+    } finally {
+      statement.finalize();
+    }
+    const normalized = rows.map((row) => ({ ...row, sql: row.sql === null ? null : normalizeSql(row.sql) }));
+    if (canonicalJson(normalized) !== canonicalJson(expectedAppendOnlyTriggers())) {
+      throw new Error("Pre-forward append-only trigger definitions are missing or invalid.");
+    }
   }
 
   getExistingRun(runKey: string): PreForwardExistingRun | undefined {
@@ -477,6 +559,7 @@ export class PreForwardLedger implements Disposable {
 
   /** Test/audit hook: SQLite triggers must reject this mutation. */
   assertAppendOnlyGuards(): void {
+    this.assertAppendOnlyGuardDefinitions();
     const statement = this.database.prepare<{ value: string }, [string]>(
       "SELECT value FROM ledger_metadata WHERE key = ?",
     );

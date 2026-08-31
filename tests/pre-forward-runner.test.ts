@@ -352,6 +352,46 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
   });
 });
 
+test("retained decisions fail closed without recreating a missing ledger", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const first = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(first.status, "executed");
+    await rm(ledgerPath, { force: true });
+
+    for (const request of [
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      () => runPreForward(configPath, "2025-02-03T00:00:00Z", { cwd: root }),
+      () => runPreForward(configPath, fixtureAsOf, {
+        cwd: root,
+        replayDecisionArtifactId: first.results[0]!.decisionArtifactId,
+      }),
+    ]) {
+      await assert.rejects(
+        request,
+        /Retained pre-forward ledger is missing; execution requires explicit audited recovery/,
+      );
+      await assert.rejects(
+        () => lstat(ledgerPath),
+        (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+      );
+    }
+  });
+});
+
 test("D-009 cost-benefit gate keeps marginal synthetic trades in cash", async () => {
   await withTemporaryRuntime(async (value, root) => {
     for (const instrument of value.execution.instruments as MutableConfig[]) {
