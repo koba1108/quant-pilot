@@ -121,6 +121,7 @@ function seriesFromFixture(
     retrievedAt: artifact.provenance.retrievedAt,
     returnBasis: artifact.payload.returnClassification.adjustedClose,
     availabilityBasis: artifact.payload.availabilityBasis,
+    returnEventCoverage: artifact.payload.returnEventCoverage,
   };
 }
 

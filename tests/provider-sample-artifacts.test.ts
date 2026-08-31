@@ -295,6 +295,32 @@ test("rejects normalized bars outside the declared sample range", async () => {
   );
 });
 
+test("rejects a captured daily-bars artifact whose provenance predates a contained bar", async () => {
+  const raw = buildRawProviderResponseArtifact(await capture(), metadata);
+  const daily = buildCapturedDailyBarsArtifact(
+    [{ code: "JPX:1308", tradingDate: "2025-01-06", close: 1000, adjustedClose: 1000 }],
+    [raw],
+    metadata,
+  );
+  const predating = buildVersionedDataArtifact({
+    artifactKind: "daily_bars",
+    payload: daily.payload,
+    source: daily.provenance.source,
+    dataset: daily.provenance.dataset,
+    sourceVersion: daily.provenance.sourceVersion,
+    adapterVersion: daily.provenance.adapterVersion,
+    observedAt: "2025-01-05T23:59:59Z",
+    availableAt: daily.provenance.availableAt,
+    retrievedAt: daily.provenance.retrievedAt,
+    request: { stableId: metadata.stableId, range: metadata.range },
+    recordId: daily.provenance.recordId,
+  });
+  assert.throws(
+    () => assertCapturedDailyBarsArtifact(predating),
+    /cannot predate a contained trading date/,
+  );
+});
+
 test("rejects tampered daily artifact payload and tampered observation parent provenance", async () => {
   const raw = buildRawProviderResponseArtifact(await capture(), metadata);
   const daily = buildCapturedDailyBarsArtifact(

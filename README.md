@@ -176,7 +176,7 @@ bun run pre-forward \
   --replay-decision=sha256:<decision-package-id>
 ```
 
-成功するfixtureは合成データであり、投資成績やM2の実データexit criterionを証明しない。D-009の売買gateを検証するため、fixtureは合成の期待便益1,000 bpsと安全余裕25 bpsを明示しているが、これはO-005/O-006の採用値ではない。通常注文は期待便益が片道執行コスト＋安全余裕を厳密に上回る場合だけ生成し、保有銘柄の通常入替はO-006承認までblocked、-30%強制清算だけはD-010として優先する。既存のJ-Quants live auditは3日分しかないため、履歴・Universe・執行前提不足を明示して終了コード1、現金維持、state transitionなしになる。全出力は`pre_forward_dry_run` / `research_only` / `formalForwardClockStarted=false`で、実注文や正式Forward Testではない。仕様と現状の境界は [`docs/pre-forward.md`](./docs/pre-forward.md) を参照する。
+成功するfixtureは合成データであり、投資成績やM2の実データexit criterionを証明しない。D-009の売買gateを検証するため、fixtureは合成の期待便益1,000 bpsと安全余裕25 bpsを明示しているが、これはO-005/O-006の採用値ではない。通常注文は期待便益が片道執行コスト＋安全余裕を厳密に上回る場合だけ生成し、保有銘柄の通常入替はO-006承認までblocked、-30%強制清算だけはD-010として優先する。ただし保有unitをsplit後価格で誤評価しないよう、強制清算にも対象期間のCorporate Action／分配coverageを要求する。fixtureだけは明示的な「完全・イベントなし」合成証跡を持ち、実データで証跡がなければ評価も注文も行わない。既存のJ-Quants live auditは3日分しかないため、履歴・Universe・執行前提不足を明示して終了コード1、現金維持、state transitionなしになる。全出力は`pre_forward_dry_run` / `research_only` / `formalForwardClockStarted=false`で、実注文や正式Forward Testではない。仕様と現状の境界は [`docs/pre-forward.md`](./docs/pre-forward.md) を参照する。
 
 ## Strategy A/B robustness grid
 

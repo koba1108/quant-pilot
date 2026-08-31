@@ -26,8 +26,8 @@ import {
 import type { LoadedPreForwardInput, LoadedPreForwardSeries } from "./market-input.ts";
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
-export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v2" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v2" as const;
+export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v3" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v3" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 
@@ -82,6 +82,7 @@ export interface PreForwardInstrumentDiagnostic {
   artifactAvailableAt?: string;
   availabilityBasis?: LoadedPreForwardSeries["availabilityBasis"];
   returnBasis?: LoadedPreForwardSeries["returnBasis"];
+  returnEventCoverage?: LoadedPreForwardSeries["returnEventCoverage"];
   totalBarCount: number;
   usableBarCount: number;
   excludedFutureBarCount: number;
@@ -201,7 +202,7 @@ export interface PreForwardDecisionPackage {
   };
   distributionAccounting: {
     policyId: typeof PRE_FORWARD_DISTRIBUTION_POLICY_ID;
-    coverage: "not_applicable_initial_cash_cycle" | "missing_event_artifacts";
+    coverage: "not_applicable_initial_cash_cycle" | "complete_synthetic_no_events" | "missing_event_artifacts";
     openingReceivables: readonly VirtualDistributionReceivable[];
     createdReceivables: readonly [];
     settlements: readonly DistributionSettlement[];
@@ -216,6 +217,10 @@ export interface PreForwardDecisionPackage {
     hardStopPhase?: "before_rebalance" | "after_cost";
     stoppedBefore: boolean;
     stoppedAfter: boolean;
+    valuationEventCoverage:
+      | "not_applicable_initial_cash_cycle"
+      | "complete_synthetic_no_events"
+      | "missing_event_artifacts";
   };
   execution: {
     policyVersion: string;
@@ -402,6 +407,25 @@ interface DiagnosticBuildResult {
   priceByCode: Map<string, number>;
   executionByCode: Map<string, PreForwardExecutionInstrumentConfig>;
   costRateByCode: Map<string, number>;
+  heldEventCoverageReadyCodes: Set<string>;
+}
+
+function heldIntervalHasCompleteSyntheticEventCoverage(
+  series: LoadedPreForwardSeries | undefined,
+  previousAsOf: string | undefined,
+  latestTradingDate: string | undefined,
+  asOf: string,
+): boolean {
+  if (series === undefined || previousAsOf === undefined || latestTradingDate === undefined) return false;
+  const coverage = series.returnEventCoverage;
+  if (coverage === undefined) return false;
+  const previousDate = previousAsOf.slice(0, 10);
+  return coverage.basis === "synthetic_complete_no_events_v1"
+    && coverage.corporateActions === "complete"
+    && coverage.distributions === "complete"
+    && coverage.startDate <= previousDate
+    && coverage.endDate >= latestTradingDate
+    && Date.parse(coverage.availableAt) <= Date.parse(asOf);
 }
 
 function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asOfDate: string): DiagnosticBuildResult {
@@ -412,6 +436,8 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
   }
   const executionByCode = new Map(request.config.execution.instruments.map((item) => [item.code, item]));
   const stateCodes = request.beforeState.positions.map((position) => position.code);
+  const heldCodes = new Set(stateCodes);
+  const heldEventCoverageReadyCodes = new Set<string>();
   const codes = [...new Set([...seriesByCode.keys(), ...executionByCode.keys(), ...stateCodes])].sort(compareText);
   const priceByCode = new Map<string, number>();
   const costRateByCode = new Map<string, number>();
@@ -444,6 +470,20 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       dataAgeDays = calendarAgeDays(latest.tradingDate, asOfDate);
       if (dataAgeDays < 0) blockers.push("future_market_data");
       if (dataAgeDays > request.config.signal.maxDataAgeDays) blockers.push("stale_market_data");
+    }
+    if (heldCodes.has(code)
+      && request.beforeState.lastAsOf !== undefined
+      && Date.parse(request.asOf) > Date.parse(request.beforeState.lastAsOf)) {
+      if (heldIntervalHasCompleteSyntheticEventCoverage(
+        series,
+        request.beforeState.lastAsOf,
+        latest?.tradingDate,
+        request.asOf,
+      )) {
+        heldEventCoverageReadyCodes.add(code);
+      } else {
+        blockers.push("held_interval_return_event_coverage_missing");
+      }
     }
     let universeDecision: UniverseMembershipDecision | undefined;
     if (request.universeMaster === undefined) {
@@ -496,6 +536,7 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       artifactAvailableAt: series?.availableAt,
       availabilityBasis: series?.availabilityBasis,
       returnBasis: series?.returnBasis,
+      returnEventCoverage: series?.returnEventCoverage,
       totalBarCount: series?.bars.length ?? 0,
       usableBarCount: bars.length,
       excludedFutureBarCount,
@@ -509,7 +550,7 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       blockers: uniqueBlockers,
     };
   });
-  return { diagnostics, priceByCode, executionByCode, costRateByCode };
+  return { diagnostics, priceByCode, executionByCode, costRateByCode, heldEventCoverageReadyCodes };
 }
 
 function normalizedBps(value: number): number {
@@ -822,7 +863,9 @@ export function buildPreForwardDecisionPackage(
   const blockedReasons = diagnosticResult.diagnostics.flatMap((diagnostic) => (
     diagnostic.blockers.map((blocker) => `${diagnostic.code}:${blocker}`)
   ));
-  if (request.beforeState.lastAsOf !== undefined && Date.parse(request.asOf) <= Date.parse(request.beforeState.lastAsOf)) {
+  const chronologyValid = request.beforeState.lastAsOf === undefined
+    || Date.parse(request.asOf) > Date.parse(request.beforeState.lastAsOf);
+  if (!chronologyValid) {
     blockedReasons.push("portfolio:as_of_not_after_last_state");
   }
   if (request.beforeState.lastAsOf !== undefined
@@ -833,23 +876,36 @@ export function buildPreForwardDecisionPackage(
   if (request.beforeState.positions.length > 0) {
     blockedReasons.push("portfolio:cost_aware_replacement_policy_not_approved");
   }
-  const distributionCoverage = request.beforeState.positions.length === 0
+  const heldEventCoverageComplete = request.beforeState.positions.length > 0
+    && request.beforeState.positions.every((position) => (
+      diagnosticResult.heldEventCoverageReadyCodes.has(position.code)
+    ));
+  const valuationEventCoverage = request.beforeState.positions.length === 0
     ? "not_applicable_initial_cash_cycle" as const
-    : "missing_event_artifacts" as const;
-  if (distributionCoverage === "missing_event_artifacts"
-    && request.beforeState.lastAsOf !== undefined
-    && Date.parse(request.asOf) > Date.parse(request.beforeState.lastAsOf)) {
+    : heldEventCoverageComplete
+      ? "complete_synthetic_no_events" as const
+      : "missing_event_artifacts" as const;
+  const distributionCoverage = valuationEventCoverage;
+  if (valuationEventCoverage === "missing_event_artifacts") {
     blockedReasons.push("portfolio:distribution_event_coverage_missing_for_held_interval");
+    blockedReasons.push("portfolio:corporate_action_unit_coverage_missing_for_held_interval");
   }
   blockedReasons.sort(compareText);
 
   const beforeHwm = request.beforeState.highWaterMarkJpy;
-  const rawBeforeValuation = valuation(request.beforeState, diagnosticResult.priceByCode, beforeHwm);
+  const rawBeforeValuation = request.beforeState.positions.length === 0
+    || (chronologyValid && heldEventCoverageComplete)
+    ? valuation(request.beforeState, diagnosticResult.priceByCode, beforeHwm)
+    : undefined;
   const beforeHwmAtCutoff = rawBeforeValuation === undefined
     ? beforeHwm
     : Math.max(beforeHwm, rawBeforeValuation.totalEquityJpy);
-  const beforeValuation = valuation(request.beforeState, diagnosticResult.priceByCode, beforeHwmAtCutoff);
-  if (request.beforeState.positions.length > 0 && beforeValuation === undefined) {
+  const beforeValuation = rawBeforeValuation === undefined
+    ? undefined
+    : valuation(request.beforeState, diagnosticResult.priceByCode, beforeHwmAtCutoff);
+  if (request.beforeState.positions.length > 0
+    && valuationEventCoverage !== "missing_event_artifacts"
+    && beforeValuation === undefined) {
     blockedReasons.push("portfolio:missing_valuation_price_for_held_asset");
   }
   const stoppedBefore = request.beforeState.stopped;
@@ -865,7 +921,7 @@ export function buildPreForwardDecisionPackage(
   const uniqueBlockedReasons = [...new Set(blockedReasons)].sort(compareText);
 
   let status: PreForwardDecisionPackage["status"] = "blocked";
-  let effectiveTargetWeights: Weights = benefitGatedTargetWeights;
+  let effectiveTargetWeights: Weights = forceCash ? { CASH: 1 } : benefitGatedTargetWeights;
   let afterState = request.beforeState;
   let afterValuation: PreForwardPortfolioValuation | undefined;
   let settlements: DistributionSettlement[] = [];
@@ -874,7 +930,12 @@ export function buildPreForwardDecisionPackage(
   let hardStopPhase: PreForwardDecisionPackage["risk"]["hardStopPhase"];
   let hardStopTriggered = false;
 
-  const safetyLiquidationAllowed = forceCash && canLiquidate && beforeValuation !== undefined;
+  const safetyLiquidationAllowed = forceCash
+    && request.beforeState.positions.length > 0
+    && chronologyValid
+    && valuationEventCoverage !== "missing_event_artifacts"
+    && canLiquidate
+    && beforeValuation !== undefined;
   if (safetyLiquidationAllowed || uniqueBlockedReasons.length === 0) {
     status = "executed";
     const settled = settleReceivables(request.beforeState, asOfDate);
@@ -1039,6 +1100,7 @@ export function buildPreForwardDecisionPackage(
       hardStopPhase,
       stoppedBefore,
       stoppedAfter: afterState.stopped,
+      valuationEventCoverage,
     },
     execution: {
       policyVersion: request.config.execution.policyVersion,
@@ -1097,6 +1159,45 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
   if (payload.portfolio.beforeState.portfolioId !== payload.portfolioId
     || payload.portfolio.afterState.portfolioId !== payload.portfolioId) {
     throw new Error("Pre-forward Decision Package portfolio states are not bound to portfolioId.");
+  }
+  const chronological = payload.portfolio.beforeState.lastAsOf === undefined
+    || Date.parse(payload.asOf) > Date.parse(payload.portfolio.beforeState.lastAsOf);
+  if (!chronological
+    && (payload.status !== "blocked" || !payload.blockedReasons.includes("portfolio:as_of_not_after_last_state"))) {
+    throw new Error("Pre-forward safety handling must not bypass portfolio chronology.");
+  }
+  const diagnosticByCode = new Map(payload.instrumentDiagnostics.map((diagnostic) => [diagnostic.code, diagnostic]));
+  const completeHeldEventCoverage = payload.portfolio.beforeState.positions.length > 0
+    && chronological
+    && payload.portfolio.beforeState.lastAsOf !== undefined
+    && payload.portfolio.beforeState.positions.every((position) => {
+      const diagnostic = diagnosticByCode.get(position.code);
+      const coverage = diagnostic?.returnEventCoverage;
+      return diagnostic?.signalDate !== undefined
+        && coverage?.basis === "synthetic_complete_no_events_v1"
+        && coverage.corporateActions === "complete"
+        && coverage.distributions === "complete"
+        && coverage.startDate <= payload.portfolio.beforeState.lastAsOf!.slice(0, 10)
+        && coverage.endDate >= diagnostic.signalDate
+        && Date.parse(coverage.availableAt) <= Date.parse(payload.asOf);
+    });
+  const expectedValuationEventCoverage = payload.portfolio.beforeState.positions.length === 0
+    ? "not_applicable_initial_cash_cycle"
+    : completeHeldEventCoverage
+      ? "complete_synthetic_no_events"
+      : "missing_event_artifacts";
+  if (payload.risk.valuationEventCoverage !== expectedValuationEventCoverage
+    || payload.distributionAccounting.coverage !== expectedValuationEventCoverage) {
+    throw new Error("Pre-forward holding-period event coverage is inconsistent with its diagnostics.");
+  }
+  if (expectedValuationEventCoverage === "missing_event_artifacts"
+    && (payload.status !== "blocked"
+      || payload.portfolio.beforeValuation !== undefined
+      || payload.risk.hardStopTriggered
+      || payload.execution.orders.some((order) => order.reason !== "rebalance")
+      || !payload.blockedReasons.includes("portfolio:corporate_action_unit_coverage_missing_for_held_interval")
+      || !payload.blockedReasons.includes("portfolio:distribution_event_coverage_missing_for_held_interval"))) {
+    throw new Error("Pre-forward must fail closed before valuing held units without complete return-event coverage.");
   }
   if (payload.risk.maxHoldings < 1 || payload.risk.maxHoldings > MAX_PORTFOLIO_ASSETS
     || payload.portfolio.afterState.positions.length > payload.risk.maxHoldings) {

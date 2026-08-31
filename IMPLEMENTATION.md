@@ -58,8 +58,8 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 ### Manual Pre-Forward
 
 - `src/pre-forward/config.ts`: strict `pre-forward-config-v2`, version validity, JPY-only M2 capability, positive D-009 safety margin, explicit synthetic benefit evidence, and approved risk constraints
-- `src/pre-forward/market-input.ts`: retained synthetic/credentialed daily-bar input classification without Total Return relabeling
-- `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
+- `src/pre-forward/market-input.ts`: retained synthetic/credentialed daily-bar input classification without Total Return relabeling; synthetic v2 artifacts explicitly bind complete no-event coverage to their bar interval
+- `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage-gated valuation, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
 - `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index and append-only hash-chained portfolio transitions
 - `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, one normal run per portfolio/month, actual package-creation provenance, and fail-closed credentialed-audit loading
 - `src/pre-forward/fixture-seeder.ts`: deterministic content-addressed fixture artifacts
@@ -170,7 +170,7 @@ Merged PR #11 M1 credentialed-sample verification:
 
 Active M2 manual Pre-Forward branch verification:
 
-- `bun test`: 206 pass / 0 fail
+- `bun test`: 210 pass / 0 fail
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
@@ -178,9 +178,11 @@ Active M2 manual Pre-Forward branch verification:
 - D-009 regression: marginal synthetic expected benefit produces no order; each executed ordinary order records a strict benefit-above-cost-plus-positive-margin pass
 - intramonth regression: a different cutoff in an already recorded calendar month is rejected rather than creating a second run
 - provenance regression: market `asOf` remains distinct from actual Decision Package `createdAt`, and replay preserves both timestamps
+- Point-in-Time artifact regression: a daily-bars artifact cannot claim observation/availability before one of its contained trading dates
+- held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
 - retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
 - ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
-- hard-stop integration test liquidates a held asset at -30% even when a non-safety data gap would otherwise block rebalancing
+- hard-stop integration test liquidates a held asset at -30% only when explicit complete synthetic no-event coverage proves the stored unit basis; otherwise it fails closed without a valuation or order
 - every output remains `pre_forward_dry_run`, `research_only`, and `formalForwardClockStarted=false`
 
 ## Next blocks
@@ -188,5 +190,5 @@ Active M2 manual Pre-Forward branch verification:
 1. Follow `docs/handoff/EXECUTION_ROADMAP.md`; do not begin work outside its active milestone
 2. M2: review and merge the manual Pre-Forward software vertical slice; do not call the synthetic success an M2 real-data completion
 3. M2 evidence gate: after separate scope approval, retain enough licensed J-Quants history plus strict Point-in-Time Universe and versioned execution assumptions for one real virtual-money cycle
-4. Connect retained distribution events before advancing a held portfolio to a later `asOf`; until then the runner must continue to block rather than assume no distribution
+4. Connect retained distribution and Corporate Action events before advancing a held portfolio to a later `asOf`; until then the runner must continue to block rather than assume no event or misvalue split-adjusted units
 5. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates

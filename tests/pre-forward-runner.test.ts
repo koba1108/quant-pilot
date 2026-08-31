@@ -68,6 +68,49 @@ function databaseCounts(path: string): { runs: number; entries: number } {
   }
 }
 
+async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: string): Promise<{
+  config: ReturnType<typeof validatePreForwardConfig>;
+  input: LoadedPreForwardInput;
+  universeMaster: Awaited<ReturnType<typeof loadUniverseMaster>>;
+}> {
+  const config = validatePreForwardConfig(JSON.parse(await readFile(configPath, "utf8")) as unknown);
+  const store = new FileArtifactStore(artifactRoot);
+  const artifacts = await Promise.all(config.input.kind === "daily_bars_manifest"
+    ? config.input.dailyBarsArtifactIds.map((id) => store.read<PreForwardDailyBarsPayload>(id))
+    : []);
+  const series = artifacts.map((artifact) => {
+    assertPreForwardDailyBarsArtifact(artifact);
+    return {
+      code: artifact.payload.stableId,
+      currency: artifact.payload.currency,
+      bars: artifact.payload.bars,
+      artifactId: artifact.provenance.artifactId,
+      source: artifact.provenance.source,
+      dataset: artifact.provenance.dataset,
+      sourceVersion: artifact.provenance.sourceVersion,
+      adapterVersion: artifact.provenance.adapterVersion,
+      observedAt: artifact.provenance.observedAt,
+      availableAt: artifact.provenance.availableAt,
+      retrievedAt: artifact.provenance.retrievedAt,
+      returnBasis: artifact.payload.returnClassification.adjustedClose,
+      availabilityBasis: artifact.payload.availabilityBasis,
+      returnEventCoverage: artifact.payload.returnEventCoverage,
+    } as const;
+  });
+  return {
+    config,
+    input: {
+      evidenceTier: "synthetic_fixture",
+      disposition: "research_only",
+      inputArtifactIds: artifacts.map((artifact) => artifact.provenance.artifactId).sort(),
+      series,
+      missingCapabilities: ["not_credentialed_provider_evidence"],
+      limitations: ["test"],
+    },
+    universeMaster: await loadUniverseMaster(join(repositoryRoot, config.universe.masterPath!)),
+  };
+}
+
 test("manual pre-forward fixture executes Trend/Rotation, persists decisions, replays, and reruns idempotently", async () => {
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot, ledgerPath }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
@@ -228,40 +271,10 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
   });
 });
 
-test("the -30% high-water-mark stop liquidates even when distribution evidence is incomplete", async () => {
+test("the -30% high-water-mark stop liquidates when complete no-event coverage proves held units", async () => {
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
-    const config = validatePreForwardConfig(JSON.parse(await readFile(configPath, "utf8")) as unknown);
-    const store = new FileArtifactStore(artifactRoot);
-    const artifacts = await Promise.all(config.input.kind === "daily_bars_manifest"
-      ? config.input.dailyBarsArtifactIds.map((id) => store.read<PreForwardDailyBarsPayload>(id))
-      : []);
-    const series = artifacts.map((artifact) => {
-      assertPreForwardDailyBarsArtifact(artifact);
-      return {
-        code: artifact.payload.stableId,
-        currency: artifact.payload.currency,
-        bars: artifact.payload.bars,
-        artifactId: artifact.provenance.artifactId,
-        source: artifact.provenance.source,
-        dataset: artifact.provenance.dataset,
-        sourceVersion: artifact.provenance.sourceVersion,
-        adapterVersion: artifact.provenance.adapterVersion,
-        observedAt: artifact.provenance.observedAt,
-        availableAt: artifact.provenance.availableAt,
-        retrievedAt: artifact.provenance.retrievedAt,
-        returnBasis: artifact.payload.returnClassification.adjustedClose,
-        availabilityBasis: artifact.payload.availabilityBasis,
-      } as const;
-    });
-    const input: LoadedPreForwardInput = {
-      evidenceTier: "synthetic_fixture",
-      disposition: "research_only",
-      inputArtifactIds: artifacts.map((artifact) => artifact.provenance.artifactId).sort(),
-      series,
-      missingCapabilities: ["not_credentialed_provider_evidence"],
-      limitations: ["test"],
-    };
+    const { config, input, universeMaster } = await loadSyntheticDecisionFixture(configPath, artifactRoot);
     const beforeState = buildVirtualPortfolioState({
       portfolioId: config.strategies[0].portfolioId,
       cashJpy: 0,
@@ -278,7 +291,7 @@ test("the -30% high-water-mark stop liquidates even when distribution evidence i
       asOf: fixtureAsOf,
       createdAt: fixtureCreatedAt,
       input,
-      universeMaster: await loadUniverseMaster(join(repositoryRoot, config.universe.masterPath!)),
+      universeMaster,
       beforeState,
     });
     assert.equal(payload.status, "executed");
@@ -292,7 +305,93 @@ test("the -30% high-water-mark stop liquidates even when distribution evidence i
     assert.equal(payload.execution.orders[0]!.riskOverride, "d010_mandatory_liquidation");
     assert.equal(payload.execution.orders[0]!.benefitGate, undefined);
     assert.ok(payload.execution.totalModeledCostJpy > 0);
-    assert.ok(payload.blockedReasons.includes("portfolio:distribution_event_coverage_missing_for_held_interval"));
+    assert.equal(payload.risk.valuationEventCoverage, "complete_synthetic_no_events");
+    assert.equal(payload.distributionAccounting.coverage, "complete_synthetic_no_events");
+    assert.ok(!payload.blockedReasons.includes("portfolio:distribution_event_coverage_missing_for_held_interval"));
     assert.ok(payload.blockedReasons.includes("portfolio:cost_aware_replacement_policy_not_approved"));
   });
+});
+
+test("held-unit valuation fails closed when split and distribution coverage are unavailable", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
+    const input: LoadedPreForwardInput = {
+      ...fixture.input,
+      series: fixture.input.series.map(({ returnEventCoverage: _coverage, ...series }) => series),
+    };
+    const beforeState = buildVirtualPortfolioState({
+      portfolioId: fixture.config.strategies[0].portfolioId,
+      cashJpy: 0,
+      positions: [{ code: "ALPHA", units: 1_000, averageCostJpy: 1_000 }],
+      distributionReceivables: [],
+      highWaterMarkJpy: 1_000_000,
+      stopped: false,
+      lastAsOf: "2025-01-01T00:00:00Z",
+    });
+    const payload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      strategy: fixture.config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input,
+      universeMaster: fixture.universeMaster,
+      beforeState,
+    });
+    assert.equal(payload.status, "blocked");
+    assert.equal(payload.risk.valuationEventCoverage, "missing_event_artifacts");
+    assert.equal(payload.portfolio.beforeValuation, undefined);
+    assert.equal(payload.risk.hardStopTriggered, false);
+    assert.deepEqual(payload.execution.orders, []);
+    assert.deepEqual(payload.portfolio.afterState, beforeState);
+    assert.ok(payload.blockedReasons.includes("ALPHA:held_interval_return_event_coverage_missing"));
+    assert.ok(payload.blockedReasons.includes("portfolio:corporate_action_unit_coverage_missing_for_held_interval"));
+    assert.ok(payload.blockedReasons.includes("portfolio:distribution_event_coverage_missing_for_held_interval"));
+  });
+});
+
+test("a stopped portfolio cannot bypass chronology during a safety cycle", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
+    const beforeState = buildVirtualPortfolioState({
+      portfolioId: fixture.config.strategies[0].portfolioId,
+      cashJpy: 650_000,
+      positions: [],
+      distributionReceivables: [],
+      highWaterMarkJpy: 1_000_000,
+      stopped: true,
+      stoppedAt: "2025-02-01T00:00:00Z",
+      lastAsOf: "2025-02-01T00:00:00Z",
+    });
+    const payload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      strategy: fixture.config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: "2025-02-02T00:00:00Z",
+      input: fixture.input,
+      universeMaster: fixture.universeMaster,
+      beforeState,
+    });
+    assert.equal(payload.status, "blocked");
+    assert.ok(payload.blockedReasons.includes("portfolio:as_of_not_after_last_state"));
+    assert.deepEqual(payload.execution.orders, []);
+    assert.deepEqual(payload.portfolio.afterState, beforeState);
+    assert.equal(payload.portfolio.afterState.lastAsOf, "2025-02-01T00:00:00Z");
+  });
+});
+
+test("pre-forward daily-bar artifacts cannot claim observation before a contained bar", () => {
+  assert.throws(
+    () => buildPreForwardDailyBarsFixture({
+      code: "ALPHA",
+      bars: [{ code: "ALPHA", tradingDate: "2025-01-07", close: 100, adjustedClose: 100 }],
+      observedAt: "2025-01-06T15:00:00Z",
+      availableAt: "2025-01-08T00:00:00Z",
+      retrievedAt: "2025-01-08T00:00:00Z",
+    }),
+    /cannot predate a contained trading date/,
+  );
 });

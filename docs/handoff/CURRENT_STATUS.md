@@ -130,13 +130,14 @@ The committed machine snapshot contains no downloaded market data, credentials, 
 - The successful synthetic cycle creates three virtual holdings and three buy orders per strategy, applies JPY 1,845 modeled cost, and ends with JPY 1,057 cash. These identical strategy results are a property of the deliberately identical fixture, not comparative performance evidence.
 - Repeating the same command returns the same Decision Package IDs with `idempotent=true` and no additional ledger transition, order, or cash movement.
 - `--replay-decision=sha256:<id>` rebuilds the canonical Decision Package from retained inputs/opening state, checks artifact and ledger binding, and applies no transition.
-- Each immutable `pre-forward-decision-package-v2` records the explicit cutoff and actual creation timestamp, data classifications and artifact IDs, strict Universe decisions, instrument blockers, Strategy A/B ranking and weights, D-009 expected-benefit/cost decisions, virtual orders/executions, modeled costs, before/after state, high-water mark, distribution-accounting coverage, and ledger head.
+- Each immutable `pre-forward-decision-package-v3` records the explicit cutoff and actual creation timestamp, data classifications and artifact IDs, strict Universe decisions, instrument blockers, Strategy A/B ranking and weights, D-009 expected-benefit/cost decisions, holding-period event coverage, virtual orders/executions, modeled costs, before/after state, high-water mark, distribution-accounting coverage, and ledger head.
 - Bun SQLite stores an append-only run index and hash-chained state transitions. Update/delete triggers reject mutation; runtime directories and databases are owner-only on POSIX.
 - The run key permits one normal cycle per portfolio/calendar month. A different cutoff in the same month is rejected until a defined D-009/O-009 emergency mode and audit contract are approved.
 - Every ordinary initial-allocation order requires explicit Point-in-Time gross expected benefit strictly above one-way execution cost plus a positive safety margin. The committed values are synthetic fixture assumptions only; ordinary held-asset replacement remains blocked pending O-006, while mandatory D-010 liquidation retains priority.
-- The maximum-three-holding constraint and -30% high-water-mark stop are asserted at the config, Decision Package, execution, and integration-test boundaries. Safety liquidation remains authoritative even when a non-safety evidence gap would block an ordinary rebalance.
+- The maximum-three-holding constraint and -30% high-water-mark stop are asserted at the config, Decision Package, execution, and integration-test boundaries. Safety liquidation remains authoritative only after complete holding-period Corporate Action/distribution coverage proves the stored unit basis; missing coverage blocks valuation and liquidation rather than turning a split into a false drawdown. Synthetic `pre-forward-daily-bars-v2` fixtures explicitly declare complete no-event coverage, while credentialed retained bars do not.
+- Safety handling never bypasses portfolio chronology, and daily-bars artifacts are rejected when their observation/availability dates predate contained market rows.
 - The existing three-day J-Quants live audit can be loaded through M1 offline replay without credentials or network access. Both strategies correctly return blocked, keep JPY 1,000,000 in cash, and apply no ledger transition because history, data freshness, strict Universe, execution assumptions, and expected-benefit evidence are incomplete.
-- Active-branch verification: `bun test` 206 pass / 0 fail; `bunx tsc --noEmit` pass; fixture execute/repeat/replay, D-009 marginal-trade rejection, intramonth rejection, creation-time provenance, and retained live-audit blocking behave as expected; `git diff --check` passes.
+- Active-branch verification: `bun test` 210 pass / 0 fail; `bunx tsc --noEmit` pass; fixture execute/repeat/replay, D-009 marginal-trade rejection, intramonth rejection, creation-time provenance, held-event-coverage/chronology guards, artifact-date validation, and retained live-audit blocking behave as expected; `git diff --check` passes.
 - Every result remains `pre_forward_dry_run`, `research_only`, and `formalForwardClockStarted=false`. The synthetic success is not the M2 real-data exit criterion and does not start formal Forward Test.
 
 ## O-001 findings preserved as open
@@ -179,6 +180,8 @@ No provider is selected. No cost, contract, retention policy, FX fixing, calenda
 - PASS — duplicate M2 invocation and explicit Decision Package replay create no duplicate order, transition, or cash movement
 - PASS — each ordinary synthetic order passes an auditable expected-benefit > execution-cost + positive-safety-margin comparison; marginal trades remain cash
 - PASS — a second cutoff in the same portfolio/month is rejected, and Decision Package creation provenance is not backdated to historical `asOf`
+- PASS — split/distribution coverage is required before held-unit valuation or safety liquidation; missing coverage leaves state unchanged
+- PASS — safety handling cannot move `lastAsOf` backward, and a daily-bars artifact cannot predate one of its rows
 - PASS — incomplete retained J-Quants input blocks with no virtual state transition
 - BLOCKED — one complete real-data M2 cycle; the retained sample has only three dates and lacks approved strict Universe and execution evidence
 
@@ -204,7 +207,7 @@ No provider is selected. No cost, contract, retention policy, FX fixing, calenda
 
 - Strategy C and its decision-package schema are not implemented.
 - The M1 software spine and bounded immutable partial audit are merged after Gate G1/G2 approval. M1's executable evidence path is complete, but the provider comparison and O-001 production gate remain blocked.
-- The M2 local ledger and manual CLI exist on the active branch. A later `asOf` for a portfolio that held assets across an interval blocks until retained distribution-event coverage is connected; the runner does not infer that no distribution occurred.
+- The M2 local ledger and manual CLI exist on the active branch. A later `asOf` for a portfolio that held assets across an interval blocks until retained distribution and Corporate Action coverage is connected; the runner does not infer that no event occurred and does not value unadjusted units through a split.
 - Formal Forward-test scheduling, notifications, and dashboard are not implemented.
 - No brokerage connection or real-order path exists or is authorized.
 
@@ -214,7 +217,7 @@ The controlling delivery order is `docs/handoff/EXECUTION_ROADMAP.md`.
 
 1. M2 NOW: review and merge the manual Pre-Forward software vertical slice; do not describe the synthetic cycle as real-data completion.
 2. M2 EVIDENCE GATE: with separately scoped authorization, capture enough licensed J-Quants history and bind strict Point-in-Time Universe plus versioned execution assumptions for one real virtual-money cycle.
-3. M2 FOLLOW-ON: connect retained distribution events before advancing a held virtual portfolio to a later cutoff.
+3. M2 FOLLOW-ON: connect retained distribution and Corporate Action events before advancing a held virtual portfolio to a later cutoff.
 4. M3 LATER: add approved scheduling, recovery, notifications, and minimal reporting.
 5. M4 GATE: freeze provider, Universe, Strategy A/B, Strategy C, persistence, and success-threshold decisions before formal Forward Test.
 6. Do not implement real orders, brokerage integration, or O-016 operations.

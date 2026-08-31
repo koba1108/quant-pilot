@@ -130,7 +130,7 @@ PR #11までに以下が `main` に入りました。
 
 Stooqは研究用OHLCVの接続確認に使うだけで、最終的なTotal Returnや実弾判断の根拠にはしません。
 
-現在のM2 branchでは、明示的な`asOf`、実生成時刻を持つimmutable Decision Package、append-only virtual ledger、月1回の通常run、D-009期待便益/cost/safety-margin gate、duplicate-safe replayを持つ手動Pre-Forward経路を実装しています。合成fixtureの期待便益・安全余裕を承認済みO-005/O-006値として扱ったり、合成成功をM2の実データexit criterion達成と表現したりしてはいけません。保持済みJ-Quants sampleは3日分のため明示的にblockedとなります。
+現在のM2 branchでは、明示的な`asOf`、実生成時刻を持つimmutable Decision Package、append-only virtual ledger、月1回の通常run、D-009期待便益/cost/safety-margin gate、保有評価前のCorporate Action／分配coverage gate、duplicate-safe replayを持つ手動Pre-Forward経路を実装しています。合成fixtureの期待便益・安全余裕・complete-no-event coverageを承認済みO-005/O-006値や実データ証跡として扱ったり、合成成功をM2の実データexit criterion達成と表現したりしてはいけません。保持済みJ-Quants sampleは3日分のため明示的にblockedとなります。
 
 ## 8. Codex移行後の最初の作業
 

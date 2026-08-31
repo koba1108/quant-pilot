@@ -171,7 +171,12 @@ export function assertCapturedDailyBarsArtifact(
     throw new Error("Captured daily-bars rawArtifactIds must be unique and sorted.");
   }
   if (!Array.isArray(payload.bars)) throw new Error("Captured daily-bars bars must be an array.");
-  assertDailyBars(payload.bars as DailyBar[], payload.stableId);
+  const bars = assertDailyBars(payload.bars as DailyBar[], payload.stableId);
+  const lastTradingDate = bars.at(-1)!.tradingDate;
+  if (lastTradingDate > artifact.provenance.observedAt.slice(0, 10)
+    || lastTradingDate > artifact.provenance.availableAt.slice(0, 10)) {
+    throw new Error("Captured daily-bars artifact cannot predate a contained trading date.");
+  }
 }
 
 function observedAtForDate(date: string): string {
