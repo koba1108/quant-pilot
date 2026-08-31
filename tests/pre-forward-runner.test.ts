@@ -9,6 +9,11 @@ import { sha256Canonical } from "../src/data/provenance.ts";
 import { loadUniverseMaster } from "../src/data/universe-master.ts";
 import { validatePreForwardConfig } from "../src/pre-forward/config.ts";
 import {
+  assertPreForwardConfigSnapshotArtifact,
+  buildPreForwardConfigSnapshotArtifact,
+  type PreForwardConfigSnapshotPayload,
+} from "../src/pre-forward/config-snapshot.ts";
+import {
   buildPreForwardDecisionPackage,
   buildVirtualPortfolioState,
   preForwardBarAvailableAt,
@@ -77,6 +82,13 @@ function universeSnapshotArtifactId(
   createdAt = fixtureCreatedAt,
 ): string {
   return buildPreForwardUniverseSnapshotArtifact(master, createdAt).provenance.artifactId;
+}
+
+function configSnapshotArtifactId(
+  config: ReturnType<typeof validatePreForwardConfig>,
+  createdAt = fixtureCreatedAt,
+): string {
+  return buildPreForwardConfigSnapshotArtifact(config, createdAt).provenance.artifactId;
 }
 
 async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: string): Promise<{
@@ -158,6 +170,14 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     const originalMasterText = (await readFile(masterPath, "utf8")).trimEnd();
     await writeFile(masterPath, `${originalMasterText}\n${futureAlphaRevision}\n`, "utf8");
     const revisedMaster = await loadUniverseMaster(masterPath);
+    const revisedConfigValue = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    revisedConfigValue.execution.policyVersion += "-next";
+    revisedConfigValue.execution.commissionBps += 1;
+    for (const strategy of revisedConfigValue.strategies as MutableConfig[]) {
+      strategy.strategyConfigVersion += "-next";
+    }
+    await writeFile(configPath, `${JSON.stringify(revisedConfigValue, null, 2)}\n`, "utf8");
+    const revisedConfig = validatePreForwardConfig(revisedConfigValue);
     const second = await runPreForward(configPath, fixtureAsOf, { cwd: root });
     assert.equal(second.status, "executed");
     assert.deepEqual(
@@ -203,6 +223,17 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
           && order.riskOverride === undefined
       )));
       assert.equal(artifact.payload.input.disposition, "research_only");
+      assert.notEqual(artifact.payload.configFingerprint, sha256Canonical(revisedConfig));
+      assert.match(artifact.payload.configSnapshotArtifactId, /^sha256:[0-9a-f]{64}$/);
+      const configSnapshot = await store.read<PreForwardConfigSnapshotPayload>(
+        artifact.payload.configSnapshotArtifactId,
+      );
+      assertPreForwardConfigSnapshotArtifact(configSnapshot);
+      assert.equal(configSnapshot.payload.configFingerprint, artifact.payload.configFingerprint);
+      assert.notEqual(
+        configSnapshot.payload.config.execution.policyVersion,
+        revisedConfig.execution.policyVersion,
+      );
       assert.notEqual(artifact.payload.universe.masterFingerprint, revisedMaster.fingerprint);
       assert.match(artifact.payload.universe.snapshotArtifactId!, /^sha256:[0-9a-f]{64}$/);
       assert.equal(artifact.payload.portfolio.afterState.positions.length, 3);
@@ -273,6 +304,7 @@ test("signal history excludes every bar from before the resolved ETF listing dat
     assert.throws(() => buildPreForwardDecisionPackage({
       config: changedConfig,
       configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(changedConfig),
       strategy: changedConfig.strategies[0],
       asOf: fixtureAsOf,
       createdAt: fixtureCreatedAt,
@@ -286,6 +318,7 @@ test("signal history excludes every bar from before the resolved ETF listing dat
     assert.throws(() => buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
       strategy: changedStrategy,
       asOf: fixtureAsOf,
       createdAt: fixtureCreatedAt,
@@ -294,9 +327,25 @@ test("signal history excludes every bar from before the resolved ETF listing dat
       universeSnapshotArtifactId: universeSnapshotArtifactId(universeMaster),
       beforeState,
     }), /Pre-forward strategy is not bound to the validated config/);
+    assert.throws(() => buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(
+        fixture.config,
+        "2025-01-07T00:06:00Z",
+      ),
+      strategy: fixture.config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input: fixture.input,
+      universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(universeMaster),
+      beforeState,
+    }), /Pre-forward config must be bound to its retained snapshot artifact/);
     const payload = buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
       strategy: fixture.config.strategies[0],
       asOf: fixtureAsOf,
       createdAt: fixtureCreatedAt,
@@ -331,6 +380,7 @@ test("same-day closing bars remain unavailable before the conservative close flo
     const payload = buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
       strategy: fixture.config.strategies[0],
       asOf,
       createdAt: fixtureCreatedAt,
@@ -421,6 +471,7 @@ test("the -30% high-water-mark stop liquidates when complete no-event coverage p
     const payload = buildPreForwardDecisionPackage({
       config,
       configFingerprint: sha256Canonical(config),
+      configSnapshotArtifactId: configSnapshotArtifactId(config),
       strategy: config.strategies[0],
       asOf: fixtureAsOf,
       createdAt: fixtureCreatedAt,
@@ -473,6 +524,7 @@ test("held-unit valuation fails closed when event coverage does not reach the de
     assert.throws(() => buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
       strategy: fixture.config.strategies[0],
       asOf: fixtureAsOf,
       createdAt: fixtureCreatedAt,
@@ -489,6 +541,7 @@ test("held-unit valuation fails closed when event coverage does not reach the de
     const payload = buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
       strategy: fixture.config.strategies[0],
       asOf: fixtureAsOf,
       createdAt: fixtureCreatedAt,
@@ -526,6 +579,10 @@ test("a stopped portfolio cannot bypass chronology during a safety cycle", async
     const payload = buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(
+        fixture.config,
+        "2025-02-02T00:00:00Z",
+      ),
       strategy: fixture.config.strategies[0],
       asOf: fixtureAsOf,
       createdAt: "2025-02-02T00:00:00Z",
@@ -553,6 +610,17 @@ test("pre-forward daily-bar artifacts cannot claim observation before a containe
       observedAt: "2025-01-06T15:00:00Z",
       availableAt: "2025-01-08T00:00:00Z",
       retrievedAt: "2025-01-08T00:00:00Z",
+    }),
+    /cannot predate a contained trading date/,
+  );
+
+  assert.throws(
+    () => buildPreForwardDailyBarsFixture({
+      code: "ALPHA",
+      bars: [{ code: "ALPHA", tradingDate: "2025-01-07", close: 100, adjustedClose: 100 }],
+      observedAt: "2025-01-07T00:00:00+14:00",
+      availableAt: "2025-01-07T00:00:00+14:00",
+      retrievedAt: "2025-01-07T00:00:00Z",
     }),
     /cannot predate a contained trading date/,
   );

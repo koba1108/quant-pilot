@@ -26,6 +26,11 @@ import {
   type PreForwardStrategyConfig,
 } from "./config.ts";
 import {
+  assertPreForwardConfigSnapshotArtifact,
+  buildPreForwardConfigSnapshotArtifact,
+  type PreForwardConfigSnapshotPayload,
+} from "./config-snapshot.ts";
+import {
   assertPreForwardDecisionPackage,
   buildPreForwardDecisionArtifact,
   buildPreForwardDecisionPackage,
@@ -87,13 +92,11 @@ export interface RunPreForwardOptions {
 }
 
 interface LoadedRuntime {
+  cwd: string;
   config: PreForwardConfig;
   configFingerprint: string;
-  artifactRoot: string;
   store: FileArtifactStore;
   ledgerPath: string;
-  input: LoadedPreForwardInput;
-  universeMaster?: UniverseMaster;
 }
 
 async function resolveConfigPath(path: string, cwd: string): Promise<string> {
@@ -222,26 +225,37 @@ async function loadCredentialedInput(
   });
 }
 
+async function loadRuntimeInput(
+  config: PreForwardConfig,
+  store: FileArtifactStore,
+  cwd: string,
+): Promise<LoadedPreForwardInput> {
+  return config.input.kind === "daily_bars_manifest"
+    ? loadManifestInput(config, store)
+    : loadCredentialedInput(config, store, cwd);
+}
+
+async function loadCurrentUniverseMaster(
+  config: PreForwardConfig,
+  cwd: string,
+): Promise<UniverseMaster | undefined> {
+  return config.universe.masterPath === undefined
+    ? undefined
+    : loadUniverseMaster(await resolveRepositoryInputFile(config.universe.masterPath, cwd));
+}
+
 async function loadRuntime(configPath: string, options: RunPreForwardOptions): Promise<LoadedRuntime> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const config = await loadPreForwardConfig(configPath, cwd);
   const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, cwd);
   const store = new FileArtifactStore(artifactRoot);
-  const input = config.input.kind === "daily_bars_manifest"
-    ? await loadManifestInput(config, store)
-    : await loadCredentialedInput(config, store, cwd);
   const ledgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
-  const universeMaster = config.universe.masterPath === undefined
-    ? undefined
-    : await loadUniverseMaster(await resolveRepositoryInputFile(config.universe.masterPath, cwd));
   return {
+    cwd,
     config,
     configFingerprint: sha256Canonical(config),
-    artifactRoot,
     store,
     ledgerPath,
-    input,
-    universeMaster,
   };
 }
 
@@ -290,7 +304,7 @@ function buildReport(
 
 function assertStoredDecisionIdentity(
   payload: PreForwardDecisionPackage,
-  runtime: LoadedRuntime,
+  config: PreForwardConfig,
   strategy: PreForwardStrategyConfig,
   asOf: string,
 ): void {
@@ -307,9 +321,21 @@ function assertStoredDecisionIdentity(
     || payload.strategy.name !== strategy.strategy
     || payload.strategy.strategyVersion !== strategy.strategyVersion
     || payload.strategy.strategyConfigVersion !== strategy.strategyConfigVersion
-    || payload.configFingerprint !== runtime.configFingerprint) {
+    || payload.configFingerprint !== sha256Canonical(config)) {
     throw new Error("Stored Decision Package does not match the requested config, strategy, and asOf identity.");
   }
+}
+
+async function loadRetainedConfig(
+  store: FileArtifactStore,
+  payload: PreForwardDecisionPackage,
+): Promise<PreForwardConfig> {
+  const snapshot = await store.read<PreForwardConfigSnapshotPayload>(payload.configSnapshotArtifactId);
+  assertPreForwardConfigSnapshotArtifact(snapshot);
+  if (snapshot.payload.configFingerprint !== payload.configFingerprint) {
+    throw new Error("Retained config snapshot does not match the Decision Package fingerprint.");
+  }
+  return snapshot.payload.config;
 }
 
 async function loadRetainedUniverseMaster(
@@ -330,21 +356,30 @@ async function replayOne(
   runtime: LoadedRuntime,
   ledger: PreForwardLedger,
   artifact: VersionedDataArtifact<PreForwardDecisionPackage>,
-  strategy: PreForwardStrategyConfig,
   asOf: string,
 ): Promise<PreForwardStrategyRunResult> {
   if (artifact.provenance.artifactKind !== "decision_package") {
     throw new Error("Pre-forward replay artifact must use artifactKind=decision_package.");
   }
-  assertStoredDecisionIdentity(artifact.payload, runtime, strategy, asOf);
+  assertPreForwardDecisionPackage(artifact.payload);
+  const config = await loadRetainedConfig(runtime.store, artifact.payload);
+  const strategy = config.strategies.find((candidate) => (
+    candidate.portfolioId === artifact.payload.portfolioId
+      && candidate.strategy === artifact.payload.strategy.name
+  ));
+  if (strategy === undefined) throw new Error("Retained config has no strategy matching the Decision Package.");
+  assertStrategyConfigCurrent(strategy, asOf.slice(0, 10));
+  assertStoredDecisionIdentity(artifact.payload, config, strategy, asOf);
+  const input = await loadRuntimeInput(config, runtime.store, runtime.cwd);
   const universeMaster = await loadRetainedUniverseMaster(runtime.store, artifact.payload);
   const rebuilt = buildPreForwardDecisionPackage({
-    config: runtime.config,
-    configFingerprint: runtime.configFingerprint,
+    config,
+    configFingerprint: artifact.payload.configFingerprint,
+    configSnapshotArtifactId: artifact.payload.configSnapshotArtifactId,
     strategy,
     asOf,
     createdAt: artifact.payload.createdAt,
-    input: runtime.input,
+    input,
     universeMaster,
     universeSnapshotArtifactId: artifact.payload.universe.snapshotArtifactId,
     beforeState: artifact.payload.portfolio.beforeState,
@@ -369,19 +404,19 @@ export async function runPreForward(
   if (!isIsoDateTime(asOf)) throw new Error("--as-of must be an ISO timestamp with timezone.");
   const runtime = await loadRuntime(configPath, options);
   const asOfDate = asOf.slice(0, 10);
-  for (const strategy of runtime.config.strategies) assertStrategyConfigCurrent(strategy, asOfDate);
   const ledger = await PreForwardLedger.open(runtime.ledgerPath);
   try {
     if (options.replayDecisionArtifactId !== undefined) {
       const artifact = await runtime.store.read<PreForwardDecisionPackage>(options.replayDecisionArtifactId);
-      const strategy = runtime.config.strategies.find((candidate) => (
-        candidate.portfolioId === artifact.payload.portfolioId && candidate.strategy === artifact.payload.strategy.name
-      ));
-      if (strategy === undefined) throw new Error("Replay Decision Package has no matching configured strategy.");
-      return buildReport(asOf, "replay", [await replayOne(runtime, ledger, artifact, strategy, asOf)]);
+      return buildReport(asOf, "replay", [await replayOne(runtime, ledger, artifact, asOf)]);
     }
 
+    for (const strategy of runtime.config.strategies) assertStrategyConfigCurrent(strategy, asOfDate);
     let createdAt: string | undefined;
+    let input: LoadedPreForwardInput | undefined;
+    let universeMaster: UniverseMaster | undefined;
+    let universeMasterLoaded = false;
+    let configSnapshotArtifact: ReturnType<typeof buildPreForwardConfigSnapshotArtifact> | undefined;
     let universeSnapshotArtifact: ReturnType<typeof buildPreForwardUniverseSnapshotArtifact> | undefined;
     const results: PreForwardStrategyRunResult[] = [];
     for (const strategy of runtime.config.strategies) {
@@ -389,23 +424,33 @@ export async function runPreForward(
       const existing = ledger.getExistingRun(runKey);
       if (existing !== undefined) {
         const artifact = await runtime.store.read<PreForwardDecisionPackage>(existing.decisionArtifactId);
-        results.push(await replayOne(runtime, ledger, artifact, strategy, asOf));
+        results.push(await replayOne(runtime, ledger, artifact, asOf));
         continue;
       }
       const opening = ledger.readPortfolioSnapshot(strategy.portfolioId, runtime.config.portfolio.initialCashJpy);
       createdAt ??= options.clock?.() ?? new Date().toISOString();
-      if (runtime.universeMaster !== undefined && universeSnapshotArtifact === undefined) {
-        universeSnapshotArtifact = buildPreForwardUniverseSnapshotArtifact(runtime.universeMaster, createdAt);
+      input ??= await loadRuntimeInput(runtime.config, runtime.store, runtime.cwd);
+      if (!universeMasterLoaded) {
+        universeMaster = await loadCurrentUniverseMaster(runtime.config, runtime.cwd);
+        universeMasterLoaded = true;
+      }
+      if (configSnapshotArtifact === undefined) {
+        configSnapshotArtifact = buildPreForwardConfigSnapshotArtifact(runtime.config, createdAt);
+        await runtime.store.put(configSnapshotArtifact);
+      }
+      if (universeMaster !== undefined && universeSnapshotArtifact === undefined) {
+        universeSnapshotArtifact = buildPreForwardUniverseSnapshotArtifact(universeMaster, createdAt);
         await runtime.store.put(universeSnapshotArtifact);
       }
       const payload = buildPreForwardDecisionPackage({
         config: runtime.config,
         configFingerprint: runtime.configFingerprint,
+        configSnapshotArtifactId: configSnapshotArtifact.provenance.artifactId,
         strategy,
         asOf,
         createdAt,
-        input: runtime.input,
-        universeMaster: runtime.universeMaster,
+        input,
+        universeMaster,
         universeSnapshotArtifactId: universeSnapshotArtifact?.provenance.artifactId,
         beforeState: opening.state,
         expectedLedgerHead: opening.headHash,

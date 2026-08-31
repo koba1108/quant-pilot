@@ -84,8 +84,9 @@ export function assertPreForwardDailyBarsArtifact(
   const bars = assertDailyBars(payload.bars as DailyBar[], payload.stableId);
   const firstTradingDate = bars[0]!.tradingDate;
   const lastTradingDate = bars.at(-1)!.tradingDate;
-  if (lastTradingDate > artifact.provenance.observedAt.slice(0, 10)
-    || lastTradingDate > artifact.provenance.availableAt.slice(0, 10)) {
+  const lastTradingDateStart = Date.parse(`${lastTradingDate}T00:00:00Z`);
+  if (Date.parse(artifact.provenance.observedAt) < lastTradingDateStart
+    || Date.parse(artifact.provenance.availableAt) < lastTradingDateStart) {
     throw new Error("Pre-forward daily-bars artifact cannot predate a contained trading date.");
   }
   if (!isRecord(payload.returnEventCoverage)) {
@@ -96,7 +97,7 @@ export function assertPreForwardDailyBarsArtifact(
     || coverage.startDate !== firstTradingDate
     || !isIsoDate(coverage.endDate)
     || coverage.endDate < lastTradingDate
-    || coverage.endDate > artifact.provenance.availableAt.slice(0, 10)
+    || Date.parse(artifact.provenance.availableAt) < Date.parse(`${coverage.endDate}T00:00:00Z`)
     || coverage.corporateActions !== "complete"
     || coverage.distributions !== "complete"
     || coverage.availableAt !== artifact.provenance.availableAt) {

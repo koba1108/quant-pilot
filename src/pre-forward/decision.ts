@@ -24,6 +24,7 @@ import {
   type PreForwardExecutionInstrumentConfig,
   type PreForwardStrategyConfig,
 } from "./config.ts";
+import { buildPreForwardConfigSnapshotArtifact } from "./config-snapshot.ts";
 import {
   assertLoadedPreForwardInputIntegrity,
   type LoadedPreForwardInput,
@@ -31,8 +32,8 @@ import {
 } from "./market-input.ts";
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
-export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v6" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v7" as const;
+export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v7" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v8" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
@@ -176,6 +177,7 @@ export interface PreForwardDecisionPackage {
     provisionalResearchParameters: true;
   };
   configFingerprint: string;
+  configSnapshotArtifactId: string;
   input: {
     evidenceTier: LoadedPreForwardInput["evidenceTier"];
     disposition: "research_only";
@@ -262,6 +264,7 @@ export interface PreForwardDecisionPackage {
 export interface BuildPreForwardDecisionRequest {
   config: PreForwardConfig;
   configFingerprint: string;
+  configSnapshotArtifactId: string;
   strategy: PreForwardStrategyConfig;
   asOf: string;
   createdAt: string;
@@ -880,6 +883,11 @@ export function buildPreForwardDecisionPackage(
     || request.configFingerprint !== sha256Canonical(validatedConfig)) {
     throw new Error("Pre-forward config changed after validation.");
   }
+  if (!ARTIFACT_ID_PATTERN.test(request.configSnapshotArtifactId)
+    || request.configSnapshotArtifactId
+      !== buildPreForwardConfigSnapshotArtifact(validatedConfig, request.createdAt).provenance.artifactId) {
+    throw new Error("Pre-forward config must be bound to its retained snapshot artifact.");
+  }
   const configuredStrategy = validatedConfig.strategies.find((candidate) => (
     candidate.portfolioId === request.strategy.portfolioId
       && candidate.strategy === request.strategy.strategy
@@ -1110,6 +1118,7 @@ export function buildPreForwardDecisionPackage(
       provisionalResearchParameters: true,
     },
     configFingerprint: request.configFingerprint,
+    configSnapshotArtifactId: request.configSnapshotArtifactId,
     input: {
       evidenceTier: request.input.evidenceTier,
       disposition: "research_only",
@@ -1205,6 +1214,7 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
   }
   if (!ARTIFACT_ID_PATTERN.test(payload.runKey)
     || !ARTIFACT_ID_PATTERN.test(payload.configFingerprint)
+    || !ARTIFACT_ID_PATTERN.test(payload.configSnapshotArtifactId)
     || !ARTIFACT_ID_PATTERN.test(payload.input.loadedInputIntegrityFingerprint)
     || !ARTIFACT_ID_PATTERN.test(payload.input.inputFingerprint)
     || !ARTIFACT_ID_PATTERN.test(payload.strategy.parametersFingerprint)) {
@@ -1427,6 +1437,7 @@ export function buildPreForwardDecisionArtifact(
       cycleId: payload.cycleId,
       createdAt: payload.createdAt,
       configFingerprint: payload.configFingerprint,
+      configSnapshotArtifactId: payload.configSnapshotArtifactId,
       loadedInputIntegrityFingerprint: payload.input.loadedInputIntegrityFingerprint,
       inputFingerprint: payload.input.inputFingerprint,
       universeSnapshotArtifactId: payload.universe.snapshotArtifactId,

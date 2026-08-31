@@ -319,6 +319,24 @@ test("rejects a captured daily-bars artifact whose provenance predates a contain
     () => assertCapturedDailyBarsArtifact(predating),
     /cannot predate a contained trading date/,
   );
+
+  const offsetPredating = buildVersionedDataArtifact({
+    artifactKind: "daily_bars",
+    payload: daily.payload,
+    source: daily.provenance.source,
+    dataset: daily.provenance.dataset,
+    sourceVersion: daily.provenance.sourceVersion,
+    adapterVersion: daily.provenance.adapterVersion,
+    observedAt: "2025-01-06T00:00:00+14:00",
+    availableAt: "2025-01-06T00:00:00+14:00",
+    retrievedAt: daily.provenance.retrievedAt,
+    request: { stableId: metadata.stableId, range: metadata.range },
+    recordId: daily.provenance.recordId,
+  });
+  assert.throws(
+    () => assertCapturedDailyBarsArtifact(offsetPredating),
+    /cannot predate a contained trading date/,
+  );
 });
 
 test("rejects tampered daily artifact payload and tampered observation parent provenance", async () => {

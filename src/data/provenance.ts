@@ -15,6 +15,7 @@ export type DataArtifactKind =
   | "exchange_calendar"
   | "provider_document"
   | "provider_capability_evidence"
+  | "configuration"
   | "decision_package";
 
 const DATA_ARTIFACT_KINDS: readonly DataArtifactKind[] = [
@@ -30,6 +31,7 @@ const DATA_ARTIFACT_KINDS: readonly DataArtifactKind[] = [
   "exchange_calendar",
   "provider_document",
   "provider_capability_evidence",
+  "configuration",
   "decision_package",
 ];
 

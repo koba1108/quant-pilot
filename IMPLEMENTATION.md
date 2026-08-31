@@ -58,7 +58,8 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 ### Manual Pre-Forward
 
 - `src/pre-forward/config.ts`: strict `pre-forward-config-v2`, version validity, JPY-only M2 capability, positive D-009 safety margin, explicit synthetic benefit evidence, and approved risk constraints
-- `src/pre-forward/market-input.ts`: retained synthetic/credentialed daily-bar input classification without Total Return relabeling; synthetic v2 artifacts explicitly bind complete no-event coverage to their bar interval
+- `src/pre-forward/market-input.ts`: retained synthetic/credentialed daily-bar input classification without Total Return relabeling; synthetic v3 artifacts explicitly bind complete no-event coverage through the decision cutoff
+- `src/pre-forward/config-snapshot.ts`: exact validated config retention and content-addressed replay binding
 - `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage-gated valuation, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
 - `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index and append-only hash-chained portfolio transitions
 - `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, one normal run per portfolio/month, actual package-creation provenance, and fail-closed credentialed-audit loading
@@ -174,13 +175,14 @@ Active M2 manual Pre-Forward branch verification:
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
-- explicit Decision Package replay: canonical decision/artifact and ledger binding reproduce without another state transition
+- explicit Decision Package replay: retained config, strategy, inputs, Universe, canonical decision/artifact, and ledger binding reproduce without another state transition
 - D-009 regression: marginal synthetic expected benefit produces no order; each executed ordinary order records a strict benefit-above-cost-plus-positive-margin pass
 - intramonth regression: a different cutoff in an already recorded calendar month is rejected rather than creating a second run
 - provenance regression: market `asOf` remains distinct from actual Decision Package `createdAt`, and replay preserves both timestamps
-- Point-in-Time artifact regression: a daily-bars artifact cannot claim observation/availability before one of its contained trading dates
+- Point-in-Time artifact regression: a daily-bars artifact cannot claim observation/availability before one of its contained trading dates, including timestamps whose UTC offset masks an earlier instant
 - lifecycle/availability regressions: signal history excludes pre-listing rows, and a same-day close is unavailable before the conservative `07:00:00Z` floor
 - execution-boundary regressions: stale validated-config fingerprints, unbound strategy overrides, and loaded-input mutation are rejected before a Decision Package is built
+- config replay regression: a later valid execution-policy and strategy-config revision cannot change or invalidate the historical replay
 - Universe replay regression: each decision retains the exact content-addressed master snapshot, so a later valid future-dated revision cannot change or invalidate the historical replay
 - held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
 - cutoff-coverage regression: event coverage ending at the latest bar cannot authorize held-unit valuation when the decision cutoff is later

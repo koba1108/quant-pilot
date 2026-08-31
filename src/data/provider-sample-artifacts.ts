@@ -173,8 +173,9 @@ export function assertCapturedDailyBarsArtifact(
   if (!Array.isArray(payload.bars)) throw new Error("Captured daily-bars bars must be an array.");
   const bars = assertDailyBars(payload.bars as DailyBar[], payload.stableId);
   const lastTradingDate = bars.at(-1)!.tradingDate;
-  if (lastTradingDate > artifact.provenance.observedAt.slice(0, 10)
-    || lastTradingDate > artifact.provenance.availableAt.slice(0, 10)) {
+  const lastTradingDateStart = Date.parse(`${lastTradingDate}T00:00:00Z`);
+  if (Date.parse(artifact.provenance.observedAt) < lastTradingDateStart
+    || Date.parse(artifact.provenance.availableAt) < lastTradingDateStart) {
     throw new Error("Captured daily-bars artifact cannot predate a contained trading date.");
   }
 }
