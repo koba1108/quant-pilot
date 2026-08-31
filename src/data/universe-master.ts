@@ -378,15 +378,36 @@ export function evaluateUniverseMembership(
   decisionDate: string,
   policy: UniverseEligibilityPolicy,
 ): UniverseMembershipDecision {
+  const { date } = endOfDecisionDate(decisionDate);
+  return evaluateUniverseMembershipAtCutoff(master, code, date, decisionDate, policy);
+}
+
+/**
+ * Evaluate lifecycle/product eligibility for an effective market date while
+ * resolving metadata only from revisions available at a separate information
+ * cutoff. This separation is required by current-as-of operating decisions:
+ * the latest trading date and the time at which the run observes metadata are
+ * related, but they are not interchangeable timestamps.
+ */
+export function evaluateUniverseMembershipAtCutoff(
+  master: UniverseMaster,
+  code: string,
+  effectiveDate: string,
+  informationCutoff: string,
+  policy: UniverseEligibilityPolicy,
+): UniverseMembershipDecision {
   if (policy.allowedStatuses.size === 0) throw new Error("allowedStatuses must be explicitly non-empty.");
   if (policy.supportedCurrencies.size === 0) throw new Error("supportedCurrencies must be explicitly non-empty.");
-  const { date } = endOfDecisionDate(decisionDate);
-  const record = resolveUniverseRecordAsOf(master, code, decisionDate);
-  if (record === undefined) return { code, decisionDate: date, eligible: false, reason: "metadata_unavailable" };
+  if (!isIsoDate(effectiveDate)) throw new Error(`Invalid universe effective date: ${effectiveDate}.`);
+  endOfDecisionDate(informationCutoff);
+  const record = resolveUniverseRecordAsOf(master, code, informationCutoff);
+  if (record === undefined) {
+    return { code, decisionDate: effectiveDate, eligible: false, reason: "metadata_unavailable" };
+  }
 
   const common = {
     code,
-    decisionDate: date,
+    decisionDate: effectiveDate,
     observationId: record.observationId,
     status: record.status,
     listingDate: record.listingDate,
@@ -401,8 +422,8 @@ export function evaluateUniverseMembership(
     currency: record.currency,
     provenance: record.provenance,
   };
-  if (date < record.listingDate) return { ...common, eligible: false, reason: "not_yet_listed" };
-  if (record.lastEligibleDate !== undefined && date > record.lastEligibleDate) {
+  if (effectiveDate < record.listingDate) return { ...common, eligible: false, reason: "not_yet_listed" };
+  if (record.lastEligibleDate !== undefined && effectiveDate > record.lastEligibleDate) {
     return { ...common, eligible: false, reason: "past_last_eligible_date" };
   }
   if (record.instrumentType.toLowerCase() !== "etf") {

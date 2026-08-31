@@ -6,7 +6,7 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 
 ## Implemented baseline and current branch
 
-PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction provider候補をfail-closed評価する契約、公式URL/evaluation snapshot、J-Quants v2 read-only research adapterまでマージ済みである。現在のdelivery milestoneはM1 Credentialed data sliceである。
+PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにproduction provider候補をfail-closed評価し、credentialed sampleをimmutable artifactへ保存してoffline replayする経路までマージ済みである。現在のdelivery milestoneはM2 Manual Pre-Forward vertical sliceである。
 
 ### Strategy
 
@@ -45,6 +45,7 @@ PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction
 - `docs/fx-normalization.md`: JPY FX calculation, audit contract, official evidence, and limitations
 - `docs/provider-evaluation.md`: official-source provider comparison, production gate, adapter boundary, and credentialed-sample plan
 - `docs/credentialed-sample.md`: M1 executable contract, live gates, replay behavior, and remaining evidence gaps
+- `docs/pre-forward.md`: M2 manual virtual-cycle contract, replay/idempotency behavior, and real-data gate
 
 ### Backtest
 
@@ -53,6 +54,16 @@ PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction
 - `src/backtest/frame-builder.ts`: daily bars to monthly signals, actual trading-date cutoffs, pinned normalized prefixes, realized-return month labels, and next-month returns
 - `src/backtest/runner.ts`: config-driven Strategy A/B CLI with explicit `price_return` / `total_return` opt-in and exact-date JPY conversion
 - `backtest.config.example.json`: runnable configuration example
+
+### Manual Pre-Forward
+
+- `src/pre-forward/config.ts`: strict `pre-forward-config-v1`, version validity, JPY-only M2 capability, and approved risk constraints
+- `src/pre-forward/market-input.ts`: retained synthetic/credentialed daily-bar input classification without Total Return relabeling
+- `src/pre-forward/decision.ts`: Strategy A/B snapshots, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
+- `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index and append-only hash-chained portfolio transitions
+- `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI and fail-closed credentialed-audit loading
+- `src/pre-forward/fixture-seeder.ts`: deterministic content-addressed fixture artifacts
+- `tests/fixtures/pre-forward/config.json`: committed synthetic acceptance config; runtime outputs remain under ignored `data/generated/`
 
 ### AI
 
@@ -145,7 +156,7 @@ PR #9 provider-evaluation verification now present on `main`:
 - J-Quants adapter tests cover official-host credential confinement, pagination, header authentication, semantic dates, four/five-character code normalization, no-trade null-row exclusion, strict rows, range matching, missing optional values, repeated pages, duplicate dates, malformed JSON, and HTTP failures
 - real J-Quants/EODHD credentials were used only for the authorized bounded capture and are not committed; raw responses were persisted only in the owner-only Git-ignored local artifact store
 
-Active M1 credentialed-sample branch verification:
+Merged PR #11 M1 credentialed-sample verification:
 
 - `bun test`: 198 pass / 0 fail
 - `bunx tsc --noEmit`: success
@@ -157,9 +168,22 @@ Active M1 credentialed-sample branch verification:
 - authorized live capture after G1/G2 approval: five J-Quants successes with 15 bars, five EODHD HTTP 404 failures, 10 raw artifacts, five daily artifacts, 60 observations, and one `captureStatus=partial` audit
 - live offline replay is canonical-equal and returns the expected nonzero status; artifacts stay outside Git with owner-only permissions, and a local scan found no credential bytes
 
+Active M2 manual Pre-Forward branch verification:
+
+- `bun test`: 205 pass / 0 fail
+- `bunx tsc --noEmit`: success
+- fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
+- repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
+- explicit Decision Package replay: canonical decision/artifact and ledger binding reproduce without another state transition
+- retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
+- ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
+- hard-stop integration test liquidates a held asset at -30% even when a non-safety data gap would otherwise block rebalancing
+- every output remains `pre_forward_dry_run`, `research_only`, and `formalForwardClockStarted=false`
+
 ## Next blocks
 
 1. Follow `docs/handoff/EXECUTION_ROADMAP.md`; do not begin work outside its active milestone
-2. M1: merge the partial-failure audit/replay fix; do not treat the EODHD result as permanent global non-coverage or as a JPX comparator
-3. M2: deliver the manual Pre-Forward vertical slice with an idempotent virtual ledger and replayable Decision Package, preserving incomplete-history and incomplete-data blocks
-4. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates
+2. M2: review and merge the manual Pre-Forward software vertical slice; do not call the synthetic success an M2 real-data completion
+3. M2 evidence gate: after separate scope approval, retain enough licensed J-Quants history plus strict Point-in-Time Universe and versioned execution assumptions for one real virtual-money cycle
+4. Connect retained distribution events before advancing a held portfolio to a later `asOf`; until then the runner must continue to block rather than assume no distribution
+5. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates

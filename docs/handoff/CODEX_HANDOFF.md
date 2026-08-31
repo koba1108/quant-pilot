@@ -5,13 +5,13 @@
 - Repository: `koba1108/quant-pilot`
 - Local path: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Current default branch state: PR #10 (`feat: add credentialed provider sample capture and replay`) merged into `main` at `eba3cdcf24397adbad349eea8648e5239debd7b1`
-- Active implementation branch: `ykoba/fix-credentialed-provider-coverage`
-- Active PR: #11 (`fix: retain partial credentialed provider evidence`)
-- Current delivery milestone: M1 — Credentialed data slice
+- Current default branch state: PR #11 (`fix: retain partial credentialed provider evidence`) merged into `main` at `60aa5266100945583f9dc1b4eff4d9bd70a76b52`
+- Active implementation branch: `ykoba/pre-forward-manual-cycle`
+- Active PR: not yet created at this snapshot
+- Current delivery milestone: M2 — Manual Pre-Forward vertical slice
 - Current roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
 - Formal Forward-Test clock: not started
-- Handoff date: 2026-08-29
+- Handoff date: 2026-08-31
 - Primary migration instructions: `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 
 ## Mission
@@ -48,7 +48,7 @@ Decision Package / Monthly Report
 
 ## Merged foundation
 
-`main` through PR #10 contains deterministic TypeScript implementations for:
+`main` through PR #11 contains deterministic TypeScript implementations for:
 
 - Strategy A/B ranking, inverse-volatility allocation, costs, the three-holding limit, and the -30% hard stop
 - commit-safe Trend/Rotation CLI fixtures and Point-in-Time lifecycle validation
@@ -58,22 +58,22 @@ Decision Package / Monthly Report
 - CSV and Stooq research providers
 - provider-neutral normalized runner integration and exact-date JPY conversion
 - fail-closed provider evaluation and a mocked J-Quants v2 daily-price adapter contract
-- fixture-tested credentialed-sample capture, immutable artifacts, reconciliation, and offline replay for J-Quants/EODHD contracts
+- fixture-tested credentialed-sample capture, immutable artifacts, reconciliation, offline replay, and durable partial-provider failures for J-Quants/EODHD contracts
 
-PR #10 was merged on 2026-08-29. The current branch extends its fixture-only runner so captured provider HTTP failures remain durable evidence while other provider/instrument pairs continue.
+PR #11 was merged on 2026-08-31. The current branch consumes retained M1 observations in a manual virtual operating cycle without weakening missing-data gates.
 
 ## Current post-merge work
 
-The active work closes M1 of `EXECUTION_ROADMAP.md`: a credentialed, reproducible, license-permitted provider sample path.
+The active work advances M2 of `EXECUTION_ROADMAP.md`: a manual, replayable, idempotent Pre-Forward virtual cycle.
 
-1. implemented and fixture-tested capture/audit tooling without secrets;
-2. bound request, retrieval, exact raw response bytes, source version, hashes, normalized artifacts, and observations;
-3. added deterministic J-Quants/EODHD five-mapping reconciliation plus offline replay;
-4. after explicit G1/G2 approval, retained a bounded live partial audit: five successful J-Quants responses and five EODHD HTTP 404 responses for the same JPX mappings;
-5. reproduced the live audit offline and kept all real bodies and config owner-only outside Git;
-6. return the blocked comparison result as O-001 evidence without auto-selecting a provider.
+1. adds a dedicated explicit-`asOf` `pre-forward` CLI for versioned Trend and Rotation configurations;
+2. produces immutable Decision Packages and append-only hash-chained Bun SQLite portfolio state;
+3. creates virtual orders/executions with trading-unit rounding, explicit costs, cash accounting, maximum three holdings, and an authoritative -30% high-water-mark stop;
+4. makes duplicate invocation and explicit Decision Package replay non-mutating and deterministic;
+5. preserves Point-in-Time Universe, stale-data, missing-history, execution, distribution, and ledger mismatches as explicit blockers;
+6. completes a synthetic fixture cycle while the retained three-day J-Quants audit correctly remains blocked with no state transition.
 
-Strategy C, formal operational scheduling, a dashboard, a production provider, and brokerage/order behavior remain outside M1.
+The M2 real-data exit criterion is not met. A longer licensed retained sample, strict Point-in-Time Universe, approved execution assumptions, and distribution-event input remain required. Strategy C, formal operational scheduling, a dashboard, a production provider selection, and real brokerage/order behavior remain outside M2.
 
 ## Important data boundaries
 
@@ -97,17 +97,19 @@ Strategy C, formal operational scheduling, a dashboard, a production provider, a
 - robustness grid: 16 completed supported cells and 16 explicit unsupported cells (PR #7 baseline)
 - final all-CLI audit: pass
 - normalized Trend and Rotation repeated outputs: byte-for-byte identical
-- active M1 branch: `bun test` 198 pass / 0 fail; TypeScript passes; fixture replay is byte-for-byte identical; live partial replay is canonical-equal; production and partial-result gates fail closed as expected
+- merged M1 path: `bun test` 198 pass / 0 fail; TypeScript passes; fixture replay is byte-for-byte identical; live partial replay is canonical-equal; production and partial-result gates fail closed as expected
+- active M2 branch: `bun test` 205 pass / 0 fail; TypeScript passes; synthetic Trend/Rotation execute; duplicate invocation and explicit replay are non-mutating; retained J-Quants input blocks with no cash movement
 
 See `CURRENT_STATUS.md` for commands, outputs, and current limitations.
 
 ## Next implementation sequence
 
-1. M1 NOW: merge the partial-failure credentialed capture and audit fix.
-2. M2 NEXT: manual, replayable, idempotent Pre-Forward virtual-portfolio cycle that preserves incomplete-data blocks.
-3. M3 LATER: approved scheduling, recovery, notifications, and minimal reporting.
-4. M4 GATE: freeze provider, Universe, strategies, persistence, and success thresholds before formal Forward Test.
-5. Follow `EXECUTION_ROADMAP.md`; do not begin later work because it is locally interesting.
+1. M2 NOW: review and merge the manual Pre-Forward software vertical slice without calling the synthetic run real-data completion.
+2. M2 EVIDENCE GATE: separately authorize enough licensed retained history and bind strict Universe/execution evidence for one real virtual-money cycle.
+3. M2 FOLLOW-ON: connect retained distribution events before advancing a held portfolio to another cutoff.
+4. M3 LATER: approved scheduling, recovery, notifications, and minimal reporting.
+5. M4 GATE: freeze provider, Universe, strategies, persistence, and success thresholds before formal Forward Test.
+6. Follow `EXECUTION_ROADMAP.md`; do not begin later work because it is locally interesting.
 
 ## Working rules
 

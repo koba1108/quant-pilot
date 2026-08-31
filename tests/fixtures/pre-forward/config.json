@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "pre-forward-config-v1",
+  "mode": "pre_forward_dry_run",
+  "artifactRoot": {
+    "kind": "relative",
+    "path": "data/generated/pre-forward/fixture-v2/artifacts"
+  },
+  "ledgerPath": {
+    "kind": "relative",
+    "path": "data/generated/pre-forward/fixture-v2/ledger.sqlite"
+  },
+  "input": {
+    "kind": "daily_bars_manifest",
+    "evidenceTier": "synthetic_fixture",
+    "dailyBarsArtifactIds": [
+      "sha256:2bba13b1a14537a5e1c732ec94d762fab963789bded7299ab6ce50f79194651d",
+      "sha256:aef7a4c19fe5963b0fddba46e964c75ec36cc28956bcfa670286d62a6c7574c4",
+      "sha256:d3a1b5ad96012ed89c580611ecdc97e072887dc8b34cb7957214304549bbb52d",
+      "sha256:f5204e9060c5a7037642796af567dc2f6a4b2949ca6529c306f8e9d5c289dc98"
+    ]
+  },
+  "universe": {
+    "masterPath": "tests/fixtures/universe/universe-master-v1.csv",
+    "allowedStatuses": ["test_candidate"],
+    "supportedCurrencies": ["JPY"]
+  },
+  "signal": {
+    "minHistoryBars": 253,
+    "volatilityWindowDays": 63,
+    "maxDataAgeDays": 3,
+    "priceField": "adjustedClose"
+  },
+  "execution": {
+    "policyVersion": "pre-forward-close-proxy-fixture-v1",
+    "priceSource": "latest_unadjusted_close_proxy",
+    "commissionBps": 1,
+    "slippageBps": 5,
+    "fallbackHalfSpreadBps": 15,
+    "fxConversionBps": 0,
+    "instruments": [
+      { "code": "ALPHA", "tradingUnit": 10, "spreadBps": 20 },
+      { "code": "BETA", "tradingUnit": 10 },
+      { "code": "DELTA", "tradingUnit": 10, "spreadBps": 25 },
+      { "code": "GAMMA", "tradingUnit": 10, "spreadBps": 30 }
+    ]
+  },
+  "portfolio": {
+    "initialCashJpy": 1000000,
+    "drawdownLimit": -0.3
+  },
+  "strategies": [
+    {
+      "strategy": "trend",
+      "portfolioId": "pre-forward-trend-fixture",
+      "strategyVersion": "trend-v1",
+      "strategyConfigVersion": "pre-forward-trend-defaults-v1",
+      "validFrom": "2025-01-01",
+      "validThrough": "2025-12-31",
+      "maxAssets": 3,
+      "parameters": {
+        "r3mWeight": 0.2,
+        "r6mWeight": 0.3,
+        "r12mWeight": 0.5,
+        "requirePositiveR12m": true
+      }
+    },
+    {
+      "strategy": "rotation",
+      "portfolioId": "pre-forward-rotation-fixture",
+      "strategyVersion": "rotation-v1",
+      "strategyConfigVersion": "pre-forward-rotation-defaults-v1",
+      "validFrom": "2025-01-01",
+      "validThrough": "2025-12-31",
+      "maxAssets": 3,
+      "parameters": {
+        "r6mWeight": 0.4,
+        "r12mWeight": 0.4,
+        "volatilityPenalty": 0.2,
+        "requirePositiveR12m": true
+      }
+    }
+  ]
+}

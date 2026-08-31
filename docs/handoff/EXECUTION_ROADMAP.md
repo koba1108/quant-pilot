@@ -1,6 +1,6 @@
 # Quant Pilot Execution Roadmap
 
-Last updated: 2026-08-29
+Last updated: 2026-08-31
 
 Status: Active delivery roadmap
 
@@ -40,9 +40,9 @@ This milestone proves implementation behavior. It does not prove an investable d
 
 ### M1 — Credentialed data slice
 
-Status: **EXIT CRITERIA MET ON CURRENT BRANCH; MERGE PENDING**
+Status: **complete through merged PR #11; O-001 remains open**
 
-Software checkpoint: the fixture-tested `capture -> immutable artifact -> reconciliation -> offline replay` spine is on `main` through PR #10. On `ykoba/fix-credentialed-provider-coverage`, an authorized bounded live run retained five successful J-Quants responses and five EODHD HTTP 404 responses as an immutable partial audit, then reproduced it offline. This closes the M1 executable evidence path with an explicit blocked comparison result; it does not close O-001 or authorize production data.
+Software checkpoint: the fixture-tested `capture -> immutable artifact -> reconciliation -> offline replay` spine and partial-failure retention are on `main` through PR #11. An authorized bounded live run retained five successful J-Quants responses and five EODHD HTTP 404 responses as an immutable partial audit, then reproduced it offline. This closes the M1 executable evidence path with an explicit blocked comparison result; it does not close O-001 or authorize production data.
 
 Goal: turn provider research into a small, reproducible, license-permitted evidence path.
 
@@ -72,7 +72,7 @@ Gate G2: license/retention confirmation before persisting provider responses.
 
 ### M2 — Manual Pre-Forward vertical slice
 
-Status: **NEXT**
+Status: **ACTIVE — SOFTWARE VERTICAL SLICE IMPLEMENTED; REAL-DATA EXIT CRITERION BLOCKED**
 
 Goal: run one complete virtual operating cycle from retained observations to replayable portfolio state.
 
@@ -202,11 +202,12 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 
 ## Current checkpoint
 
-- Current milestone: **M1 — Credentialed data slice, merge pending**
-- Completed software outcome: fixture and live partial capture/audit/replay for five JPX mappings; the live audit retained J-Quants bars and explicit EODHD failures outside Git
-- Next evidence outcome: merge the M1 fix, then start M2 with the retained J-Quants evidence labeled `credentialed_sample_unverified` and every missing production capability preserved
-- Current external gate: any larger or paid provider request needs separately scoped approval; no provider response body or key enters Git, and O-001 remains unselected
-- Next runnable milestone: **M2 — Manual Pre-Forward vertical slice after merge**
+- Current milestone: **M2 — Manual Pre-Forward vertical slice**
+- Completed software outcome on `ykoba/pre-forward-manual-cycle`: dedicated explicit-`asOf` CLI, immutable Decision Package, append-only/idempotent virtual ledger, offline replay, Strategy A/B virtual execution, modeled costs, maximum-three-holding enforcement, and authoritative -30% liquidation
+- Runnable acceptance outcome: the committed synthetic fixture completes both strategies; duplicate invocation and explicit replay add no second transition
+- Retained real-evidence outcome: the existing three-day J-Quants audit is consumed offline but blocks both strategies with no cash movement because history, strict Universe, and execution evidence are incomplete
+- Current external gate: a larger licensed provider capture and the required Point-in-Time Universe/execution inputs need separately scoped approval; no provider response body or key enters Git, and O-001 remains unselected
+- Next evidence outcome: review/merge the M2 software slice, then obtain enough licensed retained history and approved metadata to complete one real-data virtual-money cycle
 - Formal Forward-Test clock: **not started**
 
 ## Progress log
@@ -217,3 +218,4 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 | 2026-08-29 | PR #10 merged: `credentialed-sample-v1` fixture capture and offline replay produce the same immutable fail-closed audit for five mappings across J-Quants/EODHD contracts | M1 software spine complete; real evidence gate authorized but partial audit pending | Persist a redacted partial audit; preserve EODHD JPX coverage failure and do not treat it as a JPX comparator |
 | 2026-08-29 | Bounded direct probes: J-Quants succeeded for five JPX codes over 2026-04-20..22; EODHD exchange/search/EOD probes found no tested JPX path | M1 evidence incomplete; O-001 remains open | Retain permitted metadata/artifact lineage, then reassess comparison coverage without selecting a provider |
 | 2026-08-29 | Authorized live audit retained 10 raw responses, five J-Quants daily artifacts with 15 bars, five EODHD 404 failures, 60 field observations, and one partial audit; offline replay was canonical-equal | M1 executable exit criteria met on current branch; O-001 remains open and production blocked | Merge the M1 fix, then build the manual M2 Pre-Forward cycle without weakening data gates |
+| 2026-08-31 | PR #11 merged; M2 branch adds the manual Pre-Forward CLI, immutable Decision Packages, append-only SQLite ledger, replay/idempotency, and hard-risk enforcement. Synthetic Trend/Rotation complete; the retained three-day J-Quants audit blocks without state transition | M2 software vertical slice implemented; real-data exit criterion not met | Review/merge the software slice, then separately authorize sufficient retained history and approved Universe/execution evidence for one real cycle |

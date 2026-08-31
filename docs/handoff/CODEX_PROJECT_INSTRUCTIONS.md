@@ -16,8 +16,8 @@ Codexは、過去の候補・提案・途中案ではなく、リポジトリ内
 - Runtime: TypeScript + Bun
 - Node.js requirement: repositoryで指定された最新バージョン
 - Python dependency: 禁止。ユーザーの明示的な方針変更がある場合のみ再検討
-- Current state: PR #9は `main` へマージ済み（merge commit `9690bbe7e40c64a3fc2591b5da785f01bc0bbbc4`）
-- Important caveat: PR #9までのend-to-end backtest検証は合成・research-onlyデータ中心であり、実運用可能な `etf_realistic` 証拠ではない
+- Current state: PR #11は `main` へマージ済み（merge commit `60aa5266100945583f9dc1b4eff4d9bd70a76b52`）。現在のdelivery milestoneはM2 Manual Pre-Forward
+- Important caveat: 合成backtestとcredentialed sampleは引き続きresearch-onlyであり、実運用可能な `etf_realistic` 証拠でも正式Forward Testでもない
 
 ## 3. 最初に読むファイル
 
@@ -112,7 +112,7 @@ AIはハード制約を上書きできません。数値不足を推測で埋め
 
 ## 7. 現在の実装状態
 
-PR #9までに以下が `main` に入りました。
+PR #11までに以下が `main` に入りました。
 
 - `MarketDataProvider` abstraction
 - CSV provider
@@ -121,6 +121,7 @@ PR #9までに以下が `main` に入りました。
 - daily barsからmonthly frameを生成する処理
 - Strategy A/B CLI runner
 - fail-closed production-provider evaluation CLI
+- credentialed J-Quants/EODHD sample capture、immutable artifact、部分失敗の保持、reconciliation、offline replay
 - example config
 - frame-builder test
 - Codex handoff documents
@@ -128,6 +129,8 @@ PR #9までに以下が `main` に入りました。
 正規化 `price_return` / `total_return`、行単位availability、signal/forward別snapshot、JPY換算は明示的なresearch-only opt-in経路に統合済みです。通常のraw経路は `not_normalized` のままで、`etf_realistic` は未解禁です。
 
 Stooqは研究用OHLCVの接続確認に使うだけで、最終的なTotal Returnや実弾判断の根拠にはしません。
+
+現在のM2 branchでは、明示的な`asOf`、immutable Decision Package、append-only virtual ledger、duplicate-safe replayを持つ手動Pre-Forward経路を実装しています。合成fixtureの成功をM2の実データexit criterion達成と表現してはいけません。保持済みJ-Quants sampleは3日分のため明示的にblockedとなります。
 
 ## 8. Codex移行後の最初の作業
 
@@ -183,7 +186,7 @@ bun run backtest --config=<rotation用fixture設定>
 - `IMPLEMENTATION.md`
 - 必要なら `README.md`
 
-PR #9はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
+PR #11はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
 
 ## 9. 検証後の実装順序
 
