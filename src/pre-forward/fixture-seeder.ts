@@ -42,8 +42,9 @@ export async function seedPreForwardFixture(
       code,
       bars,
       observedAt: "2025-01-06T15:00:00Z",
-      availableAt: "2025-01-06T16:00:00Z",
+      availableAt: PRE_FORWARD_FIXTURE_AS_OF,
       retrievedAt: PRE_FORWARD_FIXTURE_AS_OF,
+      returnEventCoverageEndDate: PRE_FORWARD_FIXTURE_AS_OF.slice(0, 10),
     });
   }));
   const ids = artifacts.map((artifact) => artifact.provenance.artifactId).sort(compareText);

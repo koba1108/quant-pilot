@@ -68,7 +68,7 @@ The active work advances M2 of `EXECUTION_ROADMAP.md`: a manual, replayable, ide
 
 1. adds a dedicated explicit-`asOf` `pre-forward` CLI for versioned Trend and Rotation configurations;
 2. produces immutable Decision Packages and append-only hash-chained Bun SQLite portfolio state;
-3. creates virtual orders/executions with trading-unit rounding, explicit costs, a D-009 expected-benefit/cost/safety-margin gate, cash accounting, maximum three holdings, and a -30% high-water-mark stop gated by explicit holding-period event coverage;
+3. creates virtual orders/executions with trading-unit rounding, explicit costs, a D-009 expected-benefit/cost/safety-margin gate, cash accounting, maximum three holdings, and a -30% high-water-mark stop gated by explicit event coverage through the decision cutoff;
 4. makes duplicate invocation and explicit Decision Package replay non-mutating and deterministic, rejects a second normal cutoff in the same month, and separates actual package creation time from market `asOf`;
 5. preserves an exact content-addressed Universe snapshot for replay and keeps listing-date, intraday bar availability, stale-data, missing-history, execution, distribution/Corporate Action, chronology, artifact-date, loaded-input/config integrity, and ledger mismatches explicit;
 6. completes a synthetic fixture cycle while the retained three-day J-Quants audit correctly remains blocked with no state transition.

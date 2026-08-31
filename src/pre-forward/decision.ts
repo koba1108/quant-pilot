@@ -32,7 +32,7 @@ import {
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
 export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v6" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v6" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v7" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
@@ -447,7 +447,7 @@ function heldIntervalHasCompleteSyntheticEventCoverage(
     && coverage.corporateActions === "complete"
     && coverage.distributions === "complete"
     && coverage.startDate <= previousDate
-    && coverage.endDate >= latestTradingDate
+    && coverage.endDate >= asOf.slice(0, 10)
     && Date.parse(coverage.availableAt) <= Date.parse(asOf);
 }
 
@@ -1285,7 +1285,7 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
         && coverage.corporateActions === "complete"
         && coverage.distributions === "complete"
         && coverage.startDate <= payload.portfolio.beforeState.lastAsOf!.slice(0, 10)
-        && coverage.endDate >= diagnostic.signalDate
+        && coverage.endDate >= payload.asOfDate
         && Date.parse(coverage.availableAt) <= Date.parse(payload.asOf);
     });
   const expectedValuationEventCoverage = payload.portfolio.beforeState.positions.length === 0

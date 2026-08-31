@@ -183,6 +183,7 @@ Active M2 manual Pre-Forward branch verification:
 - execution-boundary regressions: stale validated-config fingerprints, unbound strategy overrides, and loaded-input mutation are rejected before a Decision Package is built
 - Universe replay regression: each decision retains the exact content-addressed master snapshot, so a later valid future-dated revision cannot change or invalidate the historical replay
 - held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
+- cutoff-coverage regression: event coverage ending at the latest bar cannot authorize held-unit valuation when the decision cutoff is later
 - retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
 - ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
 - hard-stop integration test liquidates a held asset at -30% only when explicit complete synthetic no-event coverage proves the stored unit basis; otherwise it fails closed without a valuation or order

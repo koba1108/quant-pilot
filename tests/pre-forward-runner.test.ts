@@ -447,13 +447,19 @@ test("the -30% high-water-mark stop liquidates when complete no-event coverage p
   });
 });
 
-test("held-unit valuation fails closed when split and distribution coverage are unavailable", async () => {
+test("held-unit valuation fails closed when event coverage does not reach the decision cutoff", async () => {
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
     const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
     const tamperedInput: LoadedPreForwardInput = {
       ...fixture.input,
-      series: fixture.input.series.map(({ returnEventCoverage: _coverage, ...series }) => series),
+      series: fixture.input.series.map((series) => ({
+        ...series,
+        returnEventCoverage: {
+          ...series.returnEventCoverage!,
+          endDate: series.bars.at(-1)!.tradingDate,
+        },
+      })),
     };
     const beforeState = buildVirtualPortfolioState({
       portfolioId: fixture.config.strategies[0].portfolioId,
@@ -477,6 +483,9 @@ test("held-unit valuation fails closed when split and distribution coverage are 
     }), /Loaded pre-forward inputs changed after artifact validation/);
     const { integrityFingerprint: _integrityFingerprint, ...inputBody } = tamperedInput;
     const input = sealLoadedPreForwardInput(inputBody);
+    assert.ok(input.series.every((series) => (
+      series.returnEventCoverage!.endDate < fixtureAsOf.slice(0, 10)
+    )));
     const payload = buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),

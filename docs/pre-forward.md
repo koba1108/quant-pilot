@@ -50,7 +50,7 @@ The Decision Package records validated-configuration and loaded-input integrity 
 
 The SQLite ledger is append-only at the database level: update/delete triggers reject mutations, each transition is hash-chained, and the run key permits exactly one normal Decision Package per portfolio/calendar month. On POSIX systems, the runtime directory and database are restricted to `0700` and `0600`.
 
-The committed fixture supplies `synthetic_fixture_assumption` expected-benefit records of 1,000 bps and a 25 bps safety margin solely to exercise D-009. Its `pre-forward-daily-bars-v2` artifacts also declare complete synthetic no-event coverage over exactly their bar range, allowing the hard-stop path to be tested without pretending that provider data contains Corporate Action evidence. These values and coverage are synthetic test inputs, not approved O-005/O-006 production parameters, real-data evidence, or a forecast.
+The committed fixture supplies `synthetic_fixture_assumption` expected-benefit records of 1,000 bps and a 25 bps safety margin solely to exercise D-009. Its `pre-forward-daily-bars-v3` artifacts are retained at the fixture cutoff and explicitly declare complete synthetic no-event coverage through that cutoff, allowing the hard-stop path to be tested without pretending that provider data contains Corporate Action evidence. Coverage ending only at the latest price date is insufficient whenever the decision cutoff is later. These values and coverage are synthetic test inputs, not approved O-005/O-006 production parameters, real-data evidence, or a forecast.
 
 ## Credentialed retained-artifact path
 

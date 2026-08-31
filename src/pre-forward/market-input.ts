@@ -7,7 +7,7 @@ import {
   type VersionedDataArtifact,
 } from "../data/provenance.ts";
 
-export const PRE_FORWARD_DAILY_BARS_SCHEMA_VERSION = "pre-forward-daily-bars-v2" as const;
+export const PRE_FORWARD_DAILY_BARS_SCHEMA_VERSION = "pre-forward-daily-bars-v3" as const;
 
 export interface PreForwardSyntheticReturnEventCoverage {
   basis: "synthetic_complete_no_events_v1";
@@ -38,10 +38,20 @@ export interface BuildPreForwardDailyBarsFixtureInput {
   observedAt: string;
   availableAt: string;
   retrievedAt: string;
+  returnEventCoverageEndDate?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isIsoDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  try {
+    return new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+  } catch {
+    return false;
+  }
 }
 
 export function assertPreForwardDailyBarsArtifact(
@@ -84,7 +94,9 @@ export function assertPreForwardDailyBarsArtifact(
   const coverage = payload.returnEventCoverage;
   if (coverage.basis !== "synthetic_complete_no_events_v1"
     || coverage.startDate !== firstTradingDate
-    || coverage.endDate !== lastTradingDate
+    || !isIsoDate(coverage.endDate)
+    || coverage.endDate < lastTradingDate
+    || coverage.endDate > artifact.provenance.availableAt.slice(0, 10)
     || coverage.corporateActions !== "complete"
     || coverage.distributions !== "complete"
     || coverage.availableAt !== artifact.provenance.availableAt) {
@@ -96,6 +108,7 @@ export function buildPreForwardDailyBarsFixture(
   input: BuildPreForwardDailyBarsFixtureInput,
 ): VersionedDataArtifact<PreForwardDailyBarsPayload> {
   const bars = assertDailyBars(input.bars.map((bar) => ({ ...bar })), input.code);
+  const returnEventCoverageEndDate = input.returnEventCoverageEndDate ?? bars.at(-1)!.tradingDate;
   const payload: PreForwardDailyBarsPayload = {
     schemaVersion: PRE_FORWARD_DAILY_BARS_SCHEMA_VERSION,
     evidenceTier: "synthetic_fixture",
@@ -109,7 +122,7 @@ export function buildPreForwardDailyBarsFixture(
     returnEventCoverage: {
       basis: "synthetic_complete_no_events_v1",
       startDate: bars[0]!.tradingDate,
-      endDate: bars.at(-1)!.tradingDate,
+      endDate: returnEventCoverageEndDate,
       corporateActions: "complete",
       distributions: "complete",
       availableAt: input.availableAt,
@@ -122,7 +135,7 @@ export function buildPreForwardDailyBarsFixture(
     source: "quant-pilot-synthetic-fixture",
     dataset: "pre-forward-daily-bars-fixture",
     sourceVersion: PRE_FORWARD_DAILY_BARS_SCHEMA_VERSION,
-    adapterVersion: "pre-forward-fixture-seeder-v2",
+    adapterVersion: "pre-forward-fixture-seeder-v3",
     observedAt: input.observedAt,
     availableAt: input.availableAt,
     retrievedAt: input.retrievedAt,

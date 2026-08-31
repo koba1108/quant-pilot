@@ -3,20 +3,20 @@
   "mode": "pre_forward_dry_run",
   "artifactRoot": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v7/artifacts"
+    "path": "data/generated/pre-forward/fixture-v8/artifacts"
   },
   "ledgerPath": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v7/ledger.sqlite"
+    "path": "data/generated/pre-forward/fixture-v8/ledger.sqlite"
   },
   "input": {
     "kind": "daily_bars_manifest",
     "evidenceTier": "synthetic_fixture",
     "dailyBarsArtifactIds": [
-      "sha256:0641363785b0364dbbd7d3ffa90759f458b774f4affba47eaad3fd2bb156baba",
-      "sha256:11e0e749aaaaa2a8853edb12b1b1614d69f1d08fc9679547b0c66f8abbdff101",
-      "sha256:7483332a35f913eb453fd3a7e940e99c0bd3649a84d7bcfa48a52257eb0cf663",
-      "sha256:824f109c5d4e57482b2681b1db30fe567229bf026f9ddf14a5bcd9afcb114311"
+      "sha256:599ece50ad4a275753b38be4f50eff7ba6d9cfe529f74943ba1c6e32014ef583",
+      "sha256:693fefb753a77084cef0b3c68602f976fa3b8b17de525f265a8bf1b1c4df3be8",
+      "sha256:9ae3ca6ab8888db6d721b62b76021a06d03665fe109b1b53fccc4e6d53844655",
+      "sha256:beb3fda80c24fa81545de518e8486695bfc6fdd3a226ab42cbbd579ceafc29c6"
     ]
   },
   "universe": {
