@@ -28,7 +28,7 @@ bun run pre-forward \
   --replay-decision=sha256:<decision-package-id>
 ```
 
-Replay validates the content-addressed artifact, loads the exact retained pre-forward configuration, nested credentialed-sample configuration when applicable, strategy, inputs, and Universe snapshot, rebuilds the decision from its recorded opening state, compares the canonical payload, and verifies the ledger named by that retained configuration. A later current-config ledger-path change cannot redirect historical replay, cause ordinary execution to miss the retained monthly run, or reset a future cycle to initial cash; relocation requires an explicit audited migration. Replay does not apply another transition.
+Replay validates the content-addressed artifact, loads the exact retained pre-forward configuration, nested credentialed-sample configuration when applicable, strategy, inputs, and Universe snapshot, rebuilds the decision from its recorded opening state, compares the canonical payload, and verifies the ledger named by that retained configuration. A fixed owner-only runtime binding outside the configurable store pins each portfolio to its physical artifact root. A later current-config artifact/ledger-path change therefore cannot hide history, redirect historical replay, cause ordinary execution to miss the retained monthly run, or reset a future cycle to initial cash; relocation requires an explicit audited migration. Replay does not apply another transition.
 
 ## Runtime contract
 

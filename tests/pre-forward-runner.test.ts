@@ -235,6 +235,25 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     assert.equal(replayed.results[0]!.stateTransitionApplied, false);
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
+    const relocatedArtifactRoot = join(root, "data/generated/pre-forward/relocated-artifacts");
+    const doublyRelocatedLedgerPath = join(root, "doubly-relocated-ledger.sqlite");
+    const doublyRelocatedConfigValue = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    doublyRelocatedConfigValue.artifactRoot = { kind: "absolute", path: relocatedArtifactRoot };
+    doublyRelocatedConfigValue.ledgerPath = { kind: "absolute", path: doublyRelocatedLedgerPath };
+    await writeFile(configPath, `${JSON.stringify(doublyRelocatedConfigValue, null, 2)}\n`, "utf8");
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      /artifactRoot relocation.*explicit audited migration/,
+    );
+    await assert.rejects(
+      () => lstat(doublyRelocatedLedgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+
     const store = new FileArtifactStore(artifactRoot);
     for (const result of first.results) {
       const artifact = await store.read<PreForwardDecisionPackage>(result.decisionArtifactId);
@@ -286,7 +305,7 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
 });
 
 test("D-009 cost-benefit gate keeps marginal synthetic trades in cash", async () => {
-  await withTemporaryRuntime((value) => {
+  await withTemporaryRuntime(async (value, root) => {
     for (const instrument of value.execution.instruments as MutableConfig[]) {
       instrument.expectedBenefit.grossExpectedBenefitBps = 1;
     }
@@ -294,10 +313,19 @@ test("D-009 cost-benefit gate keeps marginal synthetic trades in cash", async ()
       strategy.portfolioId += "-benefit-gate";
       strategy.strategyConfigVersion += "-benefit-gate";
     }
-  }, async ({ configPath, artifactRoot, ledgerPath }) => {
-    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, artifactRoot, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
     const report = await runPreForward(configPath, fixtureAsOf, {
-      cwd: repositoryRoot,
+      cwd: root,
       clock: () => fixtureCreatedAt,
     });
     assert.equal(report.status, "executed");
@@ -467,8 +495,8 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
     }
     const store = new FileArtifactStore(join(root, "data/generated/pre-forward/artifacts"));
     await store.put(artifact);
-  }, async ({ configPath, ledgerPath }) => {
-    const first = await runPreForward(configPath, "2026-08-31T00:00:00Z", { cwd: repositoryRoot });
+  }, async ({ root, configPath, ledgerPath }) => {
+    const first = await runPreForward(configPath, "2026-08-31T00:00:00Z", { cwd: root });
     assert.equal(first.status, "blocked");
     assert.equal(preForwardExitCode(first), 1);
     for (const result of first.results) {
@@ -483,7 +511,7 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
       assert.ok(result.blockedReasons.includes("JPX:1308:missing_expected_benefit_evidence"));
     }
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
-    const second = await runPreForward(configPath, "2026-08-31T00:00:00Z", { cwd: repositoryRoot });
+    const second = await runPreForward(configPath, "2026-08-31T00:00:00Z", { cwd: root });
     assert.ok(second.results.every((result) => result.idempotent && !result.stateTransitionApplied));
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
   });

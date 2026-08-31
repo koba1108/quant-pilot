@@ -63,7 +63,8 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 - `src/pre-forward/credentialed-config-snapshot.ts`: exact nested M1 credentialed-sample config retention for path-independent replay
 - `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage-gated valuation, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
 - `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index and append-only hash-chained portfolio transitions
-- `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, retained-artifact run-key lookup before ledger selection, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading
+- `src/pre-forward/runtime-binding.ts`: fixed per-portfolio physical artifact-root binding outside the configurable store, requiring an explicit audited migration before relocation
+- `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, stable artifact-root binding plus retained-artifact run-key lookup before ledger selection, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading
 - `src/pre-forward/fixture-seeder.ts`: deterministic content-addressed fixture artifacts
 - `tests/fixtures/pre-forward/config.json`: committed synthetic acceptance config; runtime outputs remain under ignored `data/generated/`
 
@@ -185,7 +186,7 @@ Active M2 manual Pre-Forward branch verification:
 - execution-boundary regressions: stale validated-config fingerprints, unbound strategy overrides, and loaded-input mutation are rejected before a Decision Package is built
 - aggregate-cost regression: per-instrument one-way cost at or above 100% is rejected at config validation
 - config replay regression: a later valid execution-policy and strategy-config revision cannot change or invalidate the historical replay
-- ledger replay regression: a later current-config ledger path cannot redirect replay or ordinary duplicate detection, and a future cycle rejects relocation until an explicit audited migration exists
+- runtime relocation regression: a later current-config ledger path cannot redirect replay or ordinary duplicate detection, a future cycle rejects ledger relocation, and moving both artifact/ledger roots cannot hide history without an explicit audited migration
 - credentialed-config replay regression: changing the original nested sample-config file cannot alter normal duplicate invocation or explicit historical replay
 - Universe replay regression: each decision retains the exact content-addressed master snapshot, so a later valid future-dated revision cannot change or invalidate the historical replay
 - held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology

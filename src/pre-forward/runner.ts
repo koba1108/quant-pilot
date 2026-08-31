@@ -60,6 +60,7 @@ import {
   resolvePreForwardLedgerPath,
   resolveRepositoryInputFile,
 } from "./runtime-paths.ts";
+import { assertPreForwardArtifactRootBindings } from "./runtime-binding.ts";
 import {
   assertPreForwardUniverseSnapshotArtifact,
   buildPreForwardUniverseSnapshotArtifact,
@@ -289,6 +290,11 @@ async function loadRuntime(configPath: string, options: RunPreForwardOptions): P
   const cwd = resolve(options.cwd ?? process.cwd());
   const config = await loadPreForwardConfig(configPath, cwd);
   const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, cwd);
+  await assertPreForwardArtifactRootBindings(
+    cwd,
+    config.strategies.map((strategy) => strategy.portfolioId),
+    artifactRoot,
+  );
   const store = new FileArtifactStore(artifactRoot);
   return {
     cwd,
