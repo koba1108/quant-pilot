@@ -3,6 +3,7 @@ import { assertDailyBars } from "../data/provider.ts";
 import {
   assertVersionedDataArtifact,
   buildVersionedDataArtifact,
+  sha256Canonical,
   type VersionedDataArtifact,
 } from "../data/provenance.ts";
 
@@ -166,4 +167,25 @@ export interface LoadedPreForwardInput {
   series: readonly LoadedPreForwardSeries[];
   missingCapabilities: readonly string[];
   limitations: readonly string[];
+  integrityFingerprint: string;
+}
+
+type UnsealedLoadedPreForwardInput = Omit<LoadedPreForwardInput, "integrityFingerprint">;
+
+export function loadedPreForwardInputIntegrityFingerprint(
+  input: LoadedPreForwardInput | UnsealedLoadedPreForwardInput,
+): string {
+  const { integrityFingerprint: _integrityFingerprint, ...body } = input as LoadedPreForwardInput;
+  return sha256Canonical(body);
+}
+
+export function sealLoadedPreForwardInput(input: UnsealedLoadedPreForwardInput): LoadedPreForwardInput {
+  return { ...input, integrityFingerprint: loadedPreForwardInputIntegrityFingerprint(input) };
+}
+
+export function assertLoadedPreForwardInputIntegrity(input: LoadedPreForwardInput): void {
+  if (!/^sha256:[0-9a-f]{64}$/.test(input.integrityFingerprint)
+    || loadedPreForwardInputIntegrityFingerprint(input) !== input.integrityFingerprint) {
+    throw new Error("Loaded pre-forward inputs changed after artifact validation.");
+  }
 }

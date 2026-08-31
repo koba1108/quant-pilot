@@ -19,17 +19,23 @@ import { rankTrend } from "../strategies/trend.ts";
 import type { AssetSnapshot, RankedAsset } from "../strategies/types.ts";
 import {
   PRE_FORWARD_MODE,
+  validatePreForwardConfig,
   type PreForwardConfig,
   type PreForwardExecutionInstrumentConfig,
   type PreForwardStrategyConfig,
 } from "./config.ts";
-import type { LoadedPreForwardInput, LoadedPreForwardSeries } from "./market-input.ts";
+import {
+  assertLoadedPreForwardInputIntegrity,
+  type LoadedPreForwardInput,
+  type LoadedPreForwardSeries,
+} from "./market-input.ts";
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
-export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v3" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v3" as const;
+export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v5" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v5" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
+export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
 
 const ARTIFACT_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
@@ -86,8 +92,12 @@ export interface PreForwardInstrumentDiagnostic {
   totalBarCount: number;
   usableBarCount: number;
   excludedFutureBarCount: number;
+  excludedUnavailableBarCount: number;
+  excludedPreListingBarCount: number;
+  excludedPostEligibilityBarCount: number;
   firstTradingDate?: string;
   signalDate?: string;
+  signalBarAvailableAt?: string;
   dataAgeDays?: number;
   universeDecision?: UniverseMembershipDecision;
   execution?: {
@@ -171,6 +181,7 @@ export interface PreForwardDecisionPackage {
     disposition: "research_only";
     inputArtifactIds: readonly string[];
     parentAuditArtifactId?: string;
+    loadedInputIntegrityFingerprint: string;
     inputFingerprint: string;
     missingCapabilities: readonly string[];
     limitations: readonly string[];
@@ -384,6 +395,16 @@ function calendarAgeDays(latestDate: string, asOfDate: string): number {
   return Math.floor((Date.parse(`${asOfDate}T00:00:00Z`) - Date.parse(`${latestDate}T00:00:00Z`)) / 86_400_000);
 }
 
+export function preForwardBarAvailableAt(series: LoadedPreForwardSeries, tradingDate: string): string {
+  if (!isIsoDate(tradingDate)) throw new Error(`Invalid pre-forward bar trading date: ${tradingDate}.`);
+  const conservativeCloseFloor = Date.parse(`${tradingDate}T${PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC}`);
+  const artifactAvailability = Date.parse(series.availableAt);
+  if (!Number.isFinite(artifactAvailability)) {
+    throw new Error(`Invalid pre-forward artifact availability for ${series.code}.`);
+  }
+  return new Date(Math.max(conservativeCloseFloor, artifactAvailability)).toISOString();
+}
+
 function buildSnapshot(bars: readonly LoadedPreForwardSeries["bars"][number][], windowDays: number): AssetSnapshot {
   const currentIndex = bars.length - 1;
   const current = bars[currentIndex]!.adjustedClose;
@@ -457,12 +478,39 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       && Date.parse(execution.expectedBenefit.availableAt) > Date.parse(request.asOf)) {
       blockers.push("expected_benefit_not_available_as_of");
     }
-    const bars = series?.bars.filter((bar) => bar.tradingDate <= asOfDate) ?? [];
-    const excludedFutureBarCount = series === undefined ? 0 : series.bars.length - bars.length;
-    const latest = bars.at(-1);
+    const dateEligibleBars = series?.bars.filter((bar) => bar.tradingDate <= asOfDate) ?? [];
+    const excludedFutureBarCount = series === undefined ? 0 : series.bars.length - dateEligibleBars.length;
+    const availableBars = series === undefined ? [] : dateEligibleBars.filter((bar) => (
+      Date.parse(preForwardBarAvailableAt(series, bar.tradingDate)) <= Date.parse(request.asOf)
+    ));
+    const excludedUnavailableBarCount = dateEligibleBars.length - availableBars.length;
     if (series !== undefined && Date.parse(series.availableAt) > Date.parse(request.asOf)) {
       blockers.push("artifact_not_available_as_of");
     }
+    let universeDecision: UniverseMembershipDecision | undefined;
+    if (request.universeMaster === undefined) {
+      blockers.push("universe_master_missing");
+    } else {
+      universeDecision = evaluateUniverseMembershipAtCutoff(
+        request.universeMaster,
+        code,
+        asOfDate,
+        request.asOf,
+        policy,
+      );
+      if (!universeDecision.eligible) blockers.push(`universe_${universeDecision.reason ?? "not_eligible"}`);
+    }
+    const excludedPreListingBarCount = universeDecision?.listingDate === undefined
+      ? 0
+      : availableBars.filter((bar) => bar.tradingDate < universeDecision.listingDate!).length;
+    const excludedPostEligibilityBarCount = universeDecision?.lastEligibleDate === undefined
+      ? 0
+      : availableBars.filter((bar) => bar.tradingDate > universeDecision.lastEligibleDate!).length;
+    const bars = availableBars.filter((bar) => (
+      (universeDecision?.listingDate === undefined || bar.tradingDate >= universeDecision.listingDate)
+        && (universeDecision?.lastEligibleDate === undefined || bar.tradingDate <= universeDecision.lastEligibleDate)
+    ));
+    const latest = bars.at(-1);
     if (bars.length === 0) blockers.push("no_bar_on_or_before_as_of");
     if (bars.length < request.config.signal.minHistoryBars) blockers.push("insufficient_history");
     let dataAgeDays: number | undefined;
@@ -484,19 +532,6 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       } else {
         blockers.push("held_interval_return_event_coverage_missing");
       }
-    }
-    let universeDecision: UniverseMembershipDecision | undefined;
-    if (request.universeMaster === undefined) {
-      blockers.push("universe_master_missing");
-    } else if (latest !== undefined) {
-      universeDecision = evaluateUniverseMembershipAtCutoff(
-        request.universeMaster,
-        code,
-        asOfDate,
-        request.asOf,
-        policy,
-      );
-      if (!universeDecision.eligible) blockers.push(`universe_${universeDecision.reason ?? "not_eligible"}`);
     }
     let executionAudit: PreForwardInstrumentDiagnostic["execution"];
     if (latest !== undefined && execution !== undefined && series !== undefined
@@ -540,8 +575,14 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       totalBarCount: series?.bars.length ?? 0,
       usableBarCount: bars.length,
       excludedFutureBarCount,
+      excludedUnavailableBarCount,
+      excludedPreListingBarCount,
+      excludedPostEligibilityBarCount,
       firstTradingDate: bars[0]?.tradingDate,
       signalDate: latest?.tradingDate,
+      signalBarAvailableAt: latest === undefined || series === undefined
+        ? undefined
+        : preForwardBarAvailableAt(series, latest.tradingDate),
       dataAgeDays,
       universeDecision,
       execution: executionAudit,
@@ -832,6 +873,20 @@ function packageWithFingerprint(
 export function buildPreForwardDecisionPackage(
   request: BuildPreForwardDecisionRequest,
 ): PreForwardDecisionPackage {
+  const validatedConfig = validatePreForwardConfig(request.config);
+  if (canonicalJson(validatedConfig) !== canonicalJson(request.config)
+    || request.configFingerprint !== sha256Canonical(validatedConfig)) {
+    throw new Error("Pre-forward config changed after validation.");
+  }
+  const configuredStrategy = validatedConfig.strategies.find((candidate) => (
+    candidate.portfolioId === request.strategy.portfolioId
+      && candidate.strategy === request.strategy.strategy
+  ));
+  if (configuredStrategy === undefined
+    || canonicalJson(configuredStrategy) !== canonicalJson(request.strategy)) {
+    throw new Error("Pre-forward strategy is not bound to the validated config.");
+  }
+  assertLoadedPreForwardInputIntegrity(request.input);
   assertVirtualPortfolioState(request.beforeState);
   if (!isIsoDateTime(request.asOf)) throw new Error("Pre-forward asOf must be an ISO timestamp with timezone.");
   if (!isIsoDateTime(request.createdAt) || Date.parse(request.createdAt) < Date.parse(request.asOf)) {
@@ -1023,10 +1078,8 @@ export function buildPreForwardDecisionPackage(
 
   const totalModeledCostJpy = orders.reduce((sum, order) => sum + order.modeledCostJpy, 0);
   const inputFingerprint = sha256Canonical({
-    inputArtifactIds: request.input.inputArtifactIds,
-    parentAuditArtifactId: request.input.parentAuditArtifactId,
+    loadedInputIntegrityFingerprint: request.input.integrityFingerprint,
     universeMasterFingerprint: request.universeMaster?.fingerprint,
-    evidenceTier: request.input.evidenceTier,
   });
   return packageWithFingerprint({
     schemaVersion: PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION,
@@ -1054,6 +1107,7 @@ export function buildPreForwardDecisionPackage(
       disposition: "research_only",
       inputArtifactIds: request.input.inputArtifactIds,
       parentAuditArtifactId: request.input.parentAuditArtifactId,
+      loadedInputIntegrityFingerprint: request.input.integrityFingerprint,
       inputFingerprint,
       missingCapabilities: request.input.missingCapabilities,
       limitations: request.input.limitations,
@@ -1142,9 +1196,16 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
   }
   if (!ARTIFACT_ID_PATTERN.test(payload.runKey)
     || !ARTIFACT_ID_PATTERN.test(payload.configFingerprint)
+    || !ARTIFACT_ID_PATTERN.test(payload.input.loadedInputIntegrityFingerprint)
     || !ARTIFACT_ID_PATTERN.test(payload.input.inputFingerprint)
     || !ARTIFACT_ID_PATTERN.test(payload.strategy.parametersFingerprint)) {
     throw new Error("Pre-forward Decision Package fingerprints are invalid.");
+  }
+  if (payload.input.inputFingerprint !== sha256Canonical({
+    loadedInputIntegrityFingerprint: payload.input.loadedInputIntegrityFingerprint,
+    universeMasterFingerprint: payload.universe.masterFingerprint,
+  })) {
+    throw new Error("Pre-forward Decision Package input fingerprint is not bound to its loaded inputs.");
   }
   if (payload.runKey !== sha256Canonical({
     mode: PRE_FORWARD_MODE,
@@ -1167,6 +1228,35 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
     throw new Error("Pre-forward safety handling must not bypass portfolio chronology.");
   }
   const diagnosticByCode = new Map(payload.instrumentDiagnostics.map((diagnostic) => [diagnostic.code, diagnostic]));
+  for (const diagnostic of payload.instrumentDiagnostics) {
+    const barCounts = [
+      diagnostic.totalBarCount,
+      diagnostic.usableBarCount,
+      diagnostic.excludedFutureBarCount,
+      diagnostic.excludedUnavailableBarCount,
+      diagnostic.excludedPreListingBarCount,
+      diagnostic.excludedPostEligibilityBarCount,
+    ];
+    const countedBars = diagnostic.usableBarCount
+      + diagnostic.excludedFutureBarCount
+      + diagnostic.excludedUnavailableBarCount
+      + diagnostic.excludedPreListingBarCount
+      + diagnostic.excludedPostEligibilityBarCount;
+    if (barCounts.some((count) => !Number.isInteger(count) || count < 0)
+      || countedBars !== diagnostic.totalBarCount
+      || diagnostic.signalDate !== undefined && (
+        diagnostic.signalBarAvailableAt === undefined
+          || !isIsoDateTime(diagnostic.signalBarAvailableAt)
+          || Date.parse(diagnostic.signalBarAvailableAt) > Date.parse(payload.asOf)
+          || diagnostic.universeDecision?.listingDate !== undefined
+            && diagnostic.signalDate < diagnostic.universeDecision.listingDate
+          || diagnostic.universeDecision?.lastEligibleDate !== undefined
+            && diagnostic.signalDate > diagnostic.universeDecision.lastEligibleDate
+      )
+      || diagnostic.signalDate === undefined && diagnostic.signalBarAvailableAt !== undefined) {
+      throw new Error(`Pre-forward bar lifecycle or availability audit is invalid for ${diagnostic.code}.`);
+    }
+  }
   const completeHeldEventCoverage = payload.portfolio.beforeState.positions.length > 0
     && chronological
     && payload.portfolio.beforeState.lastAsOf !== undefined
@@ -1320,6 +1410,7 @@ export function buildPreForwardDecisionArtifact(
       cycleId: payload.cycleId,
       createdAt: payload.createdAt,
       configFingerprint: payload.configFingerprint,
+      loadedInputIntegrityFingerprint: payload.input.loadedInputIntegrityFingerprint,
       inputFingerprint: payload.input.inputFingerprint,
       expectedLedgerHead: payload.ledger.expectedHeadBefore,
     },

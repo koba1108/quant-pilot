@@ -170,7 +170,7 @@ Merged PR #11 M1 credentialed-sample verification:
 
 Active M2 manual Pre-Forward branch verification:
 
-- `bun test`: 210 pass / 0 fail
+- `bun test`: 212 pass / 0 fail
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
@@ -179,6 +179,8 @@ Active M2 manual Pre-Forward branch verification:
 - intramonth regression: a different cutoff in an already recorded calendar month is rejected rather than creating a second run
 - provenance regression: market `asOf` remains distinct from actual Decision Package `createdAt`, and replay preserves both timestamps
 - Point-in-Time artifact regression: a daily-bars artifact cannot claim observation/availability before one of its contained trading dates
+- lifecycle/availability regressions: signal history excludes pre-listing rows, and a same-day close is unavailable before the conservative `07:00:00Z` floor
+- execution-boundary regressions: stale validated-config fingerprints, unbound strategy overrides, and loaded-input mutation are rejected before a Decision Package is built
 - held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
 - retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
 - ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior

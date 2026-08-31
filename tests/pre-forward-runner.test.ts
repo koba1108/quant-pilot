@@ -11,6 +11,7 @@ import { validatePreForwardConfig } from "../src/pre-forward/config.ts";
 import {
   buildPreForwardDecisionPackage,
   buildVirtualPortfolioState,
+  preForwardBarAvailableAt,
   type PreForwardDecisionPackage,
 } from "../src/pre-forward/decision.ts";
 import { seedPreForwardFixture } from "../src/pre-forward/fixture-seeder.ts";
@@ -18,6 +19,7 @@ import { PreForwardLedger } from "../src/pre-forward/ledger.ts";
 import {
   assertPreForwardDailyBarsArtifact,
   buildPreForwardDailyBarsFixture,
+  sealLoadedPreForwardInput,
   type LoadedPreForwardInput,
   type PreForwardDailyBarsPayload,
 } from "../src/pre-forward/market-input.ts";
@@ -99,14 +101,14 @@ async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: st
   });
   return {
     config,
-    input: {
+    input: sealLoadedPreForwardInput({
       evidenceTier: "synthetic_fixture",
       disposition: "research_only",
       inputArtifactIds: artifacts.map((artifact) => artifact.provenance.artifactId).sort(),
       series,
       missingCapabilities: ["not_credentialed_provider_evidence"],
       limitations: ["test"],
-    },
+    }),
     universeMaster: await loadUniverseMaster(join(repositoryRoot, config.universe.masterPath!)),
   };
 }
@@ -224,6 +226,109 @@ test("D-009 cost-benefit gate keeps marginal synthetic trades in cash", async ()
   });
 });
 
+test("signal history excludes every bar from before the resolved ETF listing date", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
+    const records = fixture.universeMaster.records.map((record) => (
+      record.code === "ALPHA" ? { ...record, listingDate: "2024-12-01" } : record
+    ));
+    const masterBody = { schemaVersion: fixture.universeMaster.schemaVersion, records };
+    const universeMaster = { ...masterBody, fingerprint: sha256Canonical(masterBody) };
+    const beforeState = buildVirtualPortfolioState({
+      portfolioId: fixture.config.strategies[0].portfolioId,
+      cashJpy: 1_000_000,
+      positions: [],
+      distributionReceivables: [],
+      highWaterMarkJpy: 1_000_000,
+      stopped: false,
+    });
+    const changedConfig = structuredClone(fixture.config);
+    changedConfig.signal.maxDataAgeDays += 1;
+    assert.throws(() => buildPreForwardDecisionPackage({
+      config: changedConfig,
+      configFingerprint: sha256Canonical(fixture.config),
+      strategy: changedConfig.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input: fixture.input,
+      universeMaster,
+      beforeState,
+    }), /Pre-forward config changed after validation/);
+    const changedStrategy = structuredClone(fixture.config.strategies[0]);
+    changedStrategy.strategyVersion += "-not-configured";
+    assert.throws(() => buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      strategy: changedStrategy,
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input: fixture.input,
+      universeMaster,
+      beforeState,
+    }), /Pre-forward strategy is not bound to the validated config/);
+    const payload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      strategy: fixture.config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input: fixture.input,
+      universeMaster,
+      beforeState,
+    });
+    const diagnostic = payload.instrumentDiagnostics.find((item) => item.code === "ALPHA")!;
+    assert.ok(diagnostic.excludedPreListingBarCount > 0);
+    assert.ok(diagnostic.firstTradingDate === undefined || diagnostic.firstTradingDate >= "2024-12-01");
+    assert.ok(diagnostic.usableBarCount < fixture.config.signal.minHistoryBars);
+    assert.ok(diagnostic.blockers.includes("insufficient_history"));
+    assert.equal(diagnostic.snapshot, undefined);
+    assert.ok(!payload.quantDecision.ranking.some((asset) => asset.code === "ALPHA"));
+  });
+});
+
+test("same-day closing bars remain unavailable before the conservative close floor", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
+    const { integrityFingerprint: _integrityFingerprint, ...inputBody } = fixture.input;
+    const input = sealLoadedPreForwardInput({
+      ...inputBody,
+      series: fixture.input.series.map((series) => ({
+        ...series,
+        availableAt: "2025-01-01T00:00:00Z",
+      })),
+    });
+    const asOf = "2025-01-06T06:59:59Z";
+    const payload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      strategy: fixture.config.strategies[0],
+      asOf,
+      createdAt: fixtureCreatedAt,
+      input,
+      universeMaster: fixture.universeMaster,
+      beforeState: buildVirtualPortfolioState({
+        portfolioId: fixture.config.strategies[0].portfolioId,
+        cashJpy: 1_000_000,
+        positions: [],
+        distributionReceivables: [],
+        highWaterMarkJpy: 1_000_000,
+        stopped: false,
+      }),
+    });
+    for (const diagnostic of payload.instrumentDiagnostics) {
+      assert.equal(diagnostic.signalDate, "2025-01-03");
+      assert.equal(diagnostic.excludedUnavailableBarCount, 1);
+      assert.ok(Date.parse(diagnostic.signalBarAvailableAt!) <= Date.parse(asOf));
+      assert.equal(
+        preForwardBarAvailableAt(input.series.find((series) => series.code === diagnostic.code)!, "2025-01-06"),
+        "2025-01-06T07:00:00.000Z",
+      );
+    }
+  });
+});
+
 test("incomplete retained input is blocked explicitly and never moves virtual cash", async () => {
   await withTemporaryRuntime(async (value, root) => {
     const artifact = buildPreForwardDailyBarsFixture({
@@ -316,7 +421,7 @@ test("held-unit valuation fails closed when split and distribution coverage are 
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
     const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
-    const input: LoadedPreForwardInput = {
+    const tamperedInput: LoadedPreForwardInput = {
       ...fixture.input,
       series: fixture.input.series.map(({ returnEventCoverage: _coverage, ...series }) => series),
     };
@@ -329,6 +434,18 @@ test("held-unit valuation fails closed when split and distribution coverage are 
       stopped: false,
       lastAsOf: "2025-01-01T00:00:00Z",
     });
+    assert.throws(() => buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      strategy: fixture.config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input: tamperedInput,
+      universeMaster: fixture.universeMaster,
+      beforeState,
+    }), /Loaded pre-forward inputs changed after artifact validation/);
+    const { integrityFingerprint: _integrityFingerprint, ...inputBody } = tamperedInput;
+    const input = sealLoadedPreForwardInput(inputBody);
     const payload = buildPreForwardDecisionPackage({
       config: fixture.config,
       configFingerprint: sha256Canonical(fixture.config),

@@ -37,6 +37,7 @@ import {
 import { PreForwardLedger } from "./ledger.ts";
 import {
   assertPreForwardDailyBarsArtifact,
+  sealLoadedPreForwardInput,
   type LoadedPreForwardInput,
   type LoadedPreForwardSeries,
   type PreForwardDailyBarsPayload,
@@ -158,7 +159,7 @@ async function loadManifestInput(
   if (new Set(series.map((item) => item.code)).size !== series.length) {
     throw new Error("Pre-forward fixture manifest contains duplicate instrument series.");
   }
-  return {
+  return sealLoadedPreForwardInput({
     evidenceTier: "synthetic_fixture",
     disposition: "research_only",
     inputArtifactIds: [...config.input.dailyBarsArtifactIds],
@@ -168,7 +169,7 @@ async function loadManifestInput(
       "Synthetic artifacts validate the manual Pre-Forward operating loop, not investment performance.",
       "Provider-adjusted values are not classified as Total Return.",
     ],
-  };
+  });
 }
 
 async function loadCredentialedInput(
@@ -204,7 +205,7 @@ async function loadCredentialedInput(
   const failureLimitations = replayed.payload.providerFailures.map((failure) => (
     `Retained provider failure: ${failure.providerId}/${failure.stableId} ${failure.failureKind} ${failure.status}.`
   ));
-  return {
+  return sealLoadedPreForwardInput({
     evidenceTier: "credentialed_sample_unverified",
     disposition: "research_only",
     inputArtifactIds: [credentialedInput.auditArtifactId, ...selected.map((artifact) => artifact.provenance.artifactId)]
@@ -213,7 +214,7 @@ async function loadCredentialedInput(
     series,
     missingCapabilities: replayed.payload.missingCapabilities,
     limitations: [...replayed.payload.limitations, ...failureLimitations],
-  };
+  });
 }
 
 async function loadRuntime(configPath: string, options: RunPreForwardOptions): Promise<LoadedRuntime> {
