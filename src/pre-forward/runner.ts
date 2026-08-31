@@ -9,6 +9,7 @@ import {
   assertCredentialedSampleAuditPayload,
   loadCredentialedSampleConfig,
   replayCredentialedSampleFromConfig,
+  retainCredentialedSampleLineageFromConfig,
   type CredentialedSampleAuditPayload,
 } from "../data/credentialed-sample-runner.ts";
 import type { CredentialedSampleConfig } from "../data/credentialed-sample-config.ts";
@@ -200,7 +201,7 @@ async function loadCredentialedInput(
   const replayed = await replayCredentialedSampleFromConfig(
     sampleConfig,
     credentialedInput.auditArtifactId,
-    { cwd },
+    { cwd, artifactStore: store },
   );
   assertCredentialedSampleAuditPayload(replayed.payload);
   if (replayed.payload.evidenceTier !== "credentialed_sample_unverified") {
@@ -250,6 +251,12 @@ async function loadNewRuntimeInput(
   const sampleConfigPath = await resolveConfigPath(config.input.sampleConfigPath, cwd);
   const sampleConfig = await loadCredentialedSampleConfig(sampleConfigPath);
   const snapshot = buildPreForwardCredentialedConfigSnapshotArtifact(sampleConfig, createdAt);
+  await retainCredentialedSampleLineageFromConfig(
+    sampleConfig,
+    config.input.auditArtifactId,
+    store,
+    { cwd },
+  );
   const input = await loadCredentialedInput(
     config,
     store,

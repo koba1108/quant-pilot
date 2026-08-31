@@ -34,7 +34,7 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 - `src/data/artifact-store.ts`: immutable content-addressed filesystem artifact store
 - `src/data/provider-sample-artifacts.ts`: raw-to-daily lineage and field-specific observation artifacts
 - `src/data/credentialed-sample-config.ts`: strict fixture/live schema and G1/G2 authorization records
-- `src/data/credentialed-sample-runner.ts`: fixture/live capture, reconciliation, fail-closed audit, and offline replay CLI
+- `src/data/credentialed-sample-runner.ts`: fixture/live capture, reconciliation, fail-closed audit, offline replay CLI, and validated full-lineage retention into a caller-pinned artifact store
 - `src/data/provider-evaluation.ts`: O-001 capability, evidence, source-bundle, license, cost-approval, and integrity evaluator
 - `src/data/provider-evaluation-runner.ts`: deterministic provider-evaluation CLI
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
@@ -64,7 +64,7 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 - `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage/Point-in-Time-Universe-gated held valuation, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
 - `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index and append-only hash-chained portfolio transitions
 - `src/pre-forward/runtime-binding.ts`: fixed per-portfolio physical artifact-root binding outside the configurable store, requiring an explicit audited migration before relocation
-- `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, stable artifact-root binding plus ledger-committed retained-artifact run-key lookup before ledger selection, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading
+- `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, stable artifact-root binding plus ledger-committed retained-artifact run-key lookup before ledger selection, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading from a complete raw-to-audit lineage pinned on the first decision
 - `src/pre-forward/fixture-seeder.ts`: deterministic content-addressed fixture artifacts
 - `tests/fixtures/pre-forward/config.json`: committed synthetic acceptance config; runtime outputs remain under ignored `data/generated/`
 
@@ -188,7 +188,7 @@ Active M2 manual Pre-Forward branch verification:
 - config replay regression: a later valid execution-policy and strategy-config revision cannot change or invalidate the historical replay
 - runtime relocation regression: a later current-config ledger path cannot redirect replay or ordinary duplicate detection, a future cycle rejects ledger relocation, and moving both artifact/ledger roots cannot hide history without an explicit audited migration
 - commit-reconciliation regression: a valid Decision Package left before a losing or interrupted ledger append is ignored unless its exact artifact ID is committed and verified in the retained ledger, so it cannot poison later duplicate detection
-- credentialed-config replay regression: changing the original nested sample-config file cannot alter normal duplicate invocation or explicit historical replay
+- credentialed-lineage replay regression: after the first decision copies and validates the complete raw-response, normalized daily-bar, observation, and audit lineage into the pinned Pre-Forward store, removing the original M1 artifact directory and invalidating the nested sample-config file cannot alter normal duplicate invocation or explicit historical replay
 - Universe replay regression: each decision retains the exact content-addressed master snapshot, so a later valid future-dated revision cannot change or invalidate the historical replay
 - held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
 - cutoff-coverage regression: event coverage ending at the latest bar cannot authorize held-unit valuation when the decision cutoff is later

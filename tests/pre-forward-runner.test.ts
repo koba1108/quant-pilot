@@ -569,7 +569,7 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
     sampleConfig.mode = "live";
     sampleConfig.artifactRoot = {
       kind: "absolute",
-      path: join(root, "data/generated/pre-forward/artifacts"),
+      path: join(root, "data/generated/provider-sample/source-artifacts"),
     };
     for (const provider of sampleConfig.providers as MutableConfig[]) delete provider.fixtureFile;
     sampleConfig.credentialUseAuthorized = true;
@@ -624,6 +624,8 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
     });
     assert.equal(first.status, "blocked");
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
+    const sourceArtifactRoot = join(root, "data/generated/provider-sample/source-artifacts");
+    await rm(sourceArtifactRoot, { recursive: true, force: true });
     await writeFile(join(root, "sample.config.json"), "{}\n", "utf8");
 
     const repeated = await runPreForward(configPath, asOf, { cwd: root });
@@ -647,6 +649,10 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
     const snapshot = await store.read<PreForwardCredentialedConfigSnapshotPayload>(sampleConfigArtifactId);
     assertPreForwardCredentialedConfigSnapshotArtifact(snapshot);
     assert.equal(snapshot.payload.config.mode, "live");
+    await assert.rejects(
+      () => lstat(sourceArtifactRoot),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
   });
 });
