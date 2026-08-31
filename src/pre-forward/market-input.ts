@@ -178,6 +178,7 @@ export interface LoadedPreForwardInput {
   disposition: "research_only";
   inputArtifactIds: readonly string[];
   parentAuditArtifactId?: string;
+  credentialedSampleConfigArtifactId?: string;
   series: readonly LoadedPreForwardSeries[];
   missingCapabilities: readonly string[];
   limitations: readonly string[];
@@ -198,6 +199,13 @@ export function sealLoadedPreForwardInput(input: UnsealedLoadedPreForwardInput):
 }
 
 export function assertLoadedPreForwardInputIntegrity(input: LoadedPreForwardInput): void {
+  if ((input.evidenceTier === "credentialed_sample_unverified")
+      !== (input.credentialedSampleConfigArtifactId !== undefined)
+    || input.credentialedSampleConfigArtifactId !== undefined
+      && (!/^sha256:[0-9a-f]{64}$/.test(input.credentialedSampleConfigArtifactId)
+        || !input.inputArtifactIds.includes(input.credentialedSampleConfigArtifactId))) {
+    throw new Error("Loaded credentialed input must be bound to its retained sample config artifact.");
+  }
   if (!/^sha256:[0-9a-f]{64}$/.test(input.integrityFingerprint)
     || loadedPreForwardInputIntegrityFingerprint(input) !== input.integrityFingerprint) {
     throw new Error("Loaded pre-forward inputs changed after artifact validation.");

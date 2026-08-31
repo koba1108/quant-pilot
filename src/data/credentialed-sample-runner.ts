@@ -767,6 +767,19 @@ export async function replayCredentialedSample(
 ): Promise<VersionedDataArtifact<CredentialedSampleAuditPayload>> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const config = await loadCredentialedSampleConfig(resolve(cwd, configPath));
+  return replayCredentialedSampleFromConfig(config, auditArtifactId, { cwd });
+}
+
+export async function replayCredentialedSampleFromConfig(
+  configInput: CredentialedSampleConfig,
+  auditArtifactId: string,
+  options: Pick<CredentialedSampleRunOptions, "cwd"> = {},
+): Promise<VersionedDataArtifact<CredentialedSampleAuditPayload>> {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const config = validateCredentialedSampleConfig(configInput);
+  if (canonicalJson(config) !== canonicalJson(configInput)) {
+    throw new Error("Credentialed-sample config changed after validation.");
+  }
   const artifactRoot = await resolveArtifactRoot(config, cwd);
   const store = new FileArtifactStore(artifactRoot);
   const auditArtifact = await store.read<CredentialedSampleAuditPayload>(auditArtifactId);

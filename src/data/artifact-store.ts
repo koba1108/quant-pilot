@@ -1,4 +1,4 @@
-import { link, lstat, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   assertVersionedDataArtifact,
@@ -63,8 +63,9 @@ async function readStoredArtifact<T>(filePath: string): Promise<VersionedDataArt
 
 /**
  * A small filesystem-backed store for immutable, content-addressed artifacts.
- * The store intentionally has no listing or deletion API: callers address an
- * artifact only by its validated content-derived id.
+ * Artifacts are addressed by validated content-derived ids. The read-only
+ * listing API exists solely for deterministic integrity/index scans; deletion
+ * remains outside this boundary.
  */
 export class FileArtifactStore {
   readonly root: string;
@@ -154,5 +155,14 @@ export class FileArtifactStore {
       throw new Error(`Artifact file does not match requested artifactId: ${artifactId}.`);
     }
     return artifact;
+  }
+
+  async listArtifactIds(): Promise<readonly string[]> {
+    await this.assertPrivateRoot();
+    const entries = await readdir(this.root, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && /^[0-9a-f]{64}\.json$/.test(entry.name))
+      .map((entry) => `sha256:${entry.name.slice(0, -ARTIFACT_FILE_SUFFIX.length)}`)
+      .sort();
   }
 }

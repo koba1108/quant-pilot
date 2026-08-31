@@ -37,6 +37,7 @@ test("puts and reads an asserted artifact using an id-based filename", async () 
     assert.equal(artifactId, artifact.provenance.artifactId);
     assert.equal(canonicalJson(await store.read(artifactId)), canonicalJson(artifact));
     assert.deepEqual(await readdir(root), [`${artifactId.slice("sha256:".length)}.json`]);
+    assert.deepEqual(await store.listArtifactIds(), [artifactId]);
     if (process.platform !== "win32") {
       assert.equal((await lstat(root)).mode & 0o777, 0o700);
       assert.equal(

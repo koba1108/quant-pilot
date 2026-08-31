@@ -5,6 +5,7 @@ import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { FileArtifactStore } from "../src/data/artifact-store.ts";
+import { captureCredentialedSample } from "../src/data/credentialed-sample-runner.ts";
 import { sha256Canonical } from "../src/data/provenance.ts";
 import { loadUniverseMaster } from "../src/data/universe-master.ts";
 import { validatePreForwardConfig } from "../src/pre-forward/config.ts";
@@ -13,6 +14,10 @@ import {
   buildPreForwardConfigSnapshotArtifact,
   type PreForwardConfigSnapshotPayload,
 } from "../src/pre-forward/config-snapshot.ts";
+import {
+  assertPreForwardCredentialedConfigSnapshotArtifact,
+  type PreForwardCredentialedConfigSnapshotPayload,
+} from "../src/pre-forward/credentialed-config-snapshot.ts";
 import {
   buildPreForwardDecisionPackage,
   buildVirtualPortfolioState,
@@ -36,6 +41,7 @@ import { buildPreForwardUniverseSnapshotArtifact } from "../src/pre-forward/univ
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const fixtureConfigPath = join(repositoryRoot, "tests/fixtures/pre-forward/config.json");
+const credentialedFixtureConfigPath = join(repositoryRoot, "research/provider-samples/fixture.config.json");
 const fixtureAsOf = "2025-01-07T00:00:00Z";
 const fixtureCreatedAt = "2025-01-07T00:05:00Z";
 const futureAlphaRevision = "universe-master-v1,univ-alpha-v2,univ-alpha-v1,instrument-alpha,ALPHA,synthetic,Synthetic Alpha,Synthetic,Core,test_candidate,core,false,etf,false,false,false,false,TEST,JPY,2023-01-02,,2026-08-31T00:00:00Z,2026-08-31T00:01:00Z,synthetic-fixture,universe-fixture,2026-08-31T00:02:00Z,v2,record-alpha-v2,future revision";
@@ -53,8 +59,8 @@ async function withTemporaryRuntime<T>(
   const root = await mkdtemp(join(tmpdir(), "quant-pilot-pre-forward-"));
   try {
     const value = await baseConfig();
-    const artifactRoot = join(root, "artifacts");
-    const ledgerPath = join(root, "ledger.sqlite");
+    const artifactRoot = join(root, "data/generated/pre-forward/artifacts");
+    const ledgerPath = join(root, "data/generated/pre-forward/ledger.sqlite");
     value.artifactRoot = { kind: "absolute", path: artifactRoot };
     value.ledgerPath = { kind: "absolute", path: ledgerPath };
     await prepare(value, root);
@@ -196,6 +202,30 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     const relocatedConfigValue = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
     relocatedConfigValue.ledgerPath = { kind: "absolute", path: unrelatedLedgerPath };
     await writeFile(configPath, `${JSON.stringify(relocatedConfigValue, null, 2)}\n`, "utf8");
+    const relocatedRepeat = await runPreForward(configPath, fixtureAsOf, { cwd: root });
+    assert.deepEqual(
+      relocatedRepeat.results.map((result) => result.decisionArtifactId),
+      first.results.map((result) => result.decisionArtifactId),
+    );
+    assert.ok(relocatedRepeat.results.every((result) => result.idempotent && !result.stateTransitionApplied));
+    await assert.rejects(
+      () => lstat(unrelatedLedgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    await assert.rejects(
+      () => runPreForward(configPath, "2025-02-03T00:00:00Z", { cwd: root }),
+      /ledger relocation.*explicit audited migration/,
+    );
+    const reassociatedConfigValue = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    const reassociatedStrategies = reassociatedConfigValue.strategies as MutableConfig[];
+    const firstPortfolioId = reassociatedStrategies[0]!.portfolioId;
+    reassociatedStrategies[0]!.portfolioId = reassociatedStrategies[1]!.portfolioId;
+    reassociatedStrategies[1]!.portfolioId = firstPortfolioId;
+    await writeFile(configPath, `${JSON.stringify(reassociatedConfigValue, null, 2)}\n`, "utf8");
+    await assert.rejects(
+      () => runPreForward(configPath, "2025-02-03T00:00:00Z", { cwd: root }),
+      /ledger relocation.*explicit audited migration/,
+    );
     const replayed = await runPreForward(configPath, fixtureAsOf, {
       cwd: root,
       replayDecisionArtifactId: first.results[0]!.decisionArtifactId,
@@ -204,10 +234,6 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     assert.equal(replayed.results[0]!.decisionArtifactId, first.results[0]!.decisionArtifactId);
     assert.equal(replayed.results[0]!.stateTransitionApplied, false);
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
-    await assert.rejects(
-      () => lstat(unrelatedLedgerPath),
-      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
-    );
 
     const store = new FileArtifactStore(artifactRoot);
     for (const result of first.results) {
@@ -439,7 +465,7 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
       strategy.portfolioId += "-blocked";
       strategy.strategyConfigVersion += "-blocked";
     }
-    const store = new FileArtifactStore(join(root, "artifacts"));
+    const store = new FileArtifactStore(join(root, "data/generated/pre-forward/artifacts"));
     await store.put(artifact);
   }, async ({ configPath, ledgerPath }) => {
     const first = await runPreForward(configPath, "2026-08-31T00:00:00Z", { cwd: repositoryRoot });
@@ -459,6 +485,92 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
     const second = await runPreForward(configPath, "2026-08-31T00:00:00Z", { cwd: repositoryRoot });
     assert.ok(second.results.every((result) => result.idempotent && !result.stateTransitionApplied));
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
+  });
+
+  await withTemporaryRuntime(async (value, root) => {
+    const sampleConfig = JSON.parse(await readFile(credentialedFixtureConfigPath, "utf8")) as MutableConfig;
+    sampleConfig.mode = "live";
+    sampleConfig.artifactRoot = {
+      kind: "absolute",
+      path: join(root, "data/generated/pre-forward/artifacts"),
+    };
+    for (const provider of sampleConfig.providers as MutableConfig[]) delete provider.fixtureFile;
+    sampleConfig.credentialUseAuthorized = true;
+    sampleConfig.costAuthorized = true;
+    sampleConfig.rawRetentionAuthorized = true;
+    sampleConfig.licenseRetentionConfirmed = true;
+    const sampleConfigPath = join(root, "sample.config.json");
+    await writeFile(sampleConfigPath, `${JSON.stringify(sampleConfig, null, 2)}\n`, "utf8");
+    const jquantsToken = "authorized-jquants-token";
+    const eodhdToken = "authorized-eodhd-token";
+    const captured = await captureCredentialedSample(sampleConfigPath, {
+      cwd: root,
+      env: { JQUANTS_API_KEY: jquantsToken, EODHD_API_TOKEN: eodhdToken },
+      fetchImpl: (async (input: string | URL | Request): Promise<Response> => {
+        const url = new URL(input instanceof Request ? input.url : input.toString());
+        if (url.origin === "https://api.jquants.com") {
+          const code = url.searchParams.get("code")!;
+          return new Response(JSON.stringify({
+            data: [{ Date: "2025-01-07", Code: code, C: 100, AdjC: 100, AdjFactor: 1, Vo: 10, Va: 1_000 }],
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify([{
+          date: "2025-01-07", close: 100, adjusted_close: 100, volume: 10,
+        }]), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof fetch,
+      clock: () => "2025-01-09T00:00:00Z",
+      liveAuthorization: {
+        credentialUse: true,
+        cost: true,
+        rawRetention: true,
+        licenseRetention: true,
+      },
+    });
+    value.input = {
+      kind: "credentialed_sample_audit",
+      auditArtifactId: captured.provenance.artifactId,
+      sampleConfigPath: "sample.config.json",
+      providerId: "jquants_v2",
+    };
+    delete value.universe.masterPath;
+    value.universe.allowedStatuses = ["pre_forward_candidate"];
+    value.execution.instruments = [];
+    for (const strategy of value.strategies as MutableConfig[]) {
+      strategy.portfolioId += "-credentialed";
+      strategy.strategyConfigVersion += "-credentialed";
+    }
+  }, async ({ root, configPath, artifactRoot, ledgerPath }) => {
+    const asOf = "2025-01-10T00:00:00Z";
+    const first = await runPreForward(configPath, asOf, {
+      cwd: root,
+      clock: () => "2025-01-10T00:05:00Z",
+    });
+    assert.equal(first.status, "blocked");
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
+    await writeFile(join(root, "sample.config.json"), "{}\n", "utf8");
+
+    const repeated = await runPreForward(configPath, asOf, { cwd: root });
+    assert.deepEqual(
+      repeated.results.map((result) => result.decisionArtifactId),
+      first.results.map((result) => result.decisionArtifactId),
+    );
+    assert.ok(repeated.results.every((result) => result.idempotent && !result.stateTransitionApplied));
+    const replayed = await runPreForward(configPath, asOf, {
+      cwd: root,
+      replayDecisionArtifactId: first.results[0]!.decisionArtifactId,
+    });
+    assert.equal(replayed.results[0]!.decisionArtifactId, first.results[0]!.decisionArtifactId);
+    assert.equal(replayed.results[0]!.stateTransitionApplied, false);
+
+    const store = new FileArtifactStore(artifactRoot);
+    const decision = await store.read<PreForwardDecisionPackage>(first.results[0]!.decisionArtifactId);
+    const sampleConfigArtifactId = decision.payload.input.credentialedSampleConfigArtifactId!;
+    assert.match(sampleConfigArtifactId, /^sha256:[0-9a-f]{64}$/);
+    assert.ok(decision.payload.input.inputArtifactIds.includes(sampleConfigArtifactId));
+    const snapshot = await store.read<PreForwardCredentialedConfigSnapshotPayload>(sampleConfigArtifactId);
+    assertPreForwardCredentialedConfigSnapshotArtifact(snapshot);
+    assert.equal(snapshot.payload.config.mode, "live");
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
   });
 });

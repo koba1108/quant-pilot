@@ -32,8 +32,8 @@ import {
 } from "./market-input.ts";
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
-export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v7" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v9" as const;
+export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v8" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v10" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
@@ -192,6 +192,7 @@ export interface PreForwardDecisionPackage {
     disposition: "research_only";
     inputArtifactIds: readonly string[];
     parentAuditArtifactId?: string;
+    credentialedSampleConfigArtifactId?: string;
     loadedInputIntegrityFingerprint: string;
     inputFingerprint: string;
     missingCapabilities: readonly string[];
@@ -1142,6 +1143,7 @@ export function buildPreForwardDecisionPackage(
       disposition: "research_only",
       inputArtifactIds: request.input.inputArtifactIds,
       parentAuditArtifactId: request.input.parentAuditArtifactId,
+      credentialedSampleConfigArtifactId: request.input.credentialedSampleConfigArtifactId,
       loadedInputIntegrityFingerprint: request.input.integrityFingerprint,
       inputFingerprint,
       missingCapabilities: request.input.missingCapabilities,
@@ -1237,6 +1239,13 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
     || !ARTIFACT_ID_PATTERN.test(payload.input.inputFingerprint)
     || !ARTIFACT_ID_PATTERN.test(payload.strategy.parametersFingerprint)) {
     throw new Error("Pre-forward Decision Package fingerprints are invalid.");
+  }
+  if ((payload.input.evidenceTier === "credentialed_sample_unverified")
+      !== (payload.input.credentialedSampleConfigArtifactId !== undefined)
+    || payload.input.credentialedSampleConfigArtifactId !== undefined
+      && (!ARTIFACT_ID_PATTERN.test(payload.input.credentialedSampleConfigArtifactId)
+        || !payload.input.inputArtifactIds.includes(payload.input.credentialedSampleConfigArtifactId))) {
+    throw new Error("Pre-forward Decision Package credentialed input is not bound to its retained config.");
   }
   if (payload.input.inputFingerprint !== sha256Canonical({
     loadedInputIntegrityFingerprint: payload.input.loadedInputIntegrityFingerprint,
@@ -1456,6 +1465,7 @@ export function buildPreForwardDecisionArtifact(
       createdAt: payload.createdAt,
       configFingerprint: payload.configFingerprint,
       configSnapshotArtifactId: payload.configSnapshotArtifactId,
+      credentialedSampleConfigArtifactId: payload.input.credentialedSampleConfigArtifactId,
       loadedInputIntegrityFingerprint: payload.input.loadedInputIntegrityFingerprint,
       inputFingerprint: payload.input.inputFingerprint,
       universeSnapshotArtifactId: payload.universe.snapshotArtifactId,
