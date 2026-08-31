@@ -29,6 +29,7 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const fixtureConfigPath = join(repositoryRoot, "tests/fixtures/pre-forward/config.json");
 const fixtureAsOf = "2025-01-07T00:00:00Z";
+const fixtureCreatedAt = "2025-01-07T00:05:00Z";
 
 type MutableConfig = Record<string, any>;
 
@@ -70,7 +71,10 @@ function databaseCounts(path: string): { runs: number; entries: number } {
 test("manual pre-forward fixture executes Trend/Rotation, persists decisions, replays, and reruns idempotently", async () => {
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot, ledgerPath }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
-    const first = await runPreForward(configPath, fixtureAsOf, { cwd: repositoryRoot });
+    const first = await runPreForward(configPath, fixtureAsOf, {
+      cwd: repositoryRoot,
+      clock: () => fixtureCreatedAt,
+    });
     assert.equal(first.status, "executed");
     assert.equal(first.formalForwardClockStarted, false);
     assert.equal(first.results.length, 2);
@@ -94,6 +98,11 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     );
     assert.ok(second.results.every((result) => result.idempotent && !result.stateTransitionApplied));
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+    await assert.rejects(
+      () => runPreForward(configPath, "2025-01-08T00:00:00Z", { cwd: repositoryRoot }),
+      /Monthly Pre-Forward cycle 2025-01 already uses cutoff.*intramonth reassessment/,
+    );
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
     const replayed = await runPreForward(configPath, fixtureAsOf, {
       cwd: repositoryRoot,
@@ -109,7 +118,22 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
       const artifact = await store.read<PreForwardDecisionPackage>(result.decisionArtifactId);
       assert.equal(artifact.provenance.artifactKind, "decision_package");
       assert.equal(artifact.payload.mode, "pre_forward_dry_run");
-      assert.equal(artifact.payload.quantDecision.selectionMode, "quant_rank_only_m2");
+      assert.equal(artifact.payload.cycleId, "2025-01");
+      assert.equal(artifact.payload.createdAt, fixtureCreatedAt);
+      assert.equal(artifact.provenance.observedAt, fixtureAsOf);
+      assert.equal(artifact.provenance.availableAt, fixtureCreatedAt);
+      assert.equal(artifact.provenance.retrievedAt, fixtureCreatedAt);
+      assert.equal(artifact.payload.quantDecision.selectionMode, "quant_rank_plus_cost_benefit_gate_m2");
+      assert.ok(artifact.payload.quantDecision.benefitGate.decisions.every((decision) => (
+        decision.passed
+          && decision.grossExpectedBenefitBps
+            > decision.estimatedExecutionCostBps + decision.safetyMarginBps
+      )));
+      assert.ok(artifact.payload.execution.orders.every((order) => (
+        order.reason === "rebalance"
+          && order.benefitGate?.passed === true
+          && order.riskOverride === undefined
+      )));
       assert.equal(artifact.payload.input.disposition, "research_only");
       assert.equal(artifact.payload.portfolio.afterState.positions.length, 3);
     }
@@ -122,6 +146,37 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
       ledger.assertAppendOnlyGuards();
     } finally {
       ledger.close();
+    }
+  });
+});
+
+test("D-009 cost-benefit gate keeps marginal synthetic trades in cash", async () => {
+  await withTemporaryRuntime((value) => {
+    for (const instrument of value.execution.instruments as MutableConfig[]) {
+      instrument.expectedBenefit.grossExpectedBenefitBps = 1;
+    }
+    for (const strategy of value.strategies as MutableConfig[]) {
+      strategy.portfolioId += "-benefit-gate";
+      strategy.strategyConfigVersion += "-benefit-gate";
+    }
+  }, async ({ configPath, artifactRoot, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const report = await runPreForward(configPath, fixtureAsOf, {
+      cwd: repositoryRoot,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(report.status, "executed");
+    assert.ok(report.results.every((result) => (
+      result.orderCount === 0
+        && result.endingCashJpy === 1_000_000
+        && result.endingHoldings.length === 0
+    )));
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+    const store = new FileArtifactStore(artifactRoot);
+    for (const result of report.results) {
+      const artifact = await store.read<PreForwardDecisionPackage>(result.decisionArtifactId);
+      assert.deepEqual(artifact.payload.quantDecision.effectiveTargetWeights, { CASH: 1 });
+      assert.ok(artifact.payload.quantDecision.benefitGate.decisions.every((decision) => !decision.passed));
     }
   });
 });
@@ -164,6 +219,7 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
       assert.ok(result.blockedReasons.includes("JPX:1308:stale_market_data"));
       assert.ok(result.blockedReasons.includes("JPX:1308:universe_master_missing"));
       assert.ok(result.blockedReasons.includes("JPX:1308:missing_execution_assumptions"));
+      assert.ok(result.blockedReasons.includes("JPX:1308:missing_expected_benefit_evidence"));
     }
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
     const second = await runPreForward(configPath, "2026-08-31T00:00:00Z", { cwd: repositoryRoot });
@@ -220,6 +276,7 @@ test("the -30% high-water-mark stop liquidates even when distribution evidence i
       configFingerprint: sha256Canonical(config),
       strategy: config.strategies[0],
       asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
       input,
       universeMaster: await loadUniverseMaster(join(repositoryRoot, config.universe.masterPath!)),
       beforeState,
@@ -232,7 +289,10 @@ test("the -30% high-water-mark stop liquidates even when distribution evidence i
     assert.equal(payload.execution.orders.length, 1);
     assert.equal(payload.execution.orders[0]!.side, "sell");
     assert.equal(payload.execution.orders[0]!.reason, "hard_stop_before_rebalance");
+    assert.equal(payload.execution.orders[0]!.riskOverride, "d010_mandatory_liquidation");
+    assert.equal(payload.execution.orders[0]!.benefitGate, undefined);
     assert.ok(payload.execution.totalModeledCostJpy > 0);
     assert.ok(payload.blockedReasons.includes("portfolio:distribution_event_coverage_missing_for_held_interval"));
+    assert.ok(payload.blockedReasons.includes("portfolio:cost_aware_replacement_policy_not_approved"));
   });
 });

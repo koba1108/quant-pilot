@@ -26,8 +26,8 @@ import {
 import type { LoadedPreForwardInput, LoadedPreForwardSeries } from "./market-input.ts";
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
-export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v1" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v1" as const;
+export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v2" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v2" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 
@@ -93,10 +93,25 @@ export interface PreForwardInstrumentDiagnostic {
     marketPriceJpy: number;
     tradingUnit: number;
     oneWayCostRate: number;
+    expectedBenefit?: PreForwardExecutionInstrumentConfig["expectedBenefit"];
   };
   snapshot?: AssetSnapshot;
   status: "ready" | "blocked";
   blockers: readonly string[];
+}
+
+export interface PreForwardBenefitGateDecision {
+  code: string;
+  action: "buy_from_cash";
+  policyVersion: string;
+  evidenceBasis: "synthetic_fixture_assumption";
+  evidenceId: string;
+  evidenceAvailableAt: string;
+  grossExpectedBenefitBps: number;
+  estimatedExecutionCostBps: number;
+  safetyMarginBps: number;
+  requiredGrossBenefitBps: number;
+  passed: boolean;
 }
 
 export interface VirtualOrder {
@@ -112,6 +127,8 @@ export interface VirtualOrder {
   modeledCostJpy: number;
   cashDeltaJpy: number;
   reason: "rebalance" | "hard_stop_before_rebalance" | "hard_stop_after_cost";
+  benefitGate?: PreForwardBenefitGateDecision;
+  riskOverride?: "d010_mandatory_liquidation";
 }
 
 export interface VirtualExecution extends VirtualOrder {
@@ -134,8 +151,10 @@ export interface PreForwardDecisionPackage {
   formalForwardClockStarted: false;
   status: "executed" | "blocked";
   runKey: string;
+  cycleId: string;
   asOf: string;
   asOfDate: string;
+  createdAt: string;
   portfolioId: string;
   strategy: {
     name: "trend" | "rotation";
@@ -166,7 +185,14 @@ export interface PreForwardDecisionPackage {
     ranking: readonly RankedAsset[];
     requestedTargetWeights: Weights;
     effectiveTargetWeights: Weights;
-    selectionMode: "quant_rank_only_m2";
+    selectionMode: "quant_rank_plus_cost_benefit_gate_m2";
+    benefitGate: {
+      policyVersion: string;
+      scope: "initial_cash_to_asset_only";
+      safetyMarginBps: number;
+      decisions: readonly PreForwardBenefitGateDecision[];
+      replacementPolicy: "blocked_pending_o006";
+    };
   };
   committee: {
     status: "not_invoked_for_m2_deterministic_strategy_ab";
@@ -221,6 +247,7 @@ export interface BuildPreForwardDecisionRequest {
   configFingerprint: string;
   strategy: PreForwardStrategyConfig;
   asOf: string;
+  createdAt: string;
   input: LoadedPreForwardInput;
   universeMaster?: UniverseMaster;
   beforeState: VirtualPortfolioState;
@@ -398,6 +425,12 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
     const execution = executionByCode.get(code);
     if (series === undefined) blockers.push("missing_daily_bars_artifact");
     if (execution === undefined) blockers.push("missing_execution_assumptions");
+    if (execution?.expectedBenefit === undefined) {
+      blockers.push("missing_expected_benefit_evidence");
+    } else if (execution?.expectedBenefit !== undefined
+      && Date.parse(execution.expectedBenefit.availableAt) > Date.parse(request.asOf)) {
+      blockers.push("expected_benefit_not_available_as_of");
+    }
     const bars = series?.bars.filter((bar) => bar.tradingDate <= asOfDate) ?? [];
     const excludedFutureBarCount = series === undefined ? 0 : series.bars.length - bars.length;
     const latest = bars.at(-1);
@@ -442,6 +475,7 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
         marketPriceJpy: latest.close,
         tradingUnit: execution.tradingUnit,
         oneWayCostRate: costRate,
+        expectedBenefit: execution.expectedBenefit,
       };
     }
     let snapshot: AssetSnapshot | undefined;
@@ -476,6 +510,42 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
     };
   });
   return { diagnostics, priceByCode, executionByCode, costRateByCode };
+}
+
+function normalizedBps(value: number): number {
+  if (!Number.isFinite(value)) throw new Error("Basis-point value must be finite.");
+  return Math.round(value * 1_000_000_000) / 1_000_000_000;
+}
+
+function buildBenefitGateDecisions(
+  request: BuildPreForwardDecisionRequest,
+  ranking: readonly RankedAsset[],
+  diagnostics: DiagnosticBuildResult,
+): PreForwardBenefitGateDecision[] {
+  return ranking.map((asset): PreForwardBenefitGateDecision => {
+    const execution = diagnostics.executionByCode.get(asset.code);
+    const costRate = diagnostics.costRateByCode.get(asset.code);
+    const evidence = execution?.expectedBenefit;
+    if (execution === undefined || costRate === undefined || evidence === undefined) {
+      throw new Error(`Ranked asset lacks D-009 cost-benefit evidence: ${asset.code}.`);
+    }
+    const estimatedExecutionCostBps = normalizedBps(costRate * 10_000);
+    const safetyMarginBps = request.config.execution.benefitGate.safetyMarginBps;
+    const requiredGrossBenefitBps = normalizedBps(estimatedExecutionCostBps + safetyMarginBps);
+    return {
+      code: asset.code,
+      action: "buy_from_cash",
+      policyVersion: request.config.execution.benefitGate.policyVersion,
+      evidenceBasis: evidence.basis,
+      evidenceId: evidence.evidenceId,
+      evidenceAvailableAt: evidence.availableAt,
+      grossExpectedBenefitBps: evidence.grossExpectedBenefitBps,
+      estimatedExecutionCostBps,
+      safetyMarginBps,
+      requiredGrossBenefitBps,
+      passed: evidence.grossExpectedBenefitBps > requiredGrossBenefitBps,
+    };
+  });
 }
 
 function valuation(
@@ -552,6 +622,7 @@ function executeTargets(
   prices: ReadonlyMap<string, number>,
   executionByCode: ReadonlyMap<string, PreForwardExecutionInstrumentConfig>,
   costRateByCode: ReadonlyMap<string, number>,
+  benefitGateByCode: ReadonlyMap<string, PreForwardBenefitGateDecision>,
   reason: VirtualOrder["reason"],
 ): ExecutionResult {
   const currentByCode = new Map(state.positions.map((position) => [position.code, { ...position }]));
@@ -589,9 +660,25 @@ function executeTargets(
     const modeledCostJpy = roundJpy(grossJpy * costRate);
     const cashDeltaJpy = side === "buy" ? -(grossJpy + modeledCostJpy) : grossJpy - modeledCostJpy;
     const sequence = orders.length + 1;
+    let benefitGate: PreForwardBenefitGateDecision | undefined;
+    let riskOverride: VirtualOrder["riskOverride"];
+    if (reason === "rebalance") {
+      if (side !== "buy") {
+        throw new Error("Ordinary held-asset replacement remains blocked pending an approved O-006 policy.");
+      }
+      benefitGate = benefitGateByCode.get(code);
+      if (benefitGate === undefined
+        || !benefitGate.passed
+        || benefitGate.grossExpectedBenefitBps
+          <= benefitGate.estimatedExecutionCostBps + benefitGate.safetyMarginBps) {
+        throw new Error(`D-009 cost-benefit gate rejected virtual order for ${code}.`);
+      }
+    } else {
+      riskOverride = "d010_mandatory_liquidation";
+    }
     const orderBody = {
       sequence, code, side, units, tradingUnit: execution.tradingUnit, priceJpy,
-      grossJpy, costRate, modeledCostJpy, cashDeltaJpy, reason,
+      grossJpy, costRate, modeledCostJpy, cashDeltaJpy, reason, benefitGate, riskOverride,
     };
     const order: VirtualOrder = { orderId: sha256Canonical({ runKey, ...orderBody }), ...orderBody };
     const filled: VirtualExecution = {
@@ -679,13 +766,17 @@ function withStateMetadata(
   });
 }
 
+export function preForwardCycleId(asOf: string): string {
+  if (!isIsoDateTime(asOf)) throw new Error("Pre-forward cycle requires an ISO timestamp with timezone.");
+  return asOf.slice(0, 7);
+}
+
 export function buildPreForwardRunKey(strategy: PreForwardStrategyConfig, asOf: string): string {
   return sha256Canonical({
     mode: PRE_FORWARD_MODE,
     portfolioId: strategy.portfolioId,
     strategy: strategy.strategy,
-    strategyConfigVersion: strategy.strategyConfigVersion,
-    asOf,
+    cycleId: preForwardCycleId(asOf),
   });
 }
 
@@ -702,12 +793,16 @@ export function buildPreForwardDecisionPackage(
 ): PreForwardDecisionPackage {
   assertVirtualPortfolioState(request.beforeState);
   if (!isIsoDateTime(request.asOf)) throw new Error("Pre-forward asOf must be an ISO timestamp with timezone.");
+  if (!isIsoDateTime(request.createdAt) || Date.parse(request.createdAt) < Date.parse(request.asOf)) {
+    throw new Error("Pre-forward createdAt must be an ISO timestamp at or after asOf.");
+  }
   if (request.beforeState.portfolioId !== request.strategy.portfolioId) {
     throw new Error("Pre-forward portfolio state does not match the strategy portfolioId.");
   }
   if (request.universeMaster !== undefined) assertUniverseMasterIntegrity(request.universeMaster);
   const asOfDate = request.asOf.slice(0, 10);
   if (!isIsoDate(asOfDate)) throw new Error("Pre-forward asOf does not contain a valid declared market date.");
+  const cycleId = preForwardCycleId(request.asOf);
   const runKey = buildPreForwardRunKey(request.strategy, request.asOf);
   const diagnosticResult = buildInstrumentDiagnostics(request, asOfDate);
   const snapshots = diagnosticResult.diagnostics.flatMap((diagnostic) => (
@@ -717,11 +812,26 @@ export function buildPreForwardDecisionPackage(
     ? rankTrend(snapshots, request.strategy.parameters)
     : rankRotation(snapshots, request.strategy.parameters);
   const requestedTargetWeights = inverseVolWeights(ranking, request.strategy.maxAssets);
+  const benefitGateDecisions = buildBenefitGateDecisions(request, ranking, diagnosticResult);
+  const passedBenefitCodes = new Set(
+    benefitGateDecisions.filter((decision) => decision.passed).map((decision) => decision.code),
+  );
+  const benefitGatedRanking = ranking.filter((asset) => passedBenefitCodes.has(asset.code));
+  const benefitGatedTargetWeights = inverseVolWeights(benefitGatedRanking, request.strategy.maxAssets);
+  const benefitGateByCode = new Map(benefitGateDecisions.map((decision) => [decision.code, decision]));
   const blockedReasons = diagnosticResult.diagnostics.flatMap((diagnostic) => (
     diagnostic.blockers.map((blocker) => `${diagnostic.code}:${blocker}`)
   ));
   if (request.beforeState.lastAsOf !== undefined && Date.parse(request.asOf) <= Date.parse(request.beforeState.lastAsOf)) {
     blockedReasons.push("portfolio:as_of_not_after_last_state");
+  }
+  if (request.beforeState.lastAsOf !== undefined
+    && preForwardCycleId(request.beforeState.lastAsOf) === cycleId
+    && Date.parse(request.asOf) > Date.parse(request.beforeState.lastAsOf)) {
+    blockedReasons.push("portfolio:intramonth_reassessment_not_authorized");
+  }
+  if (request.beforeState.positions.length > 0) {
+    blockedReasons.push("portfolio:cost_aware_replacement_policy_not_approved");
   }
   const distributionCoverage = request.beforeState.positions.length === 0
     ? "not_applicable_initial_cash_cycle" as const
@@ -755,7 +865,7 @@ export function buildPreForwardDecisionPackage(
   const uniqueBlockedReasons = [...new Set(blockedReasons)].sort(compareText);
 
   let status: PreForwardDecisionPackage["status"] = "blocked";
-  let effectiveTargetWeights: Weights = requestedTargetWeights;
+  let effectiveTargetWeights: Weights = benefitGatedTargetWeights;
   let afterState = request.beforeState;
   let afterValuation: PreForwardPortfolioValuation | undefined;
   let settlements: DistributionSettlement[] = [];
@@ -782,6 +892,7 @@ export function buildPreForwardDecisionPackage(
         diagnosticResult.priceByCode,
         diagnosticResult.executionByCode,
         diagnosticResult.costRateByCode,
+        new Map(),
         "hard_stop_before_rebalance",
       );
       workingState = liquidated.state;
@@ -791,11 +902,12 @@ export function buildPreForwardDecisionPackage(
       const rebalanced = executeTargets(
         runKey,
         workingState,
-        requestedTargetWeights,
-        ranking.map((asset) => asset.code),
+        benefitGatedTargetWeights,
+        benefitGatedRanking.map((asset) => asset.code),
         diagnosticResult.priceByCode,
         diagnosticResult.executionByCode,
         diagnosticResult.costRateByCode,
+        benefitGateByCode,
         "rebalance",
       );
       workingState = rebalanced.state;
@@ -814,6 +926,7 @@ export function buildPreForwardDecisionPackage(
           diagnosticResult.priceByCode,
           diagnosticResult.executionByCode,
           diagnosticResult.costRateByCode,
+          new Map(),
           "hard_stop_after_cost",
         );
         const orderOffset = orders.length;
@@ -861,8 +974,10 @@ export function buildPreForwardDecisionPackage(
     formalForwardClockStarted: false,
     status,
     runKey,
+    cycleId,
     asOf: request.asOf,
     asOfDate,
+    createdAt: request.createdAt,
     portfolioId: request.strategy.portfolioId,
     strategy: {
       name: request.strategy.strategy,
@@ -893,7 +1008,14 @@ export function buildPreForwardDecisionPackage(
       ranking,
       requestedTargetWeights,
       effectiveTargetWeights,
-      selectionMode: "quant_rank_only_m2",
+      selectionMode: "quant_rank_plus_cost_benefit_gate_m2",
+      benefitGate: {
+        policyVersion: request.config.execution.benefitGate.policyVersion,
+        scope: "initial_cash_to_asset_only",
+        safetyMarginBps: request.config.execution.benefitGate.safetyMarginBps,
+        decisions: benefitGateDecisions,
+        replacementPolicy: "blocked_pending_o006",
+      },
     },
     committee: {
       status: "not_invoked_for_m2_deterministic_strategy_ab",
@@ -948,7 +1070,12 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
     || payload.formalForwardClockStarted !== false) {
     throw new Error("Pre-forward Decision Package identity is invalid.");
   }
-  if (!isIsoDateTime(payload.asOf) || payload.asOf.slice(0, 10) !== payload.asOfDate || !isIsoDate(payload.asOfDate)) {
+  if (!isIsoDateTime(payload.asOf)
+    || payload.asOf.slice(0, 10) !== payload.asOfDate
+    || !isIsoDate(payload.asOfDate)
+    || payload.cycleId !== preForwardCycleId(payload.asOf)
+    || !isIsoDateTime(payload.createdAt)
+    || Date.parse(payload.createdAt) < Date.parse(payload.asOf)) {
     throw new Error("Pre-forward Decision Package asOf is invalid.");
   }
   if (!ARTIFACT_ID_PATTERN.test(payload.runKey)
@@ -956,6 +1083,14 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
     || !ARTIFACT_ID_PATTERN.test(payload.input.inputFingerprint)
     || !ARTIFACT_ID_PATTERN.test(payload.strategy.parametersFingerprint)) {
     throw new Error("Pre-forward Decision Package fingerprints are invalid.");
+  }
+  if (payload.runKey !== sha256Canonical({
+    mode: PRE_FORWARD_MODE,
+    portfolioId: payload.portfolioId,
+    strategy: payload.strategy.name,
+    cycleId: payload.cycleId,
+  })) {
+    throw new Error("Pre-forward Decision Package run key is not bound to its monthly cycle.");
   }
   assertVirtualPortfolioState(payload.portfolio.beforeState);
   assertVirtualPortfolioState(payload.portfolio.afterState);
@@ -986,6 +1121,47 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
   if (payload.execution.orders.length !== payload.execution.executions.length) {
     throw new Error("Every virtual order must have exactly one virtual execution.");
   }
+  if (payload.quantDecision.selectionMode !== "quant_rank_plus_cost_benefit_gate_m2"
+    || payload.quantDecision.benefitGate.scope !== "initial_cash_to_asset_only"
+    || payload.quantDecision.benefitGate.replacementPolicy !== "blocked_pending_o006") {
+    throw new Error("Pre-forward D-009 benefit-gate identity is invalid.");
+  }
+  const benefitDecisions = payload.quantDecision.benefitGate.decisions;
+  if (benefitDecisions.length !== payload.quantDecision.ranking.length
+    || benefitDecisions.some((decision, index) => decision.code !== payload.quantDecision.ranking[index]?.code)
+    || new Set(benefitDecisions.map((decision) => decision.code)).size !== benefitDecisions.length) {
+    throw new Error("Pre-forward D-009 benefit decisions do not match the ranked candidates.");
+  }
+  for (const decision of benefitDecisions) {
+    const required = normalizedBps(decision.estimatedExecutionCostBps + decision.safetyMarginBps);
+    if (decision.action !== "buy_from_cash"
+      || decision.policyVersion !== payload.quantDecision.benefitGate.policyVersion
+      || decision.evidenceBasis !== "synthetic_fixture_assumption"
+      || typeof decision.evidenceId !== "string"
+      || decision.evidenceId.length === 0
+      || decision.safetyMarginBps !== payload.quantDecision.benefitGate.safetyMarginBps
+      || !Number.isFinite(decision.grossExpectedBenefitBps)
+      || !Number.isFinite(decision.estimatedExecutionCostBps)
+      || decision.estimatedExecutionCostBps < 0
+      || decision.requiredGrossBenefitBps !== required
+      || decision.passed !== (decision.grossExpectedBenefitBps > required)
+      || !isIsoDateTime(decision.evidenceAvailableAt)
+      || Date.parse(decision.evidenceAvailableAt) > Date.parse(payload.asOf)) {
+      throw new Error(`Pre-forward D-009 benefit decision is invalid for ${decision.code}.`);
+    }
+  }
+  const benefitByCode = new Map(benefitDecisions.map((decision) => [decision.code, decision]));
+  const expectedRequestedWeights = inverseVolWeights([...payload.quantDecision.ranking], payload.risk.maxHoldings);
+  const expectedEffectiveWeights = inverseVolWeights(
+    payload.quantDecision.ranking.filter((asset) => benefitByCode.get(asset.code)?.passed === true),
+    payload.risk.maxHoldings,
+  );
+  if (canonicalJson(payload.quantDecision.requestedTargetWeights) !== canonicalJson(expectedRequestedWeights)
+    || canonicalJson(payload.quantDecision.effectiveTargetWeights) !== canonicalJson(
+      payload.risk.hardStopTriggered || payload.risk.stoppedBefore ? { CASH: 1 } : expectedEffectiveWeights,
+    )) {
+    throw new Error("Pre-forward target weights do not match ranking, D-009 gates, and risk overrides.");
+  }
   for (const [index, order] of payload.execution.orders.entries()) {
     const execution = payload.execution.executions[index];
     const { orderId: _orderId, ...orderBody } = order;
@@ -999,7 +1175,18 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
       || order.modeledCostJpy !== roundJpy(order.grossJpy * order.costRate)
       || order.cashDeltaJpy !== (order.side === "buy"
         ? -(order.grossJpy + order.modeledCostJpy)
-        : order.grossJpy - order.modeledCostJpy)) {
+        : order.grossJpy - order.modeledCostJpy)
+      || (order.reason === "rebalance"
+        ? order.side !== "buy"
+          || order.riskOverride !== undefined
+          || order.benefitGate === undefined
+          || canonicalJson(order.benefitGate) !== canonicalJson(benefitByCode.get(order.code))
+          || !order.benefitGate.passed
+          || order.benefitGate.code !== order.code
+          || order.benefitGate.estimatedExecutionCostBps !== normalizedBps(order.costRate * 10_000)
+          || order.benefitGate.grossExpectedBenefitBps
+            <= order.benefitGate.estimatedExecutionCostBps + order.benefitGate.safetyMarginBps
+        : order.benefitGate !== undefined || order.riskOverride !== "d010_mandatory_liquidation")) {
       throw new Error("Virtual order/execution sequence is inconsistent.");
     }
   }
@@ -1025,10 +1212,12 @@ export function buildPreForwardDecisionArtifact(
     sourceVersion: payload.schemaVersion,
     adapterVersion: payload.engineVersion,
     observedAt: payload.asOf,
-    availableAt: payload.asOf,
-    retrievedAt: payload.asOf,
+    availableAt: payload.createdAt,
+    retrievedAt: payload.createdAt,
     request: {
       runKey: payload.runKey,
+      cycleId: payload.cycleId,
+      createdAt: payload.createdAt,
       configFingerprint: payload.configFingerprint,
       inputFingerprint: payload.input.inputFingerprint,
       expectedLedgerHead: payload.ledger.expectedHeadBefore,

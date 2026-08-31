@@ -11,8 +11,9 @@ import type {
   RotationStrategyParameters,
   TrendStrategyParameters,
 } from "../strategies/types.ts";
+import { isIsoDateTime } from "../data/provenance.ts";
 
-export const PRE_FORWARD_CONFIG_SCHEMA_VERSION = "pre-forward-config-v1" as const;
+export const PRE_FORWARD_CONFIG_SCHEMA_VERSION = "pre-forward-config-v2" as const;
 export const PRE_FORWARD_MODE = "pre_forward_dry_run" as const;
 
 export interface PreForwardPath {
@@ -52,10 +53,20 @@ export interface PreForwardExecutionInstrumentConfig {
   code: string;
   tradingUnit: number;
   spreadBps?: number;
+  expectedBenefit?: {
+    basis: "synthetic_fixture_assumption";
+    evidenceId: string;
+    availableAt: string;
+    grossExpectedBenefitBps: number;
+  };
 }
 
 export interface PreForwardExecutionConfig {
   policyVersion: string;
+  benefitGate: {
+    policyVersion: string;
+    safetyMarginBps: number;
+  };
   priceSource: "latest_unadjusted_close_proxy";
   commissionBps: number;
   slippageBps: number;
@@ -271,11 +282,20 @@ function validateBps(value: unknown, field: string): number {
 function validateExecution(value: unknown): PreForwardExecutionConfig {
   if (!isRecord(value)) throw new Error("execution must be an object.");
   assertOnlyKeys(value, [
-    "policyVersion", "priceSource", "commissionBps", "slippageBps", "fallbackHalfSpreadBps",
+    "policyVersion", "benefitGate", "priceSource", "commissionBps", "slippageBps", "fallbackHalfSpreadBps",
     "fxConversionBps", "instruments",
   ], "execution");
   const policyVersion = requiredString(value.policyVersion, "execution.policyVersion");
   if (!VERSION_PATTERN.test(policyVersion)) throw new Error("execution.policyVersion must be a stable lowercase id.");
+  if (!isRecord(value.benefitGate)) throw new Error("execution.benefitGate must be an object.");
+  assertOnlyKeys(value.benefitGate, ["policyVersion", "safetyMarginBps"], "execution.benefitGate");
+  const benefitGatePolicyVersion = requiredString(
+    value.benefitGate.policyVersion,
+    "execution.benefitGate.policyVersion",
+  );
+  if (!VERSION_PATTERN.test(benefitGatePolicyVersion)) {
+    throw new Error("execution.benefitGate.policyVersion must be a stable lowercase id.");
+  }
   if (value.priceSource !== "latest_unadjusted_close_proxy") {
     throw new Error("execution.priceSource must be latest_unadjusted_close_proxy.");
   }
@@ -284,20 +304,61 @@ function validateExecution(value: unknown): PreForwardExecutionConfig {
   const instruments = value.instruments.map((item, index) => {
     const field = `execution.instruments[${index}]`;
     if (!isRecord(item)) throw new Error(`${field} must be an object.`);
-    assertOnlyKeys(item, ["code", "tradingUnit", "spreadBps"], field);
+    assertOnlyKeys(item, ["code", "tradingUnit", "spreadBps", "expectedBenefit"], field);
     const code = requiredString(item.code, `${field}.code`);
     if (!STABLE_ID_PATTERN.test(code)) throw new Error(`${field}.code contains invalid characters.`);
+    let expectedBenefit: PreForwardExecutionInstrumentConfig["expectedBenefit"];
+    if (item.expectedBenefit !== undefined) {
+      if (!isRecord(item.expectedBenefit)) throw new Error(`${field}.expectedBenefit must be an object.`);
+      assertOnlyKeys(
+        item.expectedBenefit,
+        ["basis", "evidenceId", "availableAt", "grossExpectedBenefitBps"],
+        `${field}.expectedBenefit`,
+      );
+      if (item.expectedBenefit.basis !== "synthetic_fixture_assumption") {
+        throw new Error(`${field}.expectedBenefit.basis is unsupported.`);
+      }
+      const evidenceId = requiredString(item.expectedBenefit.evidenceId, `${field}.expectedBenefit.evidenceId`);
+      if (!VERSION_PATTERN.test(evidenceId)) {
+        throw new Error(`${field}.expectedBenefit.evidenceId must be a stable lowercase id.`);
+      }
+      const availableAt = requiredString(item.expectedBenefit.availableAt, `${field}.expectedBenefit.availableAt`);
+      if (!isIsoDateTime(availableAt)) {
+        throw new Error(`${field}.expectedBenefit.availableAt must be an ISO timestamp with timezone.`);
+      }
+      expectedBenefit = {
+        basis: "synthetic_fixture_assumption",
+        evidenceId,
+        availableAt,
+        grossExpectedBenefitBps: requiredNumber(
+          item.expectedBenefit.grossExpectedBenefitBps,
+          `${field}.expectedBenefit.grossExpectedBenefitBps`,
+        ),
+      };
+    }
     return {
       code,
       tradingUnit: requiredInteger(item.tradingUnit, `${field}.tradingUnit`, 1, 1_000_000),
       spreadBps: item.spreadBps === undefined ? undefined : validateBps(item.spreadBps, `${field}.spreadBps`),
+      expectedBenefit,
     };
   }).sort((left, right) => left.code.localeCompare(right.code));
   if (new Set(instruments.map((item) => item.code)).size !== instruments.length) {
     throw new Error("execution.instruments code values must be unique.");
   }
+  const safetyMarginBps = validateBps(
+    value.benefitGate.safetyMarginBps,
+    "execution.benefitGate.safetyMarginBps",
+  );
+  if (safetyMarginBps <= 0) {
+    throw new Error("execution.benefitGate.safetyMarginBps must be positive.");
+  }
   return {
     policyVersion,
+    benefitGate: {
+      policyVersion: benefitGatePolicyVersion,
+      safetyMarginBps,
+    },
     priceSource: "latest_unadjusted_close_proxy",
     commissionBps: validateBps(value.commissionBps, "execution.commissionBps"),
     slippageBps: validateBps(value.slippageBps, "execution.slippageBps"),
@@ -390,15 +451,25 @@ export function validatePreForwardConfig(value: unknown): PreForwardConfig {
   }
   const trend = strategies.find((strategy): strategy is PreForwardTrendConfig => strategy.strategy === "trend")!;
   const rotation = strategies.find((strategy): strategy is PreForwardRotationConfig => strategy.strategy === "rotation")!;
+  const input = validateInput(value.input);
+  const execution = validateExecution(value.execution);
+  if (input.kind === "daily_bars_manifest"
+    && execution.instruments.some((instrument) => instrument.expectedBenefit === undefined)) {
+    throw new Error("Synthetic pre-forward fixtures require explicit expected-benefit evidence for every instrument.");
+  }
+  if (input.kind === "credentialed_sample_audit"
+    && execution.instruments.some((instrument) => instrument.expectedBenefit !== undefined)) {
+    throw new Error("Credentialed pre-forward input cannot use synthetic expected-benefit assumptions.");
+  }
   return {
     schemaVersion: PRE_FORWARD_CONFIG_SCHEMA_VERSION,
     mode: PRE_FORWARD_MODE,
     artifactRoot: validateRuntimePath(value.artifactRoot, "artifactRoot", false),
     ledgerPath: validateRuntimePath(value.ledgerPath, "ledgerPath", true),
-    input: validateInput(value.input),
+    input,
     universe: validateUniverse(value.universe),
     signal: validateSignal(value.signal),
-    execution: validateExecution(value.execution),
+    execution,
     portfolio: { initialCashJpy: 1_000_000, drawdownLimit: -0.3 },
     strategies: [trend, rotation],
   };

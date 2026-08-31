@@ -30,6 +30,7 @@ import {
   buildPreForwardDecisionArtifact,
   buildPreForwardDecisionPackage,
   buildPreForwardRunKey,
+  preForwardCycleId,
   PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION,
   type PreForwardDecisionPackage,
 } from "./decision.ts";
@@ -76,6 +77,7 @@ export interface PreForwardRunReport {
 export interface RunPreForwardOptions {
   cwd?: string;
   replayDecisionArtifactId?: string;
+  clock?: () => string;
 }
 
 interface LoadedRuntime {
@@ -286,6 +288,12 @@ function assertStoredDecisionIdentity(
   asOf: string,
 ): void {
   assertPreForwardDecisionPackage(payload);
+  if (payload.cycleId === preForwardCycleId(asOf) && payload.asOf !== asOf) {
+    throw new Error(
+      `Monthly Pre-Forward cycle ${payload.cycleId} already uses cutoff ${payload.asOf}; `
+        + "intramonth reassessment requires a separately approved audited mode.",
+    );
+  }
   if (payload.runKey !== buildPreForwardRunKey(strategy, asOf)
     || payload.asOf !== asOf
     || payload.portfolioId !== strategy.portfolioId
@@ -313,6 +321,7 @@ async function replayOne(
     configFingerprint: runtime.configFingerprint,
     strategy,
     asOf,
+    createdAt: artifact.payload.createdAt,
     input: runtime.input,
     universeMaster: runtime.universeMaster,
     beforeState: artifact.payload.portfolio.beforeState,
@@ -349,6 +358,7 @@ export async function runPreForward(
       return buildReport(asOf, "replay", [await replayOne(runtime, ledger, artifact, strategy, asOf)]);
     }
 
+    let createdAt: string | undefined;
     const results: PreForwardStrategyRunResult[] = [];
     for (const strategy of runtime.config.strategies) {
       const runKey = buildPreForwardRunKey(strategy, asOf);
@@ -359,11 +369,13 @@ export async function runPreForward(
         continue;
       }
       const opening = ledger.readPortfolioSnapshot(strategy.portfolioId, runtime.config.portfolio.initialCashJpy);
+      createdAt ??= options.clock?.() ?? new Date().toISOString();
       const payload = buildPreForwardDecisionPackage({
         config: runtime.config,
         configFingerprint: runtime.configFingerprint,
         strategy,
         asOf,
+        createdAt,
         input: runtime.input,
         universeMaster: runtime.universeMaster,
         beforeState: opening.state,

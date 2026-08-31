@@ -1,13 +1,13 @@
 {
-  "schemaVersion": "pre-forward-config-v1",
+  "schemaVersion": "pre-forward-config-v2",
   "mode": "pre_forward_dry_run",
   "artifactRoot": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v2/artifacts"
+    "path": "data/generated/pre-forward/fixture-v3/artifacts"
   },
   "ledgerPath": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v2/ledger.sqlite"
+    "path": "data/generated/pre-forward/fixture-v3/ledger.sqlite"
   },
   "input": {
     "kind": "daily_bars_manifest",
@@ -32,16 +32,59 @@
   },
   "execution": {
     "policyVersion": "pre-forward-close-proxy-fixture-v1",
+    "benefitGate": {
+      "policyVersion": "d009-synthetic-initial-allocation-v1",
+      "safetyMarginBps": 25
+    },
     "priceSource": "latest_unadjusted_close_proxy",
     "commissionBps": 1,
     "slippageBps": 5,
     "fallbackHalfSpreadBps": 15,
     "fxConversionBps": 0,
     "instruments": [
-      { "code": "ALPHA", "tradingUnit": 10, "spreadBps": 20 },
-      { "code": "BETA", "tradingUnit": 10 },
-      { "code": "DELTA", "tradingUnit": 10, "spreadBps": 25 },
-      { "code": "GAMMA", "tradingUnit": 10, "spreadBps": 30 }
+      {
+        "code": "ALPHA",
+        "tradingUnit": 10,
+        "spreadBps": 20,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-alpha-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      },
+      {
+        "code": "BETA",
+        "tradingUnit": 10,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-beta-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      },
+      {
+        "code": "DELTA",
+        "tradingUnit": 10,
+        "spreadBps": 25,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-delta-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      },
+      {
+        "code": "GAMMA",
+        "tradingUnit": 10,
+        "spreadBps": 30,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-gamma-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      }
     ]
   },
   "portfolio": {

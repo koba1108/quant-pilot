@@ -32,6 +32,12 @@ test("pre-forward config rejects stale versions, weaker guardrails, unknown fiel
       value.input.dailyBarsArtifactIds[1] = value.input.dailyBarsArtifactIds[0];
     }, /unique and sorted/],
     [(value: Record<string, any>) => { value.execution.fxConversionBps = 1; }, /JPY-only execution/],
+    [(value: Record<string, any>) => { value.execution.benefitGate.safetyMarginBps = -1; }, /0 \(inclusive\)/],
+    [(value: Record<string, any>) => { value.execution.benefitGate.safetyMarginBps = 0; }, /must be positive/],
+    [(value: Record<string, any>) => { delete value.execution.instruments[0].expectedBenefit; }, /explicit expected-benefit evidence/],
+    [(value: Record<string, any>) => {
+      value.execution.instruments[0].expectedBenefit.availableAt = "2025-01-01";
+    }, /ISO timestamp with timezone/],
   ] as const) {
     const value = await fixture();
     mutate(value);
