@@ -507,6 +507,24 @@ test("D-009 cost-benefit gate keeps marginal synthetic trades in cash", async ()
       assert.deepEqual(artifact.payload.quantDecision.effectiveTargetWeights, { CASH: 1 });
       assert.ok(artifact.payload.quantDecision.benefitGate.decisions.every((decision) => !decision.passed));
     }
+
+    const reassignedConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    const reassignedStrategies = reassignedConfig.strategies as MutableConfig[];
+    const firstPortfolioId = reassignedStrategies[0]!.portfolioId;
+    reassignedStrategies[0]!.portfolioId = reassignedStrategies[1]!.portfolioId;
+    reassignedStrategies[1]!.portfolioId = firstPortfolioId;
+    await writeFile(configPath, `${JSON.stringify(reassignedConfig, null, 2)}\n`, "utf8");
+
+    const reassignedReport = await runPreForward(configPath, fixtureAsOf, { cwd: root });
+    const decisionByPortfolio = new Map(
+      report.results.map((result) => [result.portfolioId, result.decisionArtifactId]),
+    );
+    assert.ok(reassignedReport.results.every((result) => (
+      result.idempotent
+        && !result.stateTransitionApplied
+        && result.decisionArtifactId === decisionByPortfolio.get(result.portfolioId)
+    )));
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
   });
 });
 

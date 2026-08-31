@@ -3,11 +3,11 @@
   "mode": "pre_forward_dry_run",
   "artifactRoot": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v12/artifacts"
+    "path": "data/generated/pre-forward/fixture-v13/artifacts"
   },
   "ledgerPath": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v12/ledger.sqlite"
+    "path": "data/generated/pre-forward/fixture-v13/ledger.sqlite"
   },
   "input": {
     "kind": "daily_bars_manifest",
@@ -94,7 +94,7 @@
   "strategies": [
     {
       "strategy": "trend",
-      "portfolioId": "pre-forward-trend-fixture-v12",
+      "portfolioId": "pre-forward-trend-fixture-v13",
       "strategyVersion": "trend-v1",
       "strategyConfigVersion": "pre-forward-trend-defaults-v1",
       "validFrom": "2025-01-01",
@@ -109,7 +109,7 @@
     },
     {
       "strategy": "rotation",
-      "portfolioId": "pre-forward-rotation-fixture-v12",
+      "portfolioId": "pre-forward-rotation-fixture-v13",
       "strategyVersion": "rotation-v1",
       "strategyConfigVersion": "pre-forward-rotation-defaults-v1",
       "validFrom": "2025-01-01",

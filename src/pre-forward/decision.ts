@@ -33,7 +33,7 @@ import {
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
 export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v8" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v10" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v11" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
@@ -877,11 +877,10 @@ export function preForwardCycleId(asOf: string): string {
   return preForwardMarketDate(asOf).slice(0, 7);
 }
 
-export function buildPreForwardRunKey(strategy: PreForwardStrategyConfig, asOf: string): string {
+export function buildPreForwardRunKey(portfolioId: string, asOf: string): string {
   return sha256Canonical({
     mode: PRE_FORWARD_MODE,
-    portfolioId: strategy.portfolioId,
-    strategy: strategy.strategy,
+    portfolioId,
     cycleId: preForwardCycleId(asOf),
   });
 }
@@ -933,7 +932,7 @@ export function buildPreForwardDecisionPackage(
   const asOfDate = preForwardMarketDate(request.asOf);
   if (!isIsoDate(asOfDate)) throw new Error("Pre-forward asOf does not contain a valid declared market date.");
   const cycleId = preForwardCycleId(request.asOf);
-  const runKey = buildPreForwardRunKey(request.strategy, request.asOf);
+  const runKey = buildPreForwardRunKey(request.strategy.portfolioId, request.asOf);
   const diagnosticResult = buildInstrumentDiagnostics(request, asOfDate);
   const snapshots = diagnosticResult.diagnostics.flatMap((diagnostic) => (
     diagnostic.snapshot === undefined ? [] : [diagnostic.snapshot]
@@ -1276,12 +1275,7 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
       && !ARTIFACT_ID_PATTERN.test(payload.universe.snapshotArtifactId)) {
     throw new Error("Pre-forward Decision Package Universe is not bound to a retained snapshot artifact.");
   }
-  if (payload.runKey !== sha256Canonical({
-    mode: PRE_FORWARD_MODE,
-    portfolioId: payload.portfolioId,
-    strategy: payload.strategy.name,
-    cycleId: payload.cycleId,
-  })) {
+  if (payload.runKey !== buildPreForwardRunKey(payload.portfolioId, payload.asOf)) {
     throw new Error("Pre-forward Decision Package run key is not bound to its monthly cycle.");
   }
   assertVirtualPortfolioState(payload.portfolio.beforeState);

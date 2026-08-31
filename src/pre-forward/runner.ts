@@ -383,7 +383,7 @@ function assertStoredDecisionIdentity(
         + "intramonth reassessment requires a separately approved audited mode.",
     );
   }
-  if (payload.runKey !== buildPreForwardRunKey(strategy, asOf)
+  if (payload.runKey !== buildPreForwardRunKey(strategy.portfolioId, asOf)
     || payload.asOf !== asOf
     || payload.portfolioId !== strategy.portfolioId
     || payload.strategy.name !== strategy.strategy
@@ -564,7 +564,7 @@ export async function runPreForward(
     let universeSnapshotArtifact: ReturnType<typeof buildPreForwardUniverseSnapshotArtifact> | undefined;
     const results: PreForwardStrategyRunResult[] = [];
     for (const strategy of runtime.config.strategies) {
-      const runKey = buildPreForwardRunKey(strategy, asOf);
+      const runKey = buildPreForwardRunKey(strategy.portfolioId, asOf);
       const retainedDecision = retainedIndex.byRunKey.get(runKey);
       if (retainedDecision !== undefined) {
         results.push(await replayOne(runtime, retainedDecision, asOf));
