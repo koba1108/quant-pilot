@@ -404,6 +404,7 @@ interface RetainedDecisionIndex {
 
 async function indexRetainedDecisions(
   store: FileArtifactStore,
+  cwd: string,
   strategies: readonly PreForwardStrategyConfig[],
 ): Promise<RetainedDecisionIndex> {
   const portfolioIds = new Set(strategies.map((strategy) => strategy.portfolioId));
@@ -428,6 +429,21 @@ async function indexRetainedDecisions(
     ));
     if (strategy === undefined) throw new Error("Retained config has no strategy matching its Decision Package.");
     assertStoredDecisionIdentity(decisionArtifact.payload, config, strategy, decisionArtifact.payload.asOf);
+    const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
+    try {
+      await lstat(retainedLedgerPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    const retainedLedger = await PreForwardLedger.open(retainedLedgerPath);
+    try {
+      const committedRun = retainedLedger.getExistingRun(decisionArtifact.payload.runKey);
+      if (committedRun?.decisionArtifactId !== decisionArtifact.provenance.artifactId) continue;
+      retainedLedger.verifyDecision(decisionArtifact.payload, decisionArtifact.provenance.artifactId);
+    } finally {
+      retainedLedger.close();
+    }
     const ledgerBinding = canonicalJson(config.ledgerPath);
     const existingBinding = ledgerBindingByPortfolio.get(decisionArtifact.payload.portfolioId);
     if (existingBinding !== undefined && existingBinding !== ledgerBinding) {
@@ -506,7 +522,7 @@ export async function runPreForward(
   }
 
   for (const strategy of runtime.config.strategies) assertStrategyConfigCurrent(strategy, asOfDate);
-  const retainedIndex = await indexRetainedDecisions(runtime.store, runtime.config.strategies);
+  const retainedIndex = await indexRetainedDecisions(runtime.store, runtime.cwd, runtime.config.strategies);
   let ledger: PreForwardLedger | undefined;
   try {
     let createdAt: string | undefined;

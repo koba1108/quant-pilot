@@ -19,6 +19,7 @@ import {
   type PreForwardCredentialedConfigSnapshotPayload,
 } from "../src/pre-forward/credentialed-config-snapshot.ts";
 import {
+  buildPreForwardDecisionArtifact,
   buildPreForwardDecisionPackage,
   buildVirtualPortfolioState,
   preForwardBarAvailableAt,
@@ -97,7 +98,11 @@ function configSnapshotArtifactId(
   return buildPreForwardConfigSnapshotArtifact(config, createdAt).provenance.artifactId;
 }
 
-async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: string): Promise<{
+async function loadSyntheticDecisionFixture(
+  configPath: string,
+  artifactRoot: string,
+  cwd = repositoryRoot,
+): Promise<{
   config: ReturnType<typeof validatePreForwardConfig>;
   input: LoadedPreForwardInput;
   universeMaster: Awaited<ReturnType<typeof loadUniverseMaster>>;
@@ -125,7 +130,7 @@ async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: st
       availabilityBasis: artifact.payload.availabilityBasis,
       returnEventCoverage: artifact.payload.returnEventCoverage,
     } as const;
-  });
+  }).sort((left, right) => left.code < right.code ? -1 : left.code > right.code ? 1 : 0);
   return {
     config,
     input: sealLoadedPreForwardInput({
@@ -134,9 +139,12 @@ async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: st
       inputArtifactIds: artifacts.map((artifact) => artifact.provenance.artifactId).sort(),
       series,
       missingCapabilities: ["not_credentialed_provider_evidence"],
-      limitations: ["test"],
+      limitations: [
+        "Synthetic artifacts validate the manual Pre-Forward operating loop, not investment performance.",
+        "Provider-adjusted values are not classified as Total Return.",
+      ],
     }),
-    universeMaster: await loadUniverseMaster(join(repositoryRoot, config.universe.masterPath!)),
+    universeMaster: await loadUniverseMaster(join(cwd, config.universe.masterPath!)),
   };
 }
 
@@ -171,6 +179,47 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
       assert.ok(result.modeledCostJpy > 0);
       assert.ok(result.endingCashJpy >= 0 && result.endingCashJpy < 1_000_000);
     }
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+
+    const store = new FileArtifactStore(artifactRoot);
+    const initial = await loadSyntheticDecisionFixture(configPath, artifactRoot, root);
+    const orphanCreatedAt = "2025-01-07T00:06:00Z";
+    const orphanConfigSnapshot = buildPreForwardConfigSnapshotArtifact(initial.config, orphanCreatedAt);
+    const orphanUniverseSnapshot = buildPreForwardUniverseSnapshotArtifact(
+      initial.universeMaster,
+      orphanCreatedAt,
+    );
+    await store.put(orphanConfigSnapshot);
+    await store.put(orphanUniverseSnapshot);
+    const orphanPayload = buildPreForwardDecisionPackage({
+      config: initial.config,
+      configFingerprint: sha256Canonical(initial.config),
+      configSnapshotArtifactId: orphanConfigSnapshot.provenance.artifactId,
+      strategy: initial.config.strategies[0]!,
+      asOf: fixtureAsOf,
+      createdAt: orphanCreatedAt,
+      input: initial.input,
+      universeMaster: initial.universeMaster,
+      universeSnapshotArtifactId: orphanUniverseSnapshot.provenance.artifactId,
+      beforeState: buildVirtualPortfolioState({
+        portfolioId: initial.config.strategies[0]!.portfolioId,
+        cashJpy: 1_000_000,
+        positions: [],
+        distributionReceivables: [],
+        highWaterMarkJpy: 1_000_000,
+        stopped: false,
+      }),
+    });
+    const orphanArtifact = buildPreForwardDecisionArtifact(orphanPayload);
+    await store.put(orphanArtifact);
+    assert.notEqual(orphanArtifact.provenance.artifactId, first.results[0]!.decisionArtifactId);
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, {
+        cwd: root,
+        replayDecisionArtifactId: orphanArtifact.provenance.artifactId,
+      }),
+      /run index does not match its Decision Package/,
+    );
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
     const originalMasterText = (await readFile(masterPath, "utf8")).trimEnd();
@@ -254,7 +303,6 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
       (error: NodeJS.ErrnoException) => error.code === "ENOENT",
     );
 
-    const store = new FileArtifactStore(artifactRoot);
     for (const result of first.results) {
       const artifact = await store.read<PreForwardDecisionPackage>(result.decisionArtifactId);
       assert.equal(artifact.provenance.artifactKind, "decision_package");
