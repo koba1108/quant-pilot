@@ -3,11 +3,11 @@
   "mode": "pre_forward_dry_run",
   "artifactRoot": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v6/artifacts"
+    "path": "data/generated/pre-forward/fixture-v7/artifacts"
   },
   "ledgerPath": {
     "kind": "relative",
-    "path": "data/generated/pre-forward/fixture-v6/ledger.sqlite"
+    "path": "data/generated/pre-forward/fixture-v7/ledger.sqlite"
   },
   "input": {
     "kind": "daily_bars_manifest",

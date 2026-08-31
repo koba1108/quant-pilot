@@ -70,7 +70,7 @@ The active work advances M2 of `EXECUTION_ROADMAP.md`: a manual, replayable, ide
 2. produces immutable Decision Packages and append-only hash-chained Bun SQLite portfolio state;
 3. creates virtual orders/executions with trading-unit rounding, explicit costs, a D-009 expected-benefit/cost/safety-margin gate, cash accounting, maximum three holdings, and a -30% high-water-mark stop gated by explicit holding-period event coverage;
 4. makes duplicate invocation and explicit Decision Package replay non-mutating and deterministic, rejects a second normal cutoff in the same month, and separates actual package creation time from market `asOf`;
-5. preserves Point-in-Time Universe, listing-date, intraday bar availability, stale-data, missing-history, execution, distribution/Corporate Action, chronology, artifact-date, loaded-input/config integrity, and ledger mismatches as explicit blockers;
+5. preserves an exact content-addressed Universe snapshot for replay and keeps listing-date, intraday bar availability, stale-data, missing-history, execution, distribution/Corporate Action, chronology, artifact-date, loaded-input/config integrity, and ledger mismatches explicit;
 6. completes a synthetic fixture cycle while the retained three-day J-Quants audit correctly remains blocked with no state transition.
 
 The M2 real-data exit criterion is not met. A longer licensed retained sample, strict Point-in-Time Universe, approved execution assumptions, and distribution/Corporate Action input remain required. Strategy C, formal operational scheduling, a dashboard, a production provider selection, and real brokerage/order behavior remain outside M2.
@@ -98,7 +98,7 @@ The M2 real-data exit criterion is not met. A longer licensed retained sample, s
 - final all-CLI audit: pass
 - normalized Trend and Rotation repeated outputs: byte-for-byte identical
 - merged M1 path: `bun test` 198 pass / 0 fail; TypeScript passes; fixture replay is byte-for-byte identical; live partial replay is canonical-equal; production and partial-result gates fail closed as expected
-- active M2 branch: `bun test` 212 pass / 0 fail; TypeScript passes; synthetic Trend/Rotation execute through D-009 benefit gates; duplicate invocation and explicit replay are non-mutating; intramonth reruns reject; held-unit valuation requires event coverage; chronology/artifact-date/listing/intraday/input-integrity regressions pass; retained J-Quants input blocks with no cash movement
+- active M2 branch: `bun test` 212 pass / 0 fail; TypeScript passes; synthetic Trend/Rotation execute through D-009 benefit gates; duplicate invocation and explicit replay are non-mutating even after a later Universe master revision; intramonth reruns reject; held-unit valuation requires event coverage; chronology/artifact-date/listing/intraday/input-integrity regressions pass; retained J-Quants input blocks with no cash movement
 
 See `CURRENT_STATUS.md` for commands, outputs, and current limitations.
 

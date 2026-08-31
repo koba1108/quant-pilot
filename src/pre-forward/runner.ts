@@ -47,6 +47,11 @@ import {
   resolvePreForwardLedgerPath,
   resolveRepositoryInputFile,
 } from "./runtime-paths.ts";
+import {
+  assertPreForwardUniverseSnapshotArtifact,
+  buildPreForwardUniverseSnapshotArtifact,
+  type PreForwardUniverseSnapshotPayload,
+} from "./universe-snapshot.ts";
 
 export interface PreForwardStrategyRunResult {
   strategy: "trend" | "rotation";
@@ -307,6 +312,20 @@ function assertStoredDecisionIdentity(
   }
 }
 
+async function loadRetainedUniverseMaster(
+  store: FileArtifactStore,
+  payload: PreForwardDecisionPackage,
+): Promise<UniverseMaster | undefined> {
+  const snapshotArtifactId = payload.universe.snapshotArtifactId;
+  if (snapshotArtifactId === undefined) return undefined;
+  const snapshot = await store.read<PreForwardUniverseSnapshotPayload>(snapshotArtifactId);
+  assertPreForwardUniverseSnapshotArtifact(snapshot);
+  if (snapshot.payload.master.fingerprint !== payload.universe.masterFingerprint) {
+    throw new Error("Retained Universe snapshot does not match the Decision Package fingerprint.");
+  }
+  return snapshot.payload.master;
+}
+
 async function replayOne(
   runtime: LoadedRuntime,
   ledger: PreForwardLedger,
@@ -318,6 +337,7 @@ async function replayOne(
     throw new Error("Pre-forward replay artifact must use artifactKind=decision_package.");
   }
   assertStoredDecisionIdentity(artifact.payload, runtime, strategy, asOf);
+  const universeMaster = await loadRetainedUniverseMaster(runtime.store, artifact.payload);
   const rebuilt = buildPreForwardDecisionPackage({
     config: runtime.config,
     configFingerprint: runtime.configFingerprint,
@@ -325,7 +345,8 @@ async function replayOne(
     asOf,
     createdAt: artifact.payload.createdAt,
     input: runtime.input,
-    universeMaster: runtime.universeMaster,
+    universeMaster,
+    universeSnapshotArtifactId: artifact.payload.universe.snapshotArtifactId,
     beforeState: artifact.payload.portfolio.beforeState,
     expectedLedgerHead: artifact.payload.ledger.expectedHeadBefore,
   });
@@ -361,6 +382,7 @@ export async function runPreForward(
     }
 
     let createdAt: string | undefined;
+    let universeSnapshotArtifact: ReturnType<typeof buildPreForwardUniverseSnapshotArtifact> | undefined;
     const results: PreForwardStrategyRunResult[] = [];
     for (const strategy of runtime.config.strategies) {
       const runKey = buildPreForwardRunKey(strategy, asOf);
@@ -372,6 +394,10 @@ export async function runPreForward(
       }
       const opening = ledger.readPortfolioSnapshot(strategy.portfolioId, runtime.config.portfolio.initialCashJpy);
       createdAt ??= options.clock?.() ?? new Date().toISOString();
+      if (runtime.universeMaster !== undefined && universeSnapshotArtifact === undefined) {
+        universeSnapshotArtifact = buildPreForwardUniverseSnapshotArtifact(runtime.universeMaster, createdAt);
+        await runtime.store.put(universeSnapshotArtifact);
+      }
       const payload = buildPreForwardDecisionPackage({
         config: runtime.config,
         configFingerprint: runtime.configFingerprint,
@@ -380,6 +406,7 @@ export async function runPreForward(
         createdAt,
         input: runtime.input,
         universeMaster: runtime.universeMaster,
+        universeSnapshotArtifactId: universeSnapshotArtifact?.provenance.artifactId,
         beforeState: opening.state,
         expectedLedgerHead: opening.headHash,
       });

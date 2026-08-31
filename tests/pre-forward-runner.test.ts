@@ -27,11 +27,13 @@ import {
   preForwardExitCode,
   runPreForward,
 } from "../src/pre-forward/runner.ts";
+import { buildPreForwardUniverseSnapshotArtifact } from "../src/pre-forward/universe-snapshot.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const fixtureConfigPath = join(repositoryRoot, "tests/fixtures/pre-forward/config.json");
 const fixtureAsOf = "2025-01-07T00:00:00Z";
 const fixtureCreatedAt = "2025-01-07T00:05:00Z";
+const futureAlphaRevision = "universe-master-v1,univ-alpha-v2,univ-alpha-v1,instrument-alpha,ALPHA,synthetic,Synthetic Alpha,Synthetic,Core,test_candidate,core,false,etf,false,false,false,false,TEST,JPY,2023-01-02,,2026-08-31T00:00:00Z,2026-08-31T00:01:00Z,synthetic-fixture,universe-fixture,2026-08-31T00:02:00Z,v2,record-alpha-v2,future revision";
 
 type MutableConfig = Record<string, any>;
 
@@ -68,6 +70,13 @@ function databaseCounts(path: string): { runs: number; entries: number } {
   } finally {
     database.close(true);
   }
+}
+
+function universeSnapshotArtifactId(
+  master: Awaited<ReturnType<typeof loadUniverseMaster>>,
+  createdAt = fixtureCreatedAt,
+): string {
+  return buildPreForwardUniverseSnapshotArtifact(master, createdAt).provenance.artifactId;
 }
 
 async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: string): Promise<{
@@ -114,10 +123,21 @@ async function loadSyntheticDecisionFixture(configPath: string, artifactRoot: st
 }
 
 test("manual pre-forward fixture executes Trend/Rotation, persists decisions, replays, and reruns idempotently", async () => {
-  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot, ledgerPath }) => {
-    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, artifactRoot, ledgerPath }) => {
+    const masterPath = join(root, "universe-master.csv");
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
     const first = await runPreForward(configPath, fixtureAsOf, {
-      cwd: repositoryRoot,
+      cwd: root,
       clock: () => fixtureCreatedAt,
     });
     assert.equal(first.status, "executed");
@@ -135,7 +155,10 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     }
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
-    const second = await runPreForward(configPath, fixtureAsOf, { cwd: repositoryRoot });
+    const originalMasterText = (await readFile(masterPath, "utf8")).trimEnd();
+    await writeFile(masterPath, `${originalMasterText}\n${futureAlphaRevision}\n`, "utf8");
+    const revisedMaster = await loadUniverseMaster(masterPath);
+    const second = await runPreForward(configPath, fixtureAsOf, { cwd: root });
     assert.equal(second.status, "executed");
     assert.deepEqual(
       second.results.map((result) => result.decisionArtifactId),
@@ -144,13 +167,13 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     assert.ok(second.results.every((result) => result.idempotent && !result.stateTransitionApplied));
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
     await assert.rejects(
-      () => runPreForward(configPath, "2025-01-08T00:00:00Z", { cwd: repositoryRoot }),
+      () => runPreForward(configPath, "2025-01-08T00:00:00Z", { cwd: root }),
       /Monthly Pre-Forward cycle 2025-01 already uses cutoff.*intramonth reassessment/,
     );
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
     const replayed = await runPreForward(configPath, fixtureAsOf, {
-      cwd: repositoryRoot,
+      cwd: root,
       replayDecisionArtifactId: first.results[0]!.decisionArtifactId,
     });
     assert.equal(replayed.operation, "replay");
@@ -180,6 +203,8 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
           && order.riskOverride === undefined
       )));
       assert.equal(artifact.payload.input.disposition, "research_only");
+      assert.notEqual(artifact.payload.universe.masterFingerprint, revisedMaster.fingerprint);
+      assert.match(artifact.payload.universe.snapshotArtifactId!, /^sha256:[0-9a-f]{64}$/);
       assert.equal(artifact.payload.portfolio.afterState.positions.length, 3);
     }
     if (process.platform !== "win32") {
@@ -253,6 +278,7 @@ test("signal history excludes every bar from before the resolved ETF listing dat
       createdAt: fixtureCreatedAt,
       input: fixture.input,
       universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(universeMaster),
       beforeState,
     }), /Pre-forward config changed after validation/);
     const changedStrategy = structuredClone(fixture.config.strategies[0]);
@@ -265,6 +291,7 @@ test("signal history excludes every bar from before the resolved ETF listing dat
       createdAt: fixtureCreatedAt,
       input: fixture.input,
       universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(universeMaster),
       beforeState,
     }), /Pre-forward strategy is not bound to the validated config/);
     const payload = buildPreForwardDecisionPackage({
@@ -275,6 +302,7 @@ test("signal history excludes every bar from before the resolved ETF listing dat
       createdAt: fixtureCreatedAt,
       input: fixture.input,
       universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(universeMaster),
       beforeState,
     });
     const diagnostic = payload.instrumentDiagnostics.find((item) => item.code === "ALPHA")!;
@@ -308,6 +336,7 @@ test("same-day closing bars remain unavailable before the conservative close flo
       createdAt: fixtureCreatedAt,
       input,
       universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(fixture.universeMaster),
       beforeState: buildVirtualPortfolioState({
         portfolioId: fixture.config.strategies[0].portfolioId,
         cashJpy: 1_000_000,
@@ -397,6 +426,7 @@ test("the -30% high-water-mark stop liquidates when complete no-event coverage p
       createdAt: fixtureCreatedAt,
       input,
       universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(universeMaster),
       beforeState,
     });
     assert.equal(payload.status, "executed");
@@ -442,6 +472,7 @@ test("held-unit valuation fails closed when split and distribution coverage are 
       createdAt: fixtureCreatedAt,
       input: tamperedInput,
       universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(fixture.universeMaster),
       beforeState,
     }), /Loaded pre-forward inputs changed after artifact validation/);
     const { integrityFingerprint: _integrityFingerprint, ...inputBody } = tamperedInput;
@@ -454,6 +485,7 @@ test("held-unit valuation fails closed when split and distribution coverage are 
       createdAt: fixtureCreatedAt,
       input,
       universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(fixture.universeMaster),
       beforeState,
     });
     assert.equal(payload.status, "blocked");
@@ -490,6 +522,10 @@ test("a stopped portfolio cannot bypass chronology during a safety cycle", async
       createdAt: "2025-02-02T00:00:00Z",
       input: fixture.input,
       universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(
+        fixture.universeMaster,
+        "2025-02-02T00:00:00Z",
+      ),
       beforeState,
     });
     assert.equal(payload.status, "blocked");

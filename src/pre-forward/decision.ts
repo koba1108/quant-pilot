@@ -31,8 +31,8 @@ import {
 } from "./market-input.ts";
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
-export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v5" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v5" as const;
+export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v6" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v6" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
@@ -188,6 +188,7 @@ export interface PreForwardDecisionPackage {
   };
   universe: {
     masterFingerprint?: string;
+    snapshotArtifactId?: string;
     allowedStatuses: readonly string[];
     supportedCurrencies: readonly ["JPY"];
   };
@@ -266,6 +267,7 @@ export interface BuildPreForwardDecisionRequest {
   createdAt: string;
   input: LoadedPreForwardInput;
   universeMaster?: UniverseMaster;
+  universeSnapshotArtifactId?: string;
   beforeState: VirtualPortfolioState;
   expectedLedgerHead?: string;
 }
@@ -895,6 +897,11 @@ export function buildPreForwardDecisionPackage(
   if (request.beforeState.portfolioId !== request.strategy.portfolioId) {
     throw new Error("Pre-forward portfolio state does not match the strategy portfolioId.");
   }
+  if ((request.universeMaster === undefined) !== (request.universeSnapshotArtifactId === undefined)
+    || request.universeSnapshotArtifactId !== undefined
+      && !ARTIFACT_ID_PATTERN.test(request.universeSnapshotArtifactId)) {
+    throw new Error("Pre-forward Universe master must be bound to its retained snapshot artifact.");
+  }
   if (request.universeMaster !== undefined) assertUniverseMasterIntegrity(request.universeMaster);
   const asOfDate = request.asOf.slice(0, 10);
   if (!isIsoDate(asOfDate)) throw new Error("Pre-forward asOf does not contain a valid declared market date.");
@@ -1080,6 +1087,7 @@ export function buildPreForwardDecisionPackage(
   const inputFingerprint = sha256Canonical({
     loadedInputIntegrityFingerprint: request.input.integrityFingerprint,
     universeMasterFingerprint: request.universeMaster?.fingerprint,
+    universeSnapshotArtifactId: request.universeSnapshotArtifactId,
   });
   return packageWithFingerprint({
     schemaVersion: PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION,
@@ -1114,6 +1122,7 @@ export function buildPreForwardDecisionPackage(
     },
     universe: {
       masterFingerprint: request.universeMaster?.fingerprint,
+      snapshotArtifactId: request.universeSnapshotArtifactId,
       allowedStatuses: request.config.universe.allowedStatuses,
       supportedCurrencies: request.config.universe.supportedCurrencies,
     },
@@ -1204,8 +1213,16 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
   if (payload.input.inputFingerprint !== sha256Canonical({
     loadedInputIntegrityFingerprint: payload.input.loadedInputIntegrityFingerprint,
     universeMasterFingerprint: payload.universe.masterFingerprint,
+    universeSnapshotArtifactId: payload.universe.snapshotArtifactId,
   })) {
     throw new Error("Pre-forward Decision Package input fingerprint is not bound to its loaded inputs.");
+  }
+  if ((payload.universe.masterFingerprint === undefined) !== (payload.universe.snapshotArtifactId === undefined)
+    || payload.universe.masterFingerprint !== undefined
+      && !ARTIFACT_ID_PATTERN.test(payload.universe.masterFingerprint)
+    || payload.universe.snapshotArtifactId !== undefined
+      && !ARTIFACT_ID_PATTERN.test(payload.universe.snapshotArtifactId)) {
+    throw new Error("Pre-forward Decision Package Universe is not bound to a retained snapshot artifact.");
   }
   if (payload.runKey !== sha256Canonical({
     mode: PRE_FORWARD_MODE,
@@ -1412,6 +1429,7 @@ export function buildPreForwardDecisionArtifact(
       configFingerprint: payload.configFingerprint,
       loadedInputIntegrityFingerprint: payload.input.loadedInputIntegrityFingerprint,
       inputFingerprint: payload.input.inputFingerprint,
+      universeSnapshotArtifactId: payload.universe.snapshotArtifactId,
       expectedLedgerHead: payload.ledger.expectedHeadBefore,
     },
     recordId: payload.runKey,
