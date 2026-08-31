@@ -230,6 +230,7 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     revisedConfigValue.execution.commissionBps += 1;
     for (const strategy of revisedConfigValue.strategies as MutableConfig[]) {
       strategy.strategyConfigVersion += "-next";
+      strategy.validFrom = "2025-02-01";
     }
     await writeFile(configPath, `${JSON.stringify(revisedConfigValue, null, 2)}\n`, "utf8");
     const revisedConfig = validatePreForwardConfig(revisedConfigValue);

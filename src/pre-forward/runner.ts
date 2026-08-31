@@ -548,7 +548,6 @@ export async function runPreForward(
     return buildReport(asOf, "replay", [await replayOne(runtime, artifact, asOf)]);
   }
 
-  for (const strategy of runtime.config.strategies) assertStrategyConfigCurrent(strategy, asOfDate);
   const retainedIndex = await indexRetainedDecisions(
     runtime.store,
     runtime.cwd,
@@ -571,6 +570,7 @@ export async function runPreForward(
         results.push(await replayOne(runtime, retainedDecision, asOf));
         continue;
       }
+      assertStrategyConfigCurrent(strategy, asOfDate);
       if (runtime.configuredLedgerPath !== runtime.boundLedgerPath) {
         throw new Error(
           `Pre-forward ledger relocation for ${strategy.portfolioId} requires an explicit audited migration.`,

@@ -185,7 +185,7 @@ Active M2 manual Pre-Forward branch verification:
 - lifecycle/availability regressions: signal history excludes pre-listing rows, and a same-day close is unavailable before the conservative `07:00:00Z` floor
 - execution-boundary regressions: stale validated-config fingerprints, unbound strategy overrides, and loaded-input mutation are rejected before a Decision Package is built
 - aggregate-cost regression: per-instrument one-way cost at or above 100% is rejected at config validation
-- config replay regression: a later valid execution-policy and strategy-config revision cannot change or invalidate the historical replay
+- config replay regression: a later valid execution-policy, strategy-config, and validity-window revision cannot change or invalidate ordinary reuse or explicit replay of the historical cycle
 - runtime relocation regression: a later current-config ledger path cannot redirect replay or ordinary duplicate detection, a future cycle rejects ledger relocation, and moving both artifact/ledger roots cannot hide history without an explicit audited migration
 - missing-ledger regression: after retained decisions exist, deleting their ledger blocks same-cutoff execution, a future cycle, and explicit replay without recreating an empty SQLite database or resetting portfolio state
 - committed-artifact regression: deleting a Decision Package named by a committed ledger run blocks the next cycle without appending another transition
