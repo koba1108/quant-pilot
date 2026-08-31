@@ -98,7 +98,7 @@ The M2 real-data exit criterion is not met. A longer licensed retained sample, s
 - final all-CLI audit: pass
 - normalized Trend and Rotation repeated outputs: byte-for-byte identical
 - merged M1 path: `bun test` 198 pass / 0 fail; TypeScript passes; fixture replay is byte-for-byte identical; live partial replay is canonical-equal; production and partial-result gates fail closed as expected
-- active M2 branch: `bun test` 212 pass / 0 fail; TypeScript passes; synthetic Trend/Rotation execute through D-009 benefit gates; duplicate invocation and explicit replay are non-mutating even after later config, ledger-path, nested sample-config, and Universe master revisions; artifact-store relocation, Tokyo-market-month intramonth reruns, and aggregate costs at or above 100% reject; held-unit valuation requires event coverage; chronology/absolute-timestamp/listing/intraday/input-integrity regressions pass; retained J-Quants input blocks with no cash movement
+- active M2 branch: Bun 1.3.14 `bun test` 212 pass / 0 fail and Bun 1.2.14 per-file compatibility sweep 212 pass / 0 fail; TypeScript passes; synthetic Trend/Rotation execute through D-009 benefit gates; duplicate invocation and explicit replay are non-mutating even after later config, ledger-path, nested sample-config, and Universe master revisions; artifact-store relocation, Tokyo-market-month intramonth reruns, and aggregate costs at or above 100% reject; strict SQLite shutdown, held-unit valuation coverage, chronology/absolute-timestamp/listing/intraday/input-integrity regressions pass; retained J-Quants input blocks with no cash movement
 
 See `CURRENT_STATUS.md` for commands, outputs, and current limitations.
 

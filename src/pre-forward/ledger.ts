@@ -208,9 +208,15 @@ export class PreForwardLedger implements Disposable {
         "INSERT OR IGNORE INTO ledger_metadata (key, value) VALUES ('schema_version', ?)",
         [PRE_FORWARD_LEDGER_SCHEMA_VERSION],
       );
-      const metadata = database.query<{ value: string }, [string]>(
+      const metadataStatement = database.prepare<{ value: string }, [string]>(
         "SELECT value FROM ledger_metadata WHERE key = ?",
-      ).get("schema_version");
+      );
+      let metadata: { value: string } | null;
+      try {
+        metadata = metadataStatement.get("schema_version");
+      } finally {
+        metadataStatement.finalize();
+      }
       if (metadata?.value !== PRE_FORWARD_LEDGER_SCHEMA_VERSION) {
         throw new Error(`Unsupported pre-forward ledger schema: ${metadata?.value ?? "missing"}.`);
       }
@@ -232,9 +238,15 @@ export class PreForwardLedger implements Disposable {
   }
 
   getExistingRun(runKey: string): PreForwardExistingRun | undefined {
-    const row = this.database.query<RunRow, [string]>(
+    const statement = this.database.prepare<RunRow, [string]>(
       "SELECT * FROM pre_forward_runs WHERE run_key = ?",
-    ).get(runKey);
+    );
+    let row: RunRow | null;
+    try {
+      row = statement.get(runKey);
+    } finally {
+      statement.finalize();
+    }
     if (row === null) return undefined;
     return {
       runKey: row.run_key,
@@ -251,9 +263,15 @@ export class PreForwardLedger implements Disposable {
   }
 
   readPortfolioSnapshot(portfolioId: string, initialCashJpy = 1_000_000): PreForwardLedgerSnapshot {
-    const entries = this.database.query<EntryRow, [string]>(
+    const statement = this.database.prepare<EntryRow, [string]>(
       "SELECT * FROM portfolio_ledger_entries WHERE portfolio_id = ? ORDER BY sequence ASC",
-    ).all(portfolioId);
+    );
+    let entries: EntryRow[];
+    try {
+      entries = statement.all(portfolioId);
+    } finally {
+      statement.finalize();
+    }
     let state = createInitialVirtualPortfolioState(portfolioId, initialCashJpy);
     let headHash: string | undefined;
     let expectedSequence = 1;
@@ -294,7 +312,12 @@ export class PreForwardLedger implements Disposable {
     if (!ARTIFACT_ID_PATTERN.test(decisionArtifactId)) {
       throw new Error("Decision artifact id must be a canonical SHA-256 identifier.");
     }
-    const transaction = this.database.transaction((): PreForwardLedgerAppendResult => {
+    // Bun 1.2.x can retain resources owned by Database.transaction() until
+    // garbage collection, making the subsequent strict close fail after the
+    // transition has committed. Explicit SQL transaction boundaries plus
+    // explicitly finalized prepared statements keep close(true) deterministic.
+    this.database.run("BEGIN IMMEDIATE");
+    try {
       const existing = this.getExistingRun(packagePayload.runKey);
       if (existing !== undefined) {
         if (existing.decisionArtifactId !== decisionArtifactId
@@ -306,12 +329,14 @@ export class PreForwardLedger implements Disposable {
           throw new Error(`Pre-forward run key already exists with different evidence: ${packagePayload.runKey}.`);
         }
         this.verifyDecision(packagePayload, decisionArtifactId);
-        return {
+        const result = {
           idempotent: true,
           stateTransitionApplied: false,
           headBefore: existing.ledgerHeadBefore,
           headAfter: existing.ledgerHeadAfter,
         };
+        this.database.run("COMMIT");
+        return result;
       }
       const current = this.readPortfolioSnapshot(packagePayload.portfolioId);
       if (current.headHash !== packagePayload.ledger.expectedHeadBefore
@@ -377,14 +402,27 @@ export class PreForwardLedger implements Disposable {
           entry.payload_json,
         ]);
       }
-      return {
+      const result = {
         idempotent: false,
         stateTransitionApplied: packagePayload.status === "executed",
         headBefore: current.headHash,
         headAfter,
       };
-    });
-    return transaction.immediate();
+      this.database.run("COMMIT");
+      return result;
+    } catch (error) {
+      if (this.database.inTransaction) {
+        try {
+          this.database.run("ROLLBACK");
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            "Pre-forward ledger append failed and its transaction could not be rolled back.",
+          );
+        }
+      }
+      throw error;
+    }
   }
 
   verifyDecision(packagePayload: PreForwardDecisionPackage, decisionArtifactId: string): void {
@@ -401,18 +439,30 @@ export class PreForwardLedger implements Disposable {
     }
     const snapshot = this.readPortfolioSnapshot(packagePayload.portfolioId);
     if (packagePayload.status === "blocked") {
-      const entry = this.database.query<{ count: number }, [string]>(
+      const statement = this.database.prepare<{ count: number }, [string]>(
         "SELECT COUNT(*) AS count FROM portfolio_ledger_entries WHERE run_key = ?",
-      ).get(packagePayload.runKey);
+      );
+      let entry: { count: number } | null;
+      try {
+        entry = statement.get(packagePayload.runKey);
+      } finally {
+        statement.finalize();
+      }
       if (run.ledgerHeadBefore !== run.ledgerHeadAfter) {
         throw new Error("Blocked pre-forward run changed the ledger head.");
       }
       if (entry?.count !== 0) throw new Error("Blocked pre-forward run must not contain a ledger transition.");
       return;
     }
-    const entry = this.database.query<EntryRow, [string]>(
+    const statement = this.database.prepare<EntryRow, [string]>(
       "SELECT * FROM portfolio_ledger_entries WHERE run_key = ?",
-    ).get(packagePayload.runKey);
+    );
+    let entry: EntryRow | null;
+    try {
+      entry = statement.get(packagePayload.runKey);
+    } finally {
+      statement.finalize();
+    }
     if (entry === null) throw new Error("Executed pre-forward run is missing its ledger transition.");
     const transition = parseTransition(entry.payload_json);
     if (transition.decisionArtifactId !== decisionArtifactId
@@ -427,16 +477,28 @@ export class PreForwardLedger implements Disposable {
 
   /** Test/audit hook: SQLite triggers must reject this mutation. */
   assertAppendOnlyGuards(): void {
-    const metadata = this.database.query<{ value: string }, [string]>(
+    const statement = this.database.prepare<{ value: string }, [string]>(
       "SELECT value FROM ledger_metadata WHERE key = ?",
-    ).get("schema_version");
-    if (metadata?.value !== PRE_FORWARD_LEDGER_SCHEMA_VERSION) throw new Error("Ledger metadata is missing.");
+    );
+    let metadata: { value: string } | null;
     try {
-      this.database.run("UPDATE ledger_metadata SET value = value WHERE key = 'schema_version'");
-    } catch (error) {
-      if (String(error).includes("append-only")) return;
-      throw error;
+      metadata = statement.get("schema_version");
+    } finally {
+      statement.finalize();
     }
-    throw new Error("Pre-forward append-only trigger did not reject an update.");
+    if (metadata?.value !== PRE_FORWARD_LEDGER_SCHEMA_VERSION) throw new Error("Ledger metadata is missing.");
+    const guardStatement = this.database.prepare(
+      "UPDATE ledger_metadata SET value = value WHERE key = 'schema_version'",
+    );
+    let rejected = false;
+    try {
+      guardStatement.run();
+    } catch (error) {
+      if (String(error).includes("append-only")) rejected = true;
+      else throw error;
+    } finally {
+      guardStatement.finalize();
+    }
+    if (!rejected) throw new Error("Pre-forward append-only trigger did not reject an update.");
   }
 }
