@@ -902,6 +902,108 @@ test("the -30% high-water-mark stop liquidates when complete no-event coverage p
   });
 });
 
+test("the hard stop uses an intervening daily-close high-water mark between monthly cutoffs", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
+    const { integrityFingerprint: _integrityFingerprint, ...inputBody } = fixture.input;
+    const input = sealLoadedPreForwardInput({
+      ...inputBody,
+      series: fixture.input.series.map((series) => ({
+        ...series,
+        bars: series.code === "ALPHA"
+          ? series.bars.map((bar) => (
+            bar.tradingDate === "2025-01-03"
+              ? { ...bar, close: 1_500, adjustedClose: 1_500 }
+              : bar.tradingDate === "2025-01-06"
+                ? { ...bar, close: 1_040, adjustedClose: 1_040 }
+                : bar
+          ))
+          : series.bars,
+      })),
+    });
+    const beforeState = buildVirtualPortfolioState({
+      portfolioId: fixture.config.strategies[0].portfolioId,
+      cashJpy: 0,
+      positions: [{ code: "ALPHA", units: 1_000, averageCostJpy: 1_000 }],
+      distributionReceivables: [],
+      highWaterMarkJpy: 1_000_000,
+      stopped: false,
+      lastAsOf: "2025-01-01T00:00:00Z",
+    });
+    const payload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
+      strategy: fixture.config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input,
+      universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(fixture.universeMaster),
+      beforeState,
+    });
+
+    assert.equal(payload.status, "executed");
+    assert.equal(payload.risk.highWaterMarkJpy, 1_500_000);
+    assert.equal(payload.risk.equityBeforeJpy, 1_040_000);
+    assert.ok(Math.abs(payload.risk.drawdownBefore! - (1_040_000 / 1_500_000 - 1)) < 1e-12);
+    assert.equal(payload.risk.hardStopTriggered, true);
+    assert.equal(payload.risk.hardStopPhase, "before_rebalance");
+    assert.deepEqual(payload.portfolio.afterState.positions, []);
+    assert.equal(payload.execution.orders[0]?.reason, "hard_stop_before_rebalance");
+  });
+});
+
+test("daily high-water-mark reconstruction does not fill a missing held-asset price", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
+    const { integrityFingerprint: _integrityFingerprint, ...inputBody } = fixture.input;
+    const input = sealLoadedPreForwardInput({
+      ...inputBody,
+      series: fixture.input.series.map((series) => ({
+        ...series,
+        bars: series.code === "BETA"
+          ? series.bars.filter((bar) => bar.tradingDate !== "2025-01-03")
+          : series.bars,
+      })),
+    });
+    const beforeState = buildVirtualPortfolioState({
+      portfolioId: fixture.config.strategies[0].portfolioId,
+      cashJpy: 0,
+      positions: [
+        { code: "ALPHA", units: 1_000, averageCostJpy: 100 },
+        { code: "BETA", units: 1_000, averageCostJpy: 100 },
+      ],
+      distributionReceivables: [],
+      highWaterMarkJpy: 1_000_000,
+      stopped: false,
+      lastAsOf: "2025-01-01T00:00:00Z",
+    });
+    const payload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
+      strategy: fixture.config.strategies[0],
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input,
+      universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(fixture.universeMaster),
+      beforeState,
+    });
+
+    assert.equal(payload.status, "blocked");
+    assert.equal(payload.portfolio.beforeValuation, undefined);
+    assert.equal(payload.risk.hardStopTriggered, false);
+    assert.deepEqual(payload.execution.orders, []);
+    assert.deepEqual(payload.portfolio.afterState, beforeState);
+    assert.ok(payload.blockedReasons.includes("portfolio:incomplete_daily_high_water_mark_prices"));
+    assert.ok(!payload.blockedReasons.includes("portfolio:missing_valuation_price_for_held_asset"));
+  });
+});
+
 test("held-unit valuation fails closed when event coverage does not reach the decision cutoff", async () => {
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });

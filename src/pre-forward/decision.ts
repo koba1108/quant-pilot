@@ -33,7 +33,7 @@ import {
 
 export const VIRTUAL_PORTFOLIO_STATE_SCHEMA_VERSION = "virtual-portfolio-state-v1" as const;
 export const PRE_FORWARD_DECISION_PACKAGE_SCHEMA_VERSION = "pre-forward-decision-package-v8" as const;
-export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v11" as const;
+export const PRE_FORWARD_DECISION_ENGINE_VERSION = "pre-forward-decision-engine-v12" as const;
 export const PRE_FORWARD_RUN_REPORT_SCHEMA_VERSION = "pre-forward-run-report-v1" as const;
 export const PRE_FORWARD_DISTRIBUTION_POLICY_ID = "d018-virtual-receivable-pay-date-v1" as const;
 export const PRE_FORWARD_DAILY_CLOSE_NOT_BEFORE_UTC = "07:00:00Z" as const;
@@ -444,6 +444,13 @@ interface DiagnosticBuildResult {
   executionByCode: Map<string, PreForwardExecutionInstrumentConfig>;
   costRateByCode: Map<string, number>;
   heldEventCoverageReadyCodes: Set<string>;
+  heldPriceHistoryByCode: Map<string, readonly HeldPriceObservation[]>;
+}
+
+interface HeldPriceObservation {
+  tradingDate: string;
+  marketPriceJpy: number;
+  availableAt: string;
 }
 
 function heldIntervalHasCompleteSyntheticEventCoverage(
@@ -474,6 +481,7 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
   const stateCodes = request.beforeState.positions.map((position) => position.code);
   const heldCodes = new Set(stateCodes);
   const heldEventCoverageReadyCodes = new Set<string>();
+  const heldPriceHistoryByCode = new Map<string, readonly HeldPriceObservation[]>();
   const codes = [...new Set([...seriesByCode.keys(), ...executionByCode.keys(), ...stateCodes])].sort(compareText);
   const priceByCode = new Map<string, number>();
   const costRateByCode = new Map<string, number>();
@@ -525,6 +533,13 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       (universeDecision?.listingDate === undefined || bar.tradingDate >= universeDecision.listingDate)
         && (universeDecision?.lastEligibleDate === undefined || bar.tradingDate <= universeDecision.lastEligibleDate)
     ));
+    if (heldCodes.has(code) && series !== undefined) {
+      heldPriceHistoryByCode.set(code, bars.map((bar) => ({
+        tradingDate: bar.tradingDate,
+        marketPriceJpy: bar.close,
+        availableAt: preForwardBarAvailableAt(series, bar.tradingDate),
+      })));
+    }
     const latest = bars.at(-1);
     if (bars.length === 0) blockers.push("no_bar_on_or_before_as_of");
     if (bars.length < request.config.signal.minHistoryBars) blockers.push("insufficient_history");
@@ -606,7 +621,14 @@ function buildInstrumentDiagnostics(request: BuildPreForwardDecisionRequest, asO
       blockers: uniqueBlockers,
     };
   });
-  return { diagnostics, priceByCode, executionByCode, costRateByCode, heldEventCoverageReadyCodes };
+  return {
+    diagnostics,
+    priceByCode,
+    executionByCode,
+    costRateByCode,
+    heldEventCoverageReadyCodes,
+    heldPriceHistoryByCode,
+  };
 }
 
 function normalizedBps(value: number): number {
@@ -676,6 +698,56 @@ function valuation(
     highWaterMarkJpy,
     drawdown: highWaterMarkJpy <= 0 ? 0 : totalEquityJpy / highWaterMarkJpy - 1,
   };
+}
+
+function reconstructHeldHighWaterMark(
+  state: VirtualPortfolioState,
+  heldPriceHistoryByCode: ReadonlyMap<string, readonly HeldPriceObservation[]>,
+  asOf: string,
+): number | undefined {
+  if (state.positions.length === 0) return state.highWaterMarkJpy;
+  if (state.lastAsOf === undefined) return undefined;
+  const previousMarketDate = preForwardMarketDate(state.lastAsOf);
+  const currentMarketDate = preForwardMarketDate(asOf);
+  const previousCutoff = Date.parse(state.lastAsOf);
+  const currentCutoff = Date.parse(asOf);
+  const pricesByCodeAndDate = new Map<string, ReadonlyMap<string, number>>();
+  const observationDates = new Set<string>();
+
+  for (const position of state.positions) {
+    const history = heldPriceHistoryByCode.get(position.code);
+    if (history === undefined) return undefined;
+    const pricesByDate = new Map<string, number>();
+    for (const observation of history) {
+      const availableAt = Date.parse(observation.availableAt);
+      if (observation.tradingDate < previousMarketDate
+        || observation.tradingDate > currentMarketDate
+        || availableAt <= previousCutoff
+        || availableAt > currentCutoff) {
+        continue;
+      }
+      if (pricesByDate.has(observation.tradingDate)) return undefined;
+      pricesByDate.set(observation.tradingDate, observation.marketPriceJpy);
+      observationDates.add(observation.tradingDate);
+    }
+    pricesByCodeAndDate.set(position.code, pricesByDate);
+  }
+
+  const distributionReceivablesJpy = roundJpy(
+    state.distributionReceivables.reduce((sum, receivable) => sum + receivable.grossAmountJpy, 0),
+  );
+  let highWaterMarkJpy = state.highWaterMarkJpy;
+  for (const tradingDate of [...observationDates].sort(compareText)) {
+    let positionValueJpy = 0;
+    for (const position of state.positions) {
+      const marketPriceJpy = pricesByCodeAndDate.get(position.code)?.get(tradingDate);
+      if (marketPriceJpy === undefined) return undefined;
+      positionValueJpy += roundJpy(position.units * marketPriceJpy);
+    }
+    const totalEquityJpy = roundJpy(state.cashJpy + positionValueJpy + distributionReceivablesJpy);
+    highWaterMarkJpy = Math.max(highWaterMarkJpy, totalEquityJpy);
+  }
+  return highWaterMarkJpy;
 }
 
 function settleReceivables(
@@ -990,18 +1062,40 @@ export function buildPreForwardDecisionPackage(
   blockedReasons.sort(compareText);
 
   const beforeHwm = request.beforeState.highWaterMarkJpy;
+  const reconstructedBeforeHwm = request.beforeState.positions.length === 0
+    ? beforeHwm
+    : chronologyValid && heldEventCoverageComplete && heldUniverseExecutableAtCutoff
+      ? reconstructHeldHighWaterMark(
+        request.beforeState,
+        diagnosticResult.heldPriceHistoryByCode,
+        request.asOf,
+      )
+      : undefined;
+  if (request.beforeState.positions.length > 0
+    && chronologyValid
+    && heldEventCoverageComplete
+    && heldUniverseExecutableAtCutoff
+    && reconstructedBeforeHwm === undefined) {
+    blockedReasons.push("portfolio:incomplete_daily_high_water_mark_prices");
+  }
   const rawBeforeValuation = request.beforeState.positions.length === 0
-    || (chronologyValid && heldEventCoverageComplete && heldUniverseExecutableAtCutoff)
-    ? valuation(request.beforeState, diagnosticResult.priceByCode, beforeHwm)
+    || (chronologyValid
+      && heldEventCoverageComplete
+      && heldUniverseExecutableAtCutoff
+      && reconstructedBeforeHwm !== undefined)
+    ? valuation(request.beforeState, diagnosticResult.priceByCode, reconstructedBeforeHwm ?? beforeHwm)
     : undefined;
   const beforeHwmAtCutoff = rawBeforeValuation === undefined
-    ? beforeHwm
-    : Math.max(beforeHwm, rawBeforeValuation.totalEquityJpy);
+    ? reconstructedBeforeHwm ?? beforeHwm
+    : Math.max(reconstructedBeforeHwm ?? beforeHwm, rawBeforeValuation.totalEquityJpy);
   const beforeValuation = rawBeforeValuation === undefined
     ? undefined
     : valuation(request.beforeState, diagnosticResult.priceByCode, beforeHwmAtCutoff);
   if (request.beforeState.positions.length > 0
-    && valuationEventCoverage !== "missing_event_artifacts"
+    && chronologyValid
+    && heldEventCoverageComplete
+    && heldUniverseExecutableAtCutoff
+    && reconstructedBeforeHwm !== undefined
     && beforeValuation === undefined) {
     blockedReasons.push("portfolio:missing_valuation_price_for_held_asset");
   }
