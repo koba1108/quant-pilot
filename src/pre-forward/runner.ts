@@ -311,10 +311,6 @@ async function loadRuntime(configPath: string, options: RunPreForwardOptions): P
     configuredLedgerPath,
     options.replayDecisionArtifactId === undefined ? "execute" : "replay",
   );
-  if (bindingResolution.freshInitialization) {
-    const ledger = await PreForwardLedger.open(configuredLedgerPath);
-    ledger.close();
-  }
   const store = new FileArtifactStore(artifactRoot);
   return {
     cwd,

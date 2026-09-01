@@ -3,6 +3,7 @@ import { isAbsolute, join } from "node:path";
 import { canonicalJson, sha256Canonical } from "../data/provenance.ts";
 import { compareText } from "../determinism.ts";
 import { PRE_FORWARD_MODE, type PreForwardStrategyConfig } from "./config.ts";
+import { PreForwardLedger } from "./ledger.ts";
 import { resolvePreForwardArtifactRoot } from "./runtime-paths.ts";
 
 export const PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION = "pre-forward-runtime-binding-v3" as const;
@@ -20,7 +21,6 @@ export interface PreForwardRuntimeBinding {
 export interface PreForwardRuntimeBindingResolution {
   bindings: ReadonlyMap<string, PreForwardRuntimeBinding>;
   boundLedgerPath: string;
-  freshInitialization: boolean;
 }
 
 const BINDING_ROOT = {
@@ -250,12 +250,14 @@ export async function resolvePreForwardRuntimeBindings(
         artifactRootPath,
         enforceStrategyIdentity,
       ),
-      freshInitialization: false,
     };
   }
   if (operation === "replay") {
     throw new Error("Pre-forward runtime binding is missing; recovery requires an explicit audited process.");
   }
+
+  const ledger = await PreForwardLedger.open(configuredLedgerPath);
+  ledger.close();
 
   const createdBindings = new Map<string, PreForwardRuntimeBinding>();
   for (const strategy of sortedStrategies) {
@@ -280,7 +282,6 @@ export async function resolvePreForwardRuntimeBindings(
           artifactRootPath,
           enforceStrategyIdentity,
         ),
-        freshInitialization: false,
       };
     }
   }
@@ -292,6 +293,5 @@ export async function resolvePreForwardRuntimeBindings(
       artifactRootPath,
       enforceStrategyIdentity,
     ),
-    freshInitialization: true,
   };
 }

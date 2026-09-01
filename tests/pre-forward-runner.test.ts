@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
-import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { FileArtifactStore } from "../src/data/artifact-store.ts";
 import { captureCredentialedSample } from "../src/data/credentialed-sample-runner.ts";
@@ -427,6 +427,29 @@ test("a portfolio cannot advance when a committed Decision Package is missing", 
       (error: NodeJS.ErrnoException) => error.code === "ENOENT",
     );
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+  });
+});
+
+test("an invalid first-run ledger cannot persist runtime bindings", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ root, configPath, ledgerPath }) => {
+    await mkdir(dirname(ledgerPath), { recursive: true, mode: 0o700 });
+    await writeFile(ledgerPath, "not a sqlite database", { mode: 0o600 });
+
+    await assert.rejects(() => runPreForward(configPath, fixtureAsOf, { cwd: root }));
+    const bindingRoot = join(root, "data/generated/pre-forward/runtime-bindings");
+    assert.equal((await readdir(bindingRoot)).length, 0);
+
+    const correctedLedgerPath = join(root, "data/generated/pre-forward/corrected-ledger.sqlite");
+    const correctedConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    correctedConfig.ledgerPath = { kind: "absolute", path: correctedLedgerPath };
+    await writeFile(configPath, `${JSON.stringify(correctedConfig, null, 2)}\n`, "utf8");
+
+    await assert.rejects(() => runPreForward(configPath, fixtureAsOf, { cwd: root }));
+    assert.deepEqual(databaseCounts(correctedLedgerPath), { runs: 0, entries: 0 });
+    assert.equal(
+      (await readdir(bindingRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
+      2,
+    );
   });
 });
 
