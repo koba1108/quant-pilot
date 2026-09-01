@@ -59,6 +59,7 @@ import {
 import {
   resolvePreForwardArtifactRoot,
   resolvePreForwardLedgerPath,
+  resolvePreForwardRepositoryRoot,
   resolveRepositoryInputFile,
 } from "./runtime-paths.ts";
 import {
@@ -131,9 +132,24 @@ async function resolveConfigPath(path: string, cwd: string): Promise<string> {
   return physical;
 }
 
-export async function loadPreForwardConfig(path: string, cwd = process.cwd()): Promise<PreForwardConfig> {
+export interface LoadedPreForwardConfigContext {
+  configPath: string;
+  repositoryRoot: string;
+  config: PreForwardConfig;
+}
+
+export async function loadPreForwardConfigContext(
+  path: string,
+  cwd = process.cwd(),
+): Promise<LoadedPreForwardConfigContext> {
   const configPath = await resolveConfigPath(path, resolve(cwd));
-  return validatePreForwardConfig(JSON.parse(await readFile(configPath, "utf8")) as unknown);
+  const repositoryRoot = await resolvePreForwardRepositoryRoot(configPath);
+  const config = validatePreForwardConfig(JSON.parse(await readFile(configPath, "utf8")) as unknown);
+  return { configPath, repositoryRoot, config };
+}
+
+export async function loadPreForwardConfig(path: string, cwd = process.cwd()): Promise<PreForwardConfig> {
+  return (await loadPreForwardConfigContext(path, cwd)).config;
 }
 
 function seriesFromFixture(
@@ -309,14 +325,13 @@ async function loadCurrentUniverseMaster(
 }
 
 async function loadRuntimeBase(configPath: string, options: RunPreForwardOptions): Promise<LoadedRuntimeBase> {
-  const cwd = resolve(options.cwd ?? process.cwd());
-  const config = await loadPreForwardConfig(configPath, cwd);
-  const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, cwd);
-  const configuredLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
+  const context = await loadPreForwardConfigContext(configPath, options.cwd ?? process.cwd());
+  const artifactRoot = await resolvePreForwardArtifactRoot(context.config.artifactRoot, context.repositoryRoot);
+  const configuredLedgerPath = await resolvePreForwardLedgerPath(context.config.ledgerPath, context.repositoryRoot);
   return {
-    cwd,
-    config,
-    configFingerprint: sha256Canonical(config),
+    cwd: context.repositoryRoot,
+    config: context.config,
+    configFingerprint: sha256Canonical(context.config),
     store: new FileArtifactStore(artifactRoot),
     artifactRootPath: artifactRoot,
     configuredLedgerPath,

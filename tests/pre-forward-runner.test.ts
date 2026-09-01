@@ -763,6 +763,57 @@ test("durable enrollment prevents reusing one portfolio through a changed portfo
   });
 });
 
+test("an absolute config anchors runtime evidence across invocation directory changes", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const first = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(first.status, "executed");
+
+    const alternateInvocationDirectory = join(root, "nested/invocation");
+    await mkdir(alternateInvocationDirectory, { recursive: true, mode: 0o700 });
+    const replacementLedgerPath = join(alternateInvocationDirectory, "replacement-ledger.sqlite");
+    const relocatedConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    relocatedConfig.ledgerPath = { kind: "absolute", path: replacementLedgerPath };
+    await writeFile(configPath, `${JSON.stringify(relocatedConfig, null, 2)}\n`, "utf8");
+
+    const repeated = await runPreForward(configPath, fixtureAsOf, {
+      cwd: alternateInvocationDirectory,
+      clock: () => "2025-01-07T00:06:00Z",
+    });
+    assert.deepEqual(
+      repeated.results.map((result) => result.decisionArtifactId),
+      first.results.map((result) => result.decisionArtifactId),
+    );
+    assert.ok(repeated.results.every((result) => result.idempotent && !result.stateTransitionApplied));
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+    await assert.rejects(
+      () => lstat(replacementLedgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    await assert.rejects(
+      () => lstat(join(alternateInvocationDirectory, ".quant-pilot")),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    await assert.rejects(
+      () => lstat(join(alternateInvocationDirectory, "data/generated/pre-forward/runtime-bindings")),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+  });
+});
+
 test("runtime binding pins the ledger before a decision and missing binding evidence blocks", async () => {
   await withTemporaryRuntime(async () => {}, async ({ root, configPath, ledgerPath }) => {
     await assert.rejects(() => runPreForward(configPath, fixtureAsOf, { cwd: root }));

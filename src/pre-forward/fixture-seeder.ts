@@ -1,8 +1,9 @@
+import { resolve } from "node:path";
 import { CsvMarketDataProvider } from "../data/csv.ts";
 import { FileArtifactStore } from "../data/artifact-store.ts";
 import { canonicalJson } from "../data/provenance.ts";
 import { compareText } from "../determinism.ts";
-import { loadPreForwardConfig } from "./runner.ts";
+import { loadPreForwardConfigContext } from "./runner.ts";
 import { buildPreForwardDailyBarsFixture } from "./market-input.ts";
 import { resolvePreForwardArtifactRoot } from "./runtime-paths.ts";
 
@@ -20,15 +21,18 @@ export async function seedPreForwardFixture(
   configPath: string,
   options: SeedPreForwardFixtureOptions = {},
 ): Promise<readonly string[]> {
-  const cwd = options.cwd ?? process.cwd();
-  const config = await loadPreForwardConfig(configPath, cwd);
+  const context = await loadPreForwardConfigContext(configPath, options.cwd ?? process.cwd());
+  const config = context.config;
   if (config.input.kind !== "daily_bars_manifest" || config.input.evidenceTier !== "synthetic_fixture") {
     throw new Error("Fixture seeding requires a synthetic daily_bars_manifest config.");
   }
-  const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, cwd);
+  const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, context.repositoryRoot);
   const store = new FileArtifactStore(artifactRoot);
   await store.prepare();
-  const provider = new CsvMarketDataProvider(options.csvRoot ?? "tests/fixtures/market-data", true);
+  const csvRoot = options.csvRoot === undefined
+    ? resolve(import.meta.dirname, "../../tests/fixtures/market-data")
+    : resolve(context.repositoryRoot, options.csvRoot);
+  const provider = new CsvMarketDataProvider(csvRoot, true);
   const codes = config.execution.instruments.map((instrument) => instrument.code).sort(compareText);
   if (codes.length === 0) throw new Error("Fixture config must declare at least one execution instrument.");
   const artifacts = await Promise.all(codes.map(async (code) => {

@@ -69,3 +69,20 @@ export async function resolveRepositoryInputFile(path: string, cwd: string): Pro
   if (!metadata.isFile()) throw new Error("Pre-forward input path must be a regular file.");
   return physical;
 }
+
+export async function resolvePreForwardRepositoryRoot(configFilePath: string): Promise<string> {
+  const physicalConfigPath = await realpath(configFilePath);
+  let candidate = dirname(physicalConfigPath);
+  while (true) {
+    try {
+      const gitMetadata = await lstat(join(candidate, ".git"));
+      if (gitMetadata.isDirectory() || gitMetadata.isFile()) return realpath(candidate);
+      throw new Error("Pre-forward repository .git marker must be a file or directory.");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) return dirname(physicalConfigPath);
+    candidate = parent;
+  }
+}

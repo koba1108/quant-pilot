@@ -17,6 +17,8 @@ bun run pre-forward \
 
 The first command writes only to the ignored `data/generated/` runtime boundary. The second command writes immutable Decision Package artifacts, appends one state transition per strategy to a local SQLite ledger, and records owner-only durable portfolio enrollment evidence under the separately ignored `.quant-pilot/` boundary.
 
+Repository-scoped config inputs, runtime bindings, and `.quant-pilot/` enrollment evidence are anchored to the physical config file's nearest Git root, with the config directory used only for a standalone non-Git fixture. The process invocation directory is used only to locate a relative `--config` argument; changing directories while using the same config cannot select a new enrollment tree or reset a portfolio.
+
 Run the same command again to exercise idempotency. It must return the same Decision Package IDs with `idempotent=true` and `stateTransitionApplied=false`; it must not add an order, ledger transition, or cash movement. An equivalent ISO offset representation of the same instant is canonicalized and follows this same idempotent path. A genuinely different cutoff inside the same Asia-Tokyo market calendar month is rejected because M2 implements only the normal monthly D-009 path; no emergency/intramonth mode is inferred.
 
 An individual Decision Package can be replayed without provider access:
