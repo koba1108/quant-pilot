@@ -69,7 +69,11 @@ For an existing M1 live audit, use an ignored local config whose input is:
 
 On the first decision, the runner validates the complete M1 audit in the artifact root named by the credentialed-sample config. It then copies every content-addressed raw-response, normalized daily-bar, and observation child into the pinned private Pre-Forward artifact store before publishing the audit artifact there; the audit is written last so it cannot mark a partially retained lineage as complete. The exact validated credentialed-sample config is retained as a content-addressed `configuration` artifact in that same pinned store. Later duplicate detection and explicit replay use only this retained config and complete pinned lineage, so the original `sampleConfigPath` and M1 artifact directory may be unavailable without causing a network request, credential read, or historical-replay failure.
 
-The retained 2026-04-20..22 J-Quants sample has only three bars per instrument and has no approved strict Universe, execution-assumption, or expected-benefit artifact. A manual M2 run therefore exits nonzero, preserves JPY 1,000,000 cash, applies no ledger transition, and reports each missing capability. This is the expected fail-closed result, not an M2 real-data completion.
+The retained 2026-04-20..22 J-Quants comparison sample has only three bars per instrument and has no approved strict Universe, execution-assumption, or expected-benefit artifact. A manual M2 run therefore exits nonzero, preserves JPY 1,000,000 cash, applies no ledger transition, and reports each missing capability. This is the expected fail-closed result, not an M2 real-data completion.
+
+An explicitly scoped `pre_forward_primary` capture now retains 310 J-Quants bars for each of the same five instruments over `2025-03-03..2026-06-09`, with no EODHD request and canonical offline replay. It satisfies the 253-bar history check but not the freshness check: on `2026-09-01` its newest bar is 84 calendar days old versus the configured three-day maximum. Retrieval occurred on `2026-09-01`, so a historical `asOf=2026-06-09` would also violate Point-in-Time availability. Neither `maxDataAgeDays` nor artifact availability may be rewritten to manufacture a successful current cycle.
+
+The retained primary audit was also consumed by the actual Pre-Forward CLI at `asOf=2026-09-01T10:22:00Z`, after the artifacts were available. Both strategies saw all 310 usable bars per instrument and the latest signal date `2026-06-09`, then blocked on `stale_market_data` together with the still-missing strict Universe, execution-assumption, and expected-benefit evidence. Trend decision `sha256:f95068b1e02c95eb6c1269a9f902c951e5b1ea1d67a46871566a3d00532db5f6` and Rotation decision `sha256:0591453f1c7dba2a467aef60f03d1d45c0d31643eced9fd8fed1da65bb3b6aee` each kept JPY 1,000,000 cash, emitted no order, and applied no state transition. Repeating the command returned the same IDs with `idempotent=true`; explicit offline replay did the same. These local artifacts remain Git-ignored and do not start the formal Forward-Test clock.
 
 ## Current limitations
 
@@ -81,6 +85,7 @@ The retained 2026-04-20..22 J-Quants sample has only three bars per instrument a
 - A stopped portfolio cannot use the safety path to append a state whose `lastAsOf` moves backward.
 - Execution uses a versioned close-price/cost proxy; target-ETF bid/ask history and approved O-006 execution assumptions remain open.
 - Credentialed input has no accepted expected-benefit artifact contract yet, so it cannot borrow the fixture's synthetic assumptions.
+- The current J-Quants entitlement exposes enough delayed history but not a current-enough endpoint for the three-day M2 freshness gate. No code path upgrades a plan, buys data, backdates retrieval, or treats delayed bars as current.
 - Intramonth/emergency runs are not implemented; they require the defined trigger and audit evidence left open in O-009.
 - Strategy C, unattended scheduling, notifications, dashboard work, brokerage integration, and real orders are outside M2.
 

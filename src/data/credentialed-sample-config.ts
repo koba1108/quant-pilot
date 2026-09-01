@@ -5,6 +5,7 @@ export const CREDENTIALED_SAMPLE_CONFIG_SCHEMA_VERSION = "credentialed-sample-v1
 export const CREDENTIALED_SAMPLE_PROVIDER_IDS = ["jquants_v2", "eodhd_eod"] as const;
 export type CredentialedSampleProviderId = typeof CREDENTIALED_SAMPLE_PROVIDER_IDS[number];
 export type CredentialedSampleMode = "fixture" | "live";
+export type CredentialedSamplePurpose = "pre_forward_primary";
 export type CredentialedSampleArtifactRootKind = "relative" | "absolute";
 
 export interface CredentialedSampleDateRange {
@@ -22,6 +23,7 @@ export interface CredentialedSampleProviderConfig {
   source: string;
   independenceGroup: string;
   credentialEnvVar: string;
+  requestIntervalMs?: number;
   fixtureFile?: string;
 }
 
@@ -39,6 +41,12 @@ export interface CredentialedSampleInstrumentConfig {
 export interface CredentialedSampleConfig {
   schemaVersion: typeof CREDENTIALED_SAMPLE_CONFIG_SCHEMA_VERSION;
   mode: CredentialedSampleMode;
+  /**
+   * Absent only for the original two-source M1 comparison contract. The
+   * explicit Pre-Forward purpose permits a bounded J-Quants-only capture
+   * without pretending that the unavailable EODHD JPX path was compared.
+   */
+  purpose?: CredentialedSamplePurpose;
   range: CredentialedSampleDateRange;
   artifactRoot: CredentialedSampleArtifactRoot;
   providers: readonly CredentialedSampleProviderConfig[];
@@ -77,6 +85,14 @@ function requiredString(value: unknown, field: string): string {
 
 function requiredBoolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") throw new Error(`${field} must be boolean.`);
+  return value;
+}
+
+function optionalRequestInterval(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 60_000) {
+    throw new Error(`${field} must be an integer from 0 to 60000.`);
+  }
   return value;
 }
 
@@ -155,7 +171,11 @@ function validateFixtureFile(value: unknown, field: string): string {
 function validateProvider(value: unknown, index: number): CredentialedSampleProviderConfig {
   const field = `providers[${index}]`;
   if (!isRecord(value)) throw new Error(`${field} must be an object.`);
-  assertOnlyKeys(value, ["providerId", "source", "independenceGroup", "credentialEnvVar", "fixtureFile"], field);
+  assertOnlyKeys(
+    value,
+    ["providerId", "source", "independenceGroup", "credentialEnvVar", "requestIntervalMs", "fixtureFile"],
+    field,
+  );
   const providerId = requiredEnum(value.providerId, CREDENTIALED_SAMPLE_PROVIDER_IDS, `${field}.providerId`);
   const source = requiredString(value.source, `${field}.source`);
   const independenceGroup = requiredString(value.independenceGroup, `${field}.independenceGroup`);
@@ -171,8 +191,16 @@ function validateProvider(value: unknown, index: number): CredentialedSampleProv
   if (credentialEnvVar !== expectedCredentialEnvVar) {
     throw new Error(`${field}.credentialEnvVar must be ${expectedCredentialEnvVar} for ${providerId}.`);
   }
+  const requestIntervalMs = optionalRequestInterval(value.requestIntervalMs, `${field}.requestIntervalMs`);
   const fixtureFile = value.fixtureFile === undefined ? undefined : validateFixtureFile(value.fixtureFile, `${field}.fixtureFile`);
-  return { providerId, source, independenceGroup, credentialEnvVar, fixtureFile };
+  return {
+    providerId,
+    source,
+    independenceGroup,
+    credentialEnvVar,
+    ...(requestIntervalMs === undefined ? {} : { requestIntervalMs }),
+    ...(fixtureFile === undefined ? {} : { fixtureFile }),
+  };
 }
 
 function assertUnique(values: readonly string[], field: string): void {
@@ -185,9 +213,17 @@ function assertUnique(values: readonly string[], field: string): void {
   if (duplicates.size > 0) throw new Error(`${field} contains duplicates: ${[...duplicates].sort().join(", ")}.`);
 }
 
-function validateProviders(value: unknown): CredentialedSampleProviderConfig[] {
-  if (!Array.isArray(value) || value.length !== CREDENTIALED_SAMPLE_PROVIDER_IDS.length) {
-    throw new Error("providers must contain exactly the J-Quants and EODHD comparison sources.");
+function validateProviders(
+  value: unknown,
+  purpose: CredentialedSamplePurpose | undefined,
+): CredentialedSampleProviderConfig[] {
+  const expectedProviderIds: readonly CredentialedSampleProviderId[] = purpose === "pre_forward_primary"
+    ? ["jquants_v2"]
+    : CREDENTIALED_SAMPLE_PROVIDER_IDS;
+  if (!Array.isArray(value) || value.length !== expectedProviderIds.length) {
+    throw new Error(purpose === "pre_forward_primary"
+      ? "pre_forward_primary providers must contain exactly J-Quants."
+      : "providers must contain exactly the J-Quants and EODHD comparison sources.");
   }
   const providers = value.map((item, index) => validateProvider(item, index));
   assertUnique(providers.map((item) => item.providerId), "providers.providerId");
@@ -195,8 +231,10 @@ function validateProviders(value: unknown): CredentialedSampleProviderConfig[] {
   assertUnique(providers.map((item) => item.independenceGroup), "providers.independenceGroup");
   assertUnique(providers.map((item) => item.credentialEnvVar), "providers.credentialEnvVar");
   const configuredIds = providers.map((item) => item.providerId).sort();
-  if (configuredIds.some((id, index) => id !== [...CREDENTIALED_SAMPLE_PROVIDER_IDS].sort()[index])) {
-    throw new Error("providers must contain exactly the J-Quants and EODHD comparison sources.");
+  if (configuredIds.some((id, index) => id !== [...expectedProviderIds].sort()[index])) {
+    throw new Error(purpose === "pre_forward_primary"
+      ? "pre_forward_primary providers must contain exactly J-Quants."
+      : "providers must contain exactly the J-Quants and EODHD comparison sources.");
   }
   return providers;
 }
@@ -253,16 +291,22 @@ function validateInstruments(value: unknown, providers: readonly CredentialedSam
 export function validateCredentialedSampleConfig(value: unknown): CredentialedSampleConfig {
   if (!isRecord(value)) throw new Error("Credentialed sample config must be a JSON object.");
   assertOnlyKeys(value, [
-    "schemaVersion", "mode", "range", "artifactRoot", "providers", "instruments",
+    "schemaVersion", "mode", "purpose", "range", "artifactRoot", "providers", "instruments",
     "credentialUseAuthorized", "costAuthorized", "rawRetentionAuthorized", "licenseRetentionConfirmed",
   ], "Credentialed sample config");
   if (value.schemaVersion !== CREDENTIALED_SAMPLE_CONFIG_SCHEMA_VERSION) {
     throw new Error(`schemaVersion must be ${CREDENTIALED_SAMPLE_CONFIG_SCHEMA_VERSION}.`);
   }
   const mode = requiredEnum(value.mode, MODES, "mode");
+  const purpose = value.purpose === undefined
+    ? undefined
+    : requiredEnum(value.purpose, ["pre_forward_primary"] as const, "purpose");
+  if (purpose !== undefined && mode !== "live") {
+    throw new Error("purpose=pre_forward_primary is supported only in live mode.");
+  }
   const range = validateDateRange(value.range);
   const artifactRoot = validateArtifactRoot(value.artifactRoot);
-  const providers = validateProviders(value.providers);
+  const providers = validateProviders(value.providers, purpose);
   const instruments = validateInstruments(value.instruments, providers);
   const credentialUseAuthorized = requiredBoolean(value.credentialUseAuthorized, "credentialUseAuthorized");
   const costAuthorized = requiredBoolean(value.costAuthorized, "costAuthorized");
@@ -271,6 +315,9 @@ export function validateCredentialedSampleConfig(value: unknown): CredentialedSa
   for (const provider of providers) {
     if (mode === "fixture" && provider.fixtureFile === undefined) {
       throw new Error(`fixture mode requires providers.${provider.providerId}.fixtureFile.`);
+    }
+    if (mode === "fixture" && provider.requestIntervalMs !== undefined) {
+      throw new Error(`fixture mode must not configure providers.${provider.providerId}.requestIntervalMs.`);
     }
     if (mode === "live" && provider.fixtureFile !== undefined) {
       throw new Error(`live mode must not configure providers.${provider.providerId}.fixtureFile.`);
@@ -299,6 +346,7 @@ export function validateCredentialedSampleConfig(value: unknown): CredentialedSa
   return {
     schemaVersion: CREDENTIALED_SAMPLE_CONFIG_SCHEMA_VERSION,
     mode,
+    ...(purpose === undefined ? {} : { purpose }),
     range,
     artifactRoot,
     providers,

@@ -180,6 +180,86 @@ test("partial live capture retains a provider HTTP failure, continues other pair
   }, "live");
 });
 
+test("Pre-Forward primary capture uses only J-Quants, paces requests, and replays offline", async () => {
+  await withTemporaryConfig(async ({ configPath, artifactRoot, config }) => {
+    config.purpose = "pre_forward_primary";
+    config.providers = [config.providers.find((provider: MutableConfig) => provider.providerId === "jquants_v2")];
+    config.providers[0].requestIntervalMs = 13_000;
+    for (const instrument of config.instruments as MutableConfig[]) {
+      instrument.mappings = instrument.mappings.filter(
+        (mapping: MutableConfig) => mapping.providerId === "jquants_v2",
+      );
+    }
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+
+    let fetchCount = 0;
+    let now = 0;
+    const waits: number[] = [];
+    const captured = await captureCredentialedSample(configPath, {
+      cwd: repositoryRoot,
+      env: { JQUANTS_API_KEY: "authorized-jquants-token" },
+      fetchImpl: (async (input: string | URL | Request): Promise<Response> => {
+        fetchCount += 1;
+        const url = new URL(input instanceof Request ? input.url : input.toString());
+        assert.equal(url.origin, "https://api.jquants.com");
+        const code = url.searchParams.get("code")!;
+        return new Response(JSON.stringify({
+          data: [{ Date: "2025-01-07", Code: code, C: 100, AdjC: 100, AdjFactor: 1, Vo: 10, Va: 1_000 }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof fetch,
+      clock: () => "2025-01-08T00:00:00Z",
+      monotonicNow: () => now,
+      wait: async (milliseconds) => {
+        waits.push(milliseconds);
+        now += milliseconds;
+      },
+      liveAuthorization: {
+        credentialUse: true,
+        cost: true,
+        rawRetention: true,
+        licenseRetention: true,
+      },
+    });
+
+    assert.equal(fetchCount, 5);
+    assert.deepEqual(waits, [13_000, 13_000, 13_000, 13_000]);
+    assert.equal(captured.payload.purpose, "pre_forward_primary");
+    assert.equal(captured.payload.captureStatus, "complete");
+    assert.deepEqual(captured.payload.providers.map((provider) => provider.providerId), ["jquants_v2"]);
+    assert.equal(captured.payload.coverage[0]!.bars, 5);
+    assert.equal(captured.payload.artifacts.rawResponseIds.length, 5);
+    assert.equal(captured.payload.artifacts.dailyBarsIds.length, 5);
+    assert.equal(captured.payload.artifacts.observationIds.length, 20);
+    assert.ok(captured.payload.limitations.some((value) => value.includes("primary-only Pre-Forward")));
+    assert.equal((await readdir(artifactRoot)).length, 31);
+
+    const wrongMode = structuredClone(captured.payload) as unknown as MutableConfig;
+    wrongMode.mode = "fixture";
+    wrongMode.evidenceTier = "fixture_contract";
+    wrongMode.authorizationRecord = {
+      credentialUseAuthorized: false,
+      costAuthorized: false,
+      rawRetentionAuthorized: false,
+      licenseRetentionConfirmed: false,
+    };
+    wrongMode.limitations = [
+      "Committed fixtures validate the capture contract; no provider credential was used.",
+      ...wrongMode.limitations,
+    ];
+    const { fingerprint: _discarded, ...wrongModeBody } = wrongMode;
+    wrongMode.fingerprint = sha256Canonical(wrongModeBody);
+    assert.throws(
+      () => assertCredentialedSampleAuditPayload(wrongMode as never),
+      /pre_forward_primary is supported only in live mode/,
+    );
+
+    const replayed = await replayCredentialedSample(configPath, captured.provenance.artifactId, {
+      cwd: repositoryRoot,
+    });
+    assert.equal(canonicalJson(replayed), canonicalJson(captured));
+  }, "live");
+});
+
 test("replay rejects a refingerprinted provider failure whose retained status disagrees", async () => {
   await withTemporaryConfig(async ({ configPath, artifactRoot }) => {
     const captured = await captureCredentialedSample(configPath, {

@@ -1,6 +1,6 @@
 # Quant Pilot Execution Roadmap
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 Status: Active delivery roadmap
 
@@ -203,11 +203,12 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 ## Current checkpoint
 
 - Current milestone: **M2 — Manual Pre-Forward vertical slice**
-- Completed software outcome on PR #12 (`ykoba/pre-forward-manual-cycle`): dedicated explicit-`asOf` CLI, immutable Decision Package with actual creation provenance, append-only/idempotent virtual ledger, one normal cycle per portfolio/month, offline replay, Strategy A/B virtual execution, D-009 expected-benefit/cost/safety-margin gating, modeled costs, maximum-three-holding enforcement, and event-coverage-gated -30% liquidation without chronology bypass
+- Completed software outcome merged by PR #12: dedicated explicit-`asOf` CLI, immutable Decision Package with actual creation provenance, append-only/idempotent virtual ledger, one normal cycle per portfolio/month, offline replay, Strategy A/B virtual execution, D-009 expected-benefit/cost/safety-margin gating, modeled costs, maximum-three-holding enforcement, and event-coverage-gated -30% liquidation without chronology bypass
 - Runnable acceptance outcome: the committed synthetic fixture completes both strategies; duplicate invocation and explicit replay add no second transition
 - Retained real-evidence outcome: the existing three-day J-Quants audit is consumed offline but blocks both strategies with no cash movement because history, strict Universe, and execution evidence are incomplete
-- Current external gate: a larger licensed provider capture and the required Point-in-Time Universe/execution inputs need separately scoped approval; no provider response body or key enters Git, and O-001 remains unselected
-- Next evidence outcome: review/merge the M2 software slice, then obtain enough licensed retained history and approved metadata to complete one real-data virtual-money cycle
+- Retained primary-history outcome: the authorized J-Quants-only capture retained 310 bars for each of five ETFs (`2025-03-03..2026-06-09`) and replays canonically; the provider reported that the current subscription ends at `2026-06-09`. The actual Pre-Forward CLI consumed all 310 bars per instrument, then blocked both strategies with zero orders/state transitions; repeat and explicit replay were idempotent
+- Current external gate: on `2026-09-01` the latest retained bar is 84 days old and fails the three-day M2 freshness gate. Fresh entitlement/source authorization is required before Universe/execution/benefit evidence can complete a real cycle; no provider response body or key enters Git, and O-001 remains unselected
+- Next evidence outcome: obtain current-enough retained observations without weakening Point-in-Time availability or freshness, then complete both Strategy A/B virtual cycles and replay/idempotency checks
 - Formal Forward-Test clock: **not started**
 
 ## Progress log
@@ -219,3 +220,4 @@ If question 2 or 3 has no concrete answer, do not implement the task yet.
 | 2026-08-29 | Bounded direct probes: J-Quants succeeded for five JPX codes over 2026-04-20..22; EODHD exchange/search/EOD probes found no tested JPX path | M1 evidence incomplete; O-001 remains open | Retain permitted metadata/artifact lineage, then reassess comparison coverage without selecting a provider |
 | 2026-08-29 | Authorized live audit retained 10 raw responses, five J-Quants daily artifacts with 15 bars, five EODHD 404 failures, 60 field observations, and one partial audit; offline replay was canonical-equal | M1 executable exit criteria met on current branch; O-001 remains open and production blocked | Merge the M1 fix, then build the manual M2 Pre-Forward cycle without weakening data gates |
 | 2026-08-31 | PR #11 merged; PR #12 adds the manual Pre-Forward CLI, immutable Decision Packages, actual creation-time provenance, one normal run per month, D-009 benefit/cost gates, holding-period event-coverage and chronology gates, append-only SQLite ledger, replay/idempotency, and hard-risk enforcement. Synthetic Trend/Rotation complete; the retained three-day J-Quants audit blocks without state transition | M2 software vertical slice implemented; real-data exit criterion not met | Review/merge the software slice, then separately authorize sufficient retained history and approved Universe/execution/benefit/Corporate Action/distribution evidence for one real cycle |
+| 2026-09-01 | PR #12 merged. An authorized J-Quants-only primary capture retained 1,550 bars for five ETFs and replays canonically; the current subscription returns data only through 2026-06-09, 84 days stale at the checkpoint | M2 history-length evidence passes, but the real-data cycle remains fail-closed on freshness | Obtain a current-enough entitlement/source, then bind strict Universe and versioned execution/benefit evidence without backdating retrieval or relaxing freshness |
