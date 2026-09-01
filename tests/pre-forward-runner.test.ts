@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { FileArtifactStore } from "../src/data/artifact-store.ts";
@@ -501,6 +501,56 @@ test("an invalid first-run ledger cannot persist runtime bindings", async () => 
 
     await assert.rejects(() => runPreForward(configPath, fixtureAsOf, { cwd: root }));
     assert.deepEqual(databaseCounts(correctedLedgerPath), { runs: 0, entries: 0 });
+    assert.equal(
+      (await readdir(bindingRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
+      2,
+    );
+  });
+});
+
+test("an invalid first-run artifact root cannot persist runtime bindings", async () => {
+  if (process.platform === "win32") return;
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, artifactRoot, ledgerPath }) => {
+    await mkdir(artifactRoot, { recursive: true, mode: 0o755 });
+    await chmod(dirname(artifactRoot), 0o700);
+    await chmod(artifactRoot, 0o755);
+
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      /Artifact store root permissions must be owner-only \(0700\)/,
+    );
+    const bindingRoot = join(root, "data/generated/pre-forward/runtime-bindings");
+    await assert.rejects(
+      () => lstat(bindingRoot),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    await assert.rejects(
+      () => lstat(ledgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+
+    const correctedArtifactRoot = join(root, "data/generated/pre-forward/corrected-artifacts");
+    const correctedConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    correctedConfig.artifactRoot = { kind: "absolute", path: correctedArtifactRoot };
+    await writeFile(configPath, `${JSON.stringify(correctedConfig, null, 2)}\n`, "utf8");
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+
+    const report = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(report.status, "executed");
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
     assert.equal(
       (await readdir(bindingRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
       2,

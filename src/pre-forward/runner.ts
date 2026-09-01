@@ -351,6 +351,7 @@ async function loadExecutionRuntime(
   options: RunPreForwardOptions,
 ): Promise<LoadedRuntime> {
   const base = await loadRuntimeBase(configPath, options);
+  await base.store.prepare();
   return bindRuntime(base, base.config.strategies, "execute");
 }
 
