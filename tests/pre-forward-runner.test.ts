@@ -181,6 +181,22 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     }
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
+    const enrollmentRoot = join(root, ".quant-pilot/pre-forward/runtime-enrollments");
+    await rm(join(root, ".quant-pilot"), { recursive: true, force: true });
+    const enrollmentBootstrap = await runPreForward(configPath, fixtureAsOf, { cwd: root });
+    assert.deepEqual(
+      enrollmentBootstrap.results.map((result) => result.decisionArtifactId),
+      first.results.map((result) => result.decisionArtifactId),
+    );
+    assert.ok(enrollmentBootstrap.results.every((result) => (
+      result.idempotent && !result.stateTransitionApplied
+    )));
+    assert.equal(
+      (await readdir(enrollmentRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
+      2,
+    );
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+
     const equivalentOffsetRepeat = await runPreForward(
       configPath,
       "2025-01-07T09:00:00+09:00",
@@ -569,6 +585,59 @@ test("an invalid first-run artifact root cannot persist runtime bindings", async
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
     assert.equal(
       (await readdir(bindingRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
+      2,
+    );
+  });
+});
+
+test("durable enrollment evidence blocks a reset after generated runtime state is removed", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const first = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(first.status, "executed");
+
+    const enrollmentRoot = join(root, ".quant-pilot/pre-forward/runtime-enrollments");
+    assert.equal(
+      (await readdir(enrollmentRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
+      2,
+    );
+    await rm(join(root, "data/generated"), { recursive: true, force: true });
+
+    const replacementRoot = join(root, "replacement-runtime");
+    const replacementArtifactRoot = join(replacementRoot, "artifacts");
+    const replacementLedgerPath = join(replacementRoot, "ledger.sqlite");
+    const replacementConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    replacementConfig.artifactRoot = { kind: "absolute", path: replacementArtifactRoot };
+    replacementConfig.ledgerPath = { kind: "absolute", path: replacementLedgerPath };
+    await writeFile(configPath, `${JSON.stringify(replacementConfig, null, 2)}\n`, "utf8");
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      /runtime bindings are missing while durable enrollment evidence exists.*explicit audited process/,
+    );
+    await assert.rejects(
+      () => lstat(replacementLedgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    assert.equal(
+      (await readdir(enrollmentRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
       2,
     );
   });

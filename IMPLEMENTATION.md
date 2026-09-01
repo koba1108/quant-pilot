@@ -63,7 +63,7 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 - `src/pre-forward/credentialed-config-snapshot.ts`: exact nested M1 credentialed-sample config retention for path-independent replay
 - `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage/Point-in-Time-Universe-gated held valuation, exact-date daily-close High-Water Mark reconstruction without prior-price filling, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
 - `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index, append-only hash-chained portfolio transitions, committed-run enumeration, and read-only/non-creating historical verification plus non-creating append reopen
-- `src/pre-forward/runtime-binding.ts`: `pre-forward-runtime-binding-v3` owner-only enrollment directories that are published only after the artifact store and ledger validate/initialize, pin strategy identity plus both physical artifact-root and ledger paths before the first decision, and fail closed on reassignment or missing/incomplete/legacy evidence
+- `src/pre-forward/runtime-binding.ts`: `pre-forward-runtime-binding-v3` owner-only binding directories plus independent `.quant-pilot/` `pre-forward-runtime-enrollment-v1` markers that are published only after the artifact store and ledger validate/initialize, pin strategy identity plus both physical artifact-root and ledger paths before the first decision, and fail closed when generated bindings disappear or evidence conflicts
 - `src/pre-forward/runner.ts`: canonical-instant explicit-`asOf` execute/replay CLI, retained-portfolio-first replay binding, stable runtime binding plus ledger-to-artifact committed-history reconciliation before portfolio advancement, missing-ledger/package fail-closed recovery boundaries, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading from a complete raw-to-audit lineage pinned on the first decision
 - `src/pre-forward/fixture-seeder.ts`: deterministic content-addressed fixture artifacts
 - `tests/fixtures/pre-forward/config.json`: committed synthetic acceptance config; runtime outputs remain under ignored `data/generated/`
@@ -173,8 +173,8 @@ Merged PR #11 M1 credentialed-sample verification:
 
 Active M2 manual Pre-Forward branch verification:
 
-- `bun test`: 221 pass / 0 fail
-- Bun 1.2.14 direct aggregate `bun test`: 221 pass / 0 fail; all 25 files register through `bun:test`
+- `bun test`: 222 pass / 0 fail
+- Bun 1.2.14 direct aggregate `bun test`: 222 pass / 0 fail; all 25 files register through `bun:test`
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
@@ -191,7 +191,7 @@ Active M2 manual Pre-Forward branch verification:
 - portfolio-ID replacement replay regression: explicit replay resolves the complete retained portfolio binding set before and after a new experiment's replacement IDs are enrolled, without creating a transition or binding during the replay itself
 - missing-ledger regression: after retained decisions exist, deleting their ledger blocks same-cutoff execution, a future cycle, and explicit replay without recreating an empty SQLite database or resetting portfolio state
 - committed-artifact regression: deleting a Decision Package named by a committed ledger run blocks the next cycle without appending another transition
-- pre-decision binding regressions: the physical ledger is pinned before input loading or Decision Package creation, an alternate first-cycle ledger cannot be opened, and a missing v2 binding record is not recreated inside its persistent enrollment directory
+- pre-decision binding regressions: the physical ledger is pinned before input loading or Decision Package creation, an alternate first-cycle ledger cannot be opened, a missing binding record is not recreated inside its persistent directory, and an independent durable enrollment marker blocks a reset after `data/generated/` is removed
 - commit-reconciliation regression: a valid Decision Package left before a losing or interrupted ledger append is ignored unless its exact artifact ID is committed and verified in the retained ledger, so it cannot poison later duplicate detection
 - credentialed-lineage replay regression: after the first decision copies and validates the complete raw-response, normalized daily-bar, observation, and audit lineage into the pinned Pre-Forward store, removing the original M1 artifact directory and invalidating the nested sample-config file cannot alter normal duplicate invocation or explicit historical replay
 - Universe replay regression: each decision retains the exact content-addressed master snapshot, so a later valid future-dated revision cannot change or invalidate the historical replay
@@ -202,7 +202,7 @@ Active M2 manual Pre-Forward branch verification:
 - retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
 - ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
 - SQLite statements are explicitly finalized and append uses explicit `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` boundaries, so strict ledger shutdown succeeds on both Bun 1.2.14 and the local Bun 1.3.14 runtime
-- test-runner regression: every test file registers with `bun:test`, so the required aggregate `bun test` gate executes the same 221 tests on Bun 1.2.14 and Bun 1.3.14 instead of silently skipping `node:test` registrations
+- test-runner regression: every test file registers with `bun:test`, so the required aggregate `bun test` gate executes the same 222 tests on Bun 1.2.14 and Bun 1.3.14 instead of silently skipping `node:test` registrations
 - hard-stop integration tests reconstruct an intervening daily-close High-Water Mark and liquidate a held asset at -30% only when explicit complete synthetic no-event coverage proves the stored unit basis, the holding remains Point-in-Time Universe eligible at the cutoff, and every held asset has an exact price on each evaluated date; otherwise they fail closed without a valuation or order, including after `lastEligibleDate` or when a daily row is missing
 - every output remains `pre_forward_dry_run`, `research_only`, and `formalForwardClockStarted=false`
 
