@@ -710,6 +710,59 @@ test("durable enrollment evidence blocks a reset after generated runtime state i
   });
 });
 
+test("durable enrollment prevents reusing one portfolio through a changed portfolio set", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const first = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(first.status, "executed");
+
+    const enrollmentRoot = join(root, ".quant-pilot/pre-forward/runtime-enrollments");
+    await rm(join(root, "data/generated"), { recursive: true, force: true });
+    const changedSetConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    const strategies = changedSetConfig.strategies as MutableConfig[];
+    strategies[1]!.portfolioId += "-replacement";
+    await writeFile(configPath, `${JSON.stringify(changedSetConfig, null, 2)}\n`, "utf8");
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      /already enrolled with a different portfolio set.*explicit audited process/,
+    );
+    await assert.rejects(
+      () => lstat(ledgerPath),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    await assert.rejects(
+      () => lstat(join(root, "data/generated/pre-forward/runtime-bindings")),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+    );
+    const enrollmentEntries = await readdir(enrollmentRoot, { withFileTypes: true });
+    assert.equal(
+      enrollmentEntries.filter((entry) => entry.isFile() && entry.name.endsWith(".enrollment-set.json")).length,
+      1,
+    );
+    const coordinationMetadata = await lstat(join(enrollmentRoot, ".enrollment-write-lock.sqlite"));
+    assert.ok(coordinationMetadata.isFile());
+    if (process.platform !== "win32") assert.equal(coordinationMetadata.mode & 0o077, 0);
+  });
+});
+
 test("runtime binding pins the ledger before a decision and missing binding evidence blocks", async () => {
   await withTemporaryRuntime(async () => {}, async ({ root, configPath, ledgerPath }) => {
     await assert.rejects(() => runPreForward(configPath, fixtureAsOf, { cwd: root }));

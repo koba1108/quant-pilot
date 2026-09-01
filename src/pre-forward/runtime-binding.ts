@@ -1,4 +1,17 @@
-import { link, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { Database } from "bun:sqlite";
+import {
+  chmod,
+  link,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { canonicalJson, sha256Canonical } from "../data/provenance.ts";
 import { compareText } from "../determinism.ts";
@@ -49,6 +62,7 @@ const BINDING_ROOT = {
 const BINDING_FILE_NAME = "runtime.binding.json";
 const ENROLLMENT_ROOT_PARTS = [".quant-pilot", "pre-forward", "runtime-enrollments"] as const;
 const ENROLLMENT_FILE_SUFFIX = ".enrollment-set.json";
+const ENROLLMENT_WRITE_LOCK_NAME = ".enrollment-write-lock.sqlite";
 
 interface BindingLocations {
   directory: string;
@@ -215,6 +229,10 @@ function assertEnrollmentSet(
     || enrollmentSet.schemaVersion !== PRE_FORWARD_RUNTIME_ENROLLMENT_SCHEMA_VERSION
     || enrollmentSet.mode !== PRE_FORWARD_MODE
     || !Array.isArray(enrollmentSet.portfolioIds)
+    || enrollmentSet.portfolioIds.some((portfolioId) => (
+      typeof portfolioId !== "string" || portfolioId.trim() === ""
+    ))
+    || new Set(enrollmentSet.portfolioIds).size !== enrollmentSet.portfolioIds.length
     || !Array.isArray(enrollmentSet.enrollments)
     || canonicalJson(enrollmentSet.portfolioIds) !== canonicalJson(sortedExpectedPortfolioIds)
     || enrollmentSet.enrollments.length !== sortedExpectedPortfolioIds.length) {
@@ -332,6 +350,10 @@ async function readEnrollmentSet(
   file: string,
   expectedPortfolioIds: readonly string[],
 ): Promise<PreForwardRuntimeEnrollmentSet> {
+  return assertEnrollmentSet(await readEnrollmentSetPayload(file), expectedPortfolioIds);
+}
+
+async function readEnrollmentSetPayload(file: string): Promise<unknown> {
   const metadata = await lstat(file);
   if (!metadata.isFile()) throw new Error("Pre-forward runtime enrollment set must be a regular file.");
   if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
@@ -343,18 +365,86 @@ async function readEnrollmentSet(
   } catch (error) {
     throw new Error("Pre-forward runtime enrollment set is not valid JSON.", { cause: error });
   }
-  return assertEnrollmentSet(parsed, expectedPortfolioIds);
+  return parsed;
 }
 
-async function readOptionalEnrollmentSet(
+async function scanEnrollmentSets(
   enrollmentRoot: string,
-  portfolioIds: readonly string[],
+  requestedPortfolioIds: readonly string[],
 ): Promise<PreForwardRuntimeEnrollmentSet | undefined> {
-  const file = enrollmentSetFile(enrollmentRoot, portfolioIds);
+  const sortedRequestedPortfolioIds = [...requestedPortfolioIds].sort(compareText);
+  const requestedFingerprint = canonicalJson(sortedRequestedPortfolioIds);
+  const ownerByPortfolio = new Map<string, string>();
+  let exact: PreForwardRuntimeEnrollmentSet | undefined;
+  const entries = (await readdir(enrollmentRoot, { withFileTypes: true }))
+    .filter((entry) => entry.name.endsWith(ENROLLMENT_FILE_SUFFIX))
+    .sort((left, right) => compareText(left.name, right.name));
+  for (const entry of entries) {
+    const file = join(enrollmentRoot, entry.name);
+    const parsed = await readEnrollmentSetPayload(file);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)
+      || !Array.isArray((parsed as PreForwardRuntimeEnrollmentSet).portfolioIds)) {
+      throw new Error("Pre-forward runtime enrollment set is invalid.");
+    }
+    const declaredPortfolioIds = (parsed as PreForwardRuntimeEnrollmentSet).portfolioIds;
+    const enrollmentSet = assertEnrollmentSet(parsed, declaredPortfolioIds);
+    if (enrollmentSetFile(enrollmentRoot, enrollmentSet.portfolioIds) !== file) {
+      throw new Error("Pre-forward runtime enrollment set filename does not match its portfolio set.");
+    }
+    for (const portfolioId of enrollmentSet.portfolioIds) {
+      const existingOwner = ownerByPortfolio.get(portfolioId);
+      if (existingOwner !== undefined && existingOwner !== file) {
+        throw new Error(
+          `Pre-forward portfolio ${portfolioId} appears in multiple durable enrollment sets; `
+            + "recovery requires an explicit audited process.",
+        );
+      }
+      ownerByPortfolio.set(portfolioId, file);
+    }
+    const declaredFingerprint = canonicalJson(enrollmentSet.portfolioIds);
+    const overlapsRequestedPortfolio = enrollmentSet.portfolioIds.some((portfolioId) => (
+      sortedRequestedPortfolioIds.includes(portfolioId)
+    ));
+    if (overlapsRequestedPortfolio && declaredFingerprint !== requestedFingerprint) {
+      throw new Error(
+        "A requested Pre-Forward portfolio is already enrolled with a different portfolio set; "
+          + "recovery requires an explicit audited process.",
+      );
+    }
+    if (declaredFingerprint === requestedFingerprint) exact = enrollmentSet;
+  }
+  return exact;
+}
+
+async function acquireEnrollmentWriteLock(enrollmentRoot: string): Promise<Database> {
+  const lockFile = join(enrollmentRoot, ENROLLMENT_WRITE_LOCK_NAME);
   try {
-    return await readEnrollmentSet(file, portfolioIds);
+    const metadata = await lstat(lockFile);
+    if (!metadata.isFile()) {
+      throw new Error("Pre-forward runtime enrollment write lock must be a regular file.");
+    }
+    if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
+      throw new Error("Pre-forward runtime enrollment write lock must be owner-only (0600).");
+    }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const database = new Database(lockFile, { create: true, readwrite: true, strict: true });
+  try {
+    await chmod(lockFile, 0o600);
+    const metadata = await lstat(lockFile);
+    if (!metadata.isFile()
+      || process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
+      throw new Error("Pre-forward runtime enrollment write lock must be owner-only (0600).");
+    }
+    database.run("PRAGMA journal_mode = DELETE");
+    database.run("PRAGMA synchronous = FULL");
+    database.run("PRAGMA trusted_schema = OFF");
+    database.run("PRAGMA busy_timeout = 5000");
+    database.run("BEGIN IMMEDIATE");
+    return database;
+  } catch (error) {
+    database.close(true);
     throw error;
   }
 }
@@ -477,24 +567,16 @@ function validateEnrollmentSet(
   }
 }
 
-export async function resolvePreForwardRuntimeBindings(
-  cwd: string,
-  strategies: readonly Pick<PreForwardStrategyConfig, "portfolioId" | "strategy">[],
+async function resolveBindingsForEnrollmentState(
+  sortedStrategies: readonly Pick<PreForwardStrategyConfig, "portfolioId" | "strategy">[],
+  uniquePortfolioIds: readonly string[],
+  bindingRoot: string,
+  enrollmentRoot: string,
+  enrollmentSet: PreForwardRuntimeEnrollmentSet | undefined,
   artifactRootPath: string,
   configuredLedgerPath: string,
   operation: "execute" | "replay",
 ): Promise<PreForwardRuntimeBindingResolution> {
-  const sortedStrategies = [...strategies].sort((left, right) => (
-    compareText(left.portfolioId, right.portfolioId)
-  ));
-  const portfolioIds = sortedStrategies.map((strategy) => strategy.portfolioId);
-  const uniquePortfolioIds = [...new Set(portfolioIds)].sort(compareText);
-  if (uniquePortfolioIds.length !== portfolioIds.length) {
-    throw new Error("Pre-forward portfolio IDs must be unique before runtime binding.");
-  }
-  const bindingRoot = await resolvePreForwardArtifactRoot(BINDING_ROOT, cwd);
-  const enrollmentRoot = await resolveEnrollmentRoot(cwd);
-  const enrollmentSet = await readOptionalEnrollmentSet(enrollmentRoot, uniquePortfolioIds);
   const discoveredBindings = new Map<string, PreForwardRuntimeBinding>();
   for (const portfolioId of uniquePortfolioIds) {
     const binding = await readOptionalBinding(bindingRoot, portfolioId);
@@ -585,4 +667,59 @@ export async function resolvePreForwardRuntimeBindings(
     bindings: completedBindings,
     boundLedgerPath,
   };
+}
+
+export async function resolvePreForwardRuntimeBindings(
+  cwd: string,
+  strategies: readonly Pick<PreForwardStrategyConfig, "portfolioId" | "strategy">[],
+  artifactRootPath: string,
+  configuredLedgerPath: string,
+  operation: "execute" | "replay",
+): Promise<PreForwardRuntimeBindingResolution> {
+  const sortedStrategies = [...strategies].sort((left, right) => (
+    compareText(left.portfolioId, right.portfolioId)
+  ));
+  const portfolioIds = sortedStrategies.map((strategy) => strategy.portfolioId);
+  const uniquePortfolioIds = [...new Set(portfolioIds)].sort(compareText);
+  if (uniquePortfolioIds.length !== portfolioIds.length) {
+    throw new Error("Pre-forward portfolio IDs must be unique before runtime binding.");
+  }
+  const enrollmentRoot = await resolveEnrollmentRoot(cwd);
+  const initialEnrollmentSet = await scanEnrollmentSets(enrollmentRoot, uniquePortfolioIds);
+  if (initialEnrollmentSet !== undefined) {
+    const bindingRoot = await resolvePreForwardArtifactRoot(BINDING_ROOT, cwd);
+    return resolveBindingsForEnrollmentState(
+      sortedStrategies,
+      uniquePortfolioIds,
+      bindingRoot,
+      enrollmentRoot,
+      initialEnrollmentSet,
+      artifactRootPath,
+      configuredLedgerPath,
+      operation,
+    );
+  }
+
+  const enrollmentWriteLock = await acquireEnrollmentWriteLock(enrollmentRoot);
+  try {
+    const enrollmentSet = await scanEnrollmentSets(enrollmentRoot, uniquePortfolioIds);
+    const bindingRoot = await resolvePreForwardArtifactRoot(BINDING_ROOT, cwd);
+    const resolution = await resolveBindingsForEnrollmentState(
+      sortedStrategies,
+      uniquePortfolioIds,
+      bindingRoot,
+      enrollmentRoot,
+      enrollmentSet,
+      artifactRootPath,
+      configuredLedgerPath,
+      operation,
+    );
+    enrollmentWriteLock.run("COMMIT");
+    return resolution;
+  } catch (error) {
+    if (enrollmentWriteLock.inTransaction) enrollmentWriteLock.run("ROLLBACK");
+    throw error;
+  } finally {
+    enrollmentWriteLock.close(true);
+  }
 }
