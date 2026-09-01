@@ -398,6 +398,10 @@ function buildReport(
   return { ...body, reportFingerprint: sha256Canonical(body) };
 }
 
+function canonicalCutoffInstant(asOf: string): string {
+  return new Date(asOf).toISOString().replace(/\.000Z$/, "Z");
+}
+
 function assertStoredDecisionIdentity(
   payload: PreForwardDecisionPackage,
   config: PreForwardConfig,
@@ -405,14 +409,15 @@ function assertStoredDecisionIdentity(
   asOf: string,
 ): void {
   assertPreForwardDecisionPackage(payload);
-  if (payload.cycleId === preForwardCycleId(asOf) && payload.asOf !== asOf) {
+  const sameCutoffInstant = Date.parse(payload.asOf) === Date.parse(asOf);
+  if (payload.cycleId === preForwardCycleId(asOf) && !sameCutoffInstant) {
     throw new Error(
       `Monthly Pre-Forward cycle ${payload.cycleId} already uses cutoff ${payload.asOf}; `
         + "intramonth reassessment requires a separately approved audited mode.",
     );
   }
   if (payload.runKey !== buildPreForwardRunKey(strategy.portfolioId, asOf)
-    || payload.asOf !== asOf
+    || !sameCutoffInstant
     || payload.portfolioId !== strategy.portfolioId
     || payload.strategy.name !== strategy.strategy
     || payload.strategy.strategyVersion !== strategy.strategyVersion
@@ -531,7 +536,7 @@ async function replayOne(
     configFingerprint: artifact.payload.configFingerprint,
     configSnapshotArtifactId: artifact.payload.configSnapshotArtifactId,
     strategy,
-    asOf,
+    asOf: artifact.payload.asOf,
     createdAt: artifact.payload.createdAt,
     input,
     universeMaster,
@@ -571,6 +576,7 @@ export async function runPreForward(
   options: RunPreForwardOptions = {},
 ): Promise<PreForwardRunReport> {
   if (!isIsoDateTime(asOf)) throw new Error("--as-of must be an ISO timestamp with timezone.");
+  const canonicalAsOf = canonicalCutoffInstant(asOf);
   if (options.replayDecisionArtifactId !== undefined) {
     const base = await loadRuntimeBase(configPath, options);
     const artifact = await base.store.read<PreForwardDecisionPackage>(options.replayDecisionArtifactId);
@@ -580,11 +586,11 @@ export async function runPreForward(
     assertPreForwardDecisionPackage(artifact.payload);
     const retainedConfig = await loadRetainedConfig(base.store, artifact.payload);
     const runtime = await bindRuntime(base, retainedConfig.strategies, "replay");
-    return buildReport(asOf, "replay", [await replayOne(runtime, artifact, asOf)]);
+    return buildReport(canonicalAsOf, "replay", [await replayOne(runtime, artifact, canonicalAsOf)]);
   }
 
   const runtime = await loadExecutionRuntime(configPath, options);
-  const asOfDate = preForwardMarketDate(asOf);
+  const asOfDate = preForwardMarketDate(canonicalAsOf);
   const retainedIndex = await indexRetainedDecisions(
     runtime.store,
     runtime.cwd,
@@ -601,10 +607,10 @@ export async function runPreForward(
     let universeSnapshotArtifact: ReturnType<typeof buildPreForwardUniverseSnapshotArtifact> | undefined;
     const results: PreForwardStrategyRunResult[] = [];
     for (const strategy of runtime.config.strategies) {
-      const runKey = buildPreForwardRunKey(strategy.portfolioId, asOf);
+      const runKey = buildPreForwardRunKey(strategy.portfolioId, canonicalAsOf);
       const retainedDecision = retainedIndex.byRunKey.get(runKey);
       if (retainedDecision !== undefined) {
-        results.push(await replayOne(runtime, retainedDecision, asOf));
+        results.push(await replayOne(runtime, retainedDecision, canonicalAsOf));
         continue;
       }
       assertStrategyConfigCurrent(strategy, asOfDate);
@@ -619,7 +625,7 @@ export async function runPreForward(
       const existing = ledger.getExistingRun(runKey);
       if (existing !== undefined) {
         const artifact = await runtime.store.read<PreForwardDecisionPackage>(existing.decisionArtifactId);
-        results.push(await replayOne(runtime, artifact, asOf));
+        results.push(await replayOne(runtime, artifact, canonicalAsOf));
         continue;
       }
       const opening = ledger.readPortfolioSnapshot(strategy.portfolioId, runtime.config.portfolio.initialCashJpy);
@@ -642,7 +648,7 @@ export async function runPreForward(
         configFingerprint: runtime.configFingerprint,
         configSnapshotArtifactId: configSnapshotArtifact.provenance.artifactId,
         strategy,
-        asOf,
+        asOf: canonicalAsOf,
         createdAt,
         input,
         universeMaster,
@@ -660,7 +666,7 @@ export async function runPreForward(
         appended.stateTransitionApplied,
       ));
     }
-    return buildReport(asOf, "execute", results);
+    return buildReport(canonicalAsOf, "execute", results);
   } finally {
     ledger?.close();
   }

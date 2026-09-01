@@ -181,6 +181,21 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     }
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
+    const equivalentOffsetRepeat = await runPreForward(
+      configPath,
+      "2025-01-07T09:00:00+09:00",
+      { cwd: root },
+    );
+    assert.equal(equivalentOffsetRepeat.asOf, fixtureAsOf);
+    assert.deepEqual(
+      equivalentOffsetRepeat.results.map((result) => result.decisionArtifactId),
+      first.results.map((result) => result.decisionArtifactId),
+    );
+    assert.ok(equivalentOffsetRepeat.results.every((result) => (
+      result.idempotent && !result.stateTransitionApplied
+    )));
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+
     const store = new FileArtifactStore(artifactRoot);
     const initial = await loadSyntheticDecisionFixture(configPath, artifactRoot, root);
     const orphanCreatedAt = "2025-01-07T00:06:00Z";
@@ -276,11 +291,12 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
       () => runPreForward(configPath, "2025-02-03T00:00:00Z", { cwd: root }),
       /strategy reassignment.*explicit audited amendment/,
     );
-    const replayed = await runPreForward(configPath, fixtureAsOf, {
+    const replayed = await runPreForward(configPath, "2025-01-07T09:00:00+09:00", {
       cwd: root,
       replayDecisionArtifactId: first.results[0]!.decisionArtifactId,
     });
     assert.equal(replayed.operation, "replay");
+    assert.equal(replayed.asOf, fixtureAsOf);
     assert.equal(replayed.results[0]!.decisionArtifactId, first.results[0]!.decisionArtifactId);
     assert.equal(replayed.results[0]!.stateTransitionApplied, false);
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
