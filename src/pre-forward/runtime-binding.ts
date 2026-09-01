@@ -1,4 +1,4 @@
-import { link, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { canonicalJson, sha256Canonical } from "../data/provenance.ts";
 import { compareText } from "../determinism.ts";
@@ -398,16 +398,28 @@ async function createBinding(
   expected: PreForwardRuntimeBinding,
 ): Promise<PreForwardRuntimeBinding> {
   const locations = bindingLocations(bindingRoot, expected.portfolioId);
-  let created = false;
   try {
-    await mkdir(locations.directory, { mode: 0o700 });
-    created = true;
+    const stored = await readBinding(locations, expected.portfolioId);
+    if (canonicalJson(stored) !== canonicalJson(expected)) {
+      throw new Error(`Pre-forward runtime binding conflicts for ${expected.portfolioId}.`);
+    }
+    return stored;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  if (created) {
-    await assertPrivateDirectory(locations.directory, expected.portfolioId);
-    await writeFile(locations.file, `${canonicalJson(expected)}\n`, { flag: "wx", mode: 0o600 });
+
+  const temporaryDirectory = await mkdtemp(join(bindingRoot, ".binding-tmp-"));
+  const temporaryFile = join(temporaryDirectory, BINDING_FILE_NAME);
+  try {
+    await writeFile(temporaryFile, `${canonicalJson(expected)}\n`, { flag: "wx", mode: 0o600 });
+    try {
+      await rename(temporaryDirectory, locations.directory);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST" && code !== "ENOTEMPTY") throw error;
+    }
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
   }
   const stored = await readBinding(locations, expected.portfolioId);
   if (canonicalJson(stored) !== canonicalJson(expected)) {

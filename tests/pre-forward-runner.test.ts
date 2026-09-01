@@ -585,10 +585,12 @@ test("an invalid first-run artifact root cannot persist runtime bindings", async
     });
     assert.equal(report.status, "executed");
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+    const bindingEntries = await readdir(bindingRoot, { withFileTypes: true });
     assert.equal(
-      (await readdir(bindingRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
+      bindingEntries.filter((entry) => entry.isDirectory()).length,
       2,
     );
+    assert.ok(bindingEntries.every((entry) => !entry.name.startsWith(".binding-tmp-")));
   });
 });
 
