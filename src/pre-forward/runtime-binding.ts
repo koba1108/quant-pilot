@@ -2,15 +2,16 @@ import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { canonicalJson, sha256Canonical } from "../data/provenance.ts";
 import { compareText } from "../determinism.ts";
-import { PRE_FORWARD_MODE } from "./config.ts";
+import { PRE_FORWARD_MODE, type PreForwardStrategyConfig } from "./config.ts";
 import { resolvePreForwardArtifactRoot } from "./runtime-paths.ts";
 
-export const PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION = "pre-forward-runtime-binding-v2" as const;
+export const PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION = "pre-forward-runtime-binding-v3" as const;
 
 export interface PreForwardRuntimeBinding {
   schemaVersion: typeof PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION;
   mode: typeof PRE_FORWARD_MODE;
   portfolioId: string;
+  strategy: PreForwardStrategyConfig["strategy"];
   artifactRootPath: string;
   ledgerPath: string;
   bindingFingerprint: string;
@@ -46,6 +47,7 @@ function bindingLocations(bindingRoot: string, portfolioId: string): BindingLoca
 
 function buildBinding(
   portfolioId: string,
+  strategy: PreForwardStrategyConfig["strategy"],
   artifactRootPath: string,
   ledgerPath: string,
 ): PreForwardRuntimeBinding {
@@ -53,6 +55,7 @@ function buildBinding(
     schemaVersion: PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION,
     mode: PRE_FORWARD_MODE,
     portfolioId,
+    strategy,
     artifactRootPath,
     ledgerPath,
   };
@@ -72,11 +75,13 @@ function assertBinding(value: unknown, expectedPortfolioId: string): PreForwardR
     "mode",
     "portfolioId",
     "schemaVersion",
+    "strategy",
   ];
   if (canonicalJson(keys) !== canonicalJson(expectedKeys)
     || binding.schemaVersion !== PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION
     || binding.mode !== PRE_FORWARD_MODE
     || binding.portfolioId !== expectedPortfolioId
+    || (binding.strategy !== "trend" && binding.strategy !== "rotation")
     || typeof binding.artifactRootPath !== "string"
     || binding.artifactRootPath === ""
     || !isAbsolute(binding.artifactRootPath)
@@ -85,6 +90,7 @@ function assertBinding(value: unknown, expectedPortfolioId: string): PreForwardR
     || !isAbsolute(binding.ledgerPath)
     || binding.bindingFingerprint !== buildBinding(
       binding.portfolioId,
+      binding.strategy,
       binding.artifactRootPath,
       binding.ledgerPath,
     ).bindingFingerprint) {
@@ -180,19 +186,25 @@ async function createBinding(
 }
 
 function validateBindingSet(
-  portfolioIds: readonly string[],
+  strategies: readonly Pick<PreForwardStrategyConfig, "portfolioId" | "strategy">[],
   bindings: ReadonlyMap<string, PreForwardRuntimeBinding>,
   artifactRootPath: string,
+  enforceStrategyIdentity: boolean,
 ): string {
   const ledgerPaths = new Set<string>();
-  for (const portfolioId of portfolioIds) {
-    const binding = bindings.get(portfolioId);
+  for (const strategy of strategies) {
+    const binding = bindings.get(strategy.portfolioId);
     if (binding === undefined) {
       throw new Error("Pre-forward runtime bindings are incomplete; recovery requires an explicit audited process.");
     }
+    if (enforceStrategyIdentity && binding.strategy !== strategy.strategy) {
+      throw new Error(
+        `Pre-forward strategy reassignment for ${strategy.portfolioId} requires an explicit audited amendment.`,
+      );
+    }
     if (binding.artifactRootPath !== artifactRootPath) {
       throw new Error(
-        `Pre-forward artifactRoot relocation for ${portfolioId} requires an explicit audited migration.`,
+        `Pre-forward artifactRoot relocation for ${strategy.portfolioId} requires an explicit audited migration.`,
       );
     }
     ledgerPaths.add(binding.ledgerPath);
@@ -205,11 +217,16 @@ function validateBindingSet(
 
 export async function resolvePreForwardRuntimeBindings(
   cwd: string,
-  portfolioIds: readonly string[],
+  strategies: readonly Pick<PreForwardStrategyConfig, "portfolioId" | "strategy">[],
   artifactRootPath: string,
   configuredLedgerPath: string,
-  allowCreate: boolean,
+  operation: "execute" | "replay",
 ): Promise<PreForwardRuntimeBindingResolution> {
+  const enforceStrategyIdentity = operation === "execute";
+  const sortedStrategies = [...strategies].sort((left, right) => (
+    compareText(left.portfolioId, right.portfolioId)
+  ));
+  const portfolioIds = sortedStrategies.map((strategy) => strategy.portfolioId);
   const uniquePortfolioIds = [...new Set(portfolioIds)].sort(compareText);
   if (uniquePortfolioIds.length !== portfolioIds.length) {
     throw new Error("Pre-forward portfolio IDs must be unique before runtime binding.");
@@ -227,34 +244,54 @@ export async function resolvePreForwardRuntimeBindings(
   if (discovered.size === uniquePortfolioIds.length) {
     return {
       bindings: discovered,
-      boundLedgerPath: validateBindingSet(uniquePortfolioIds, discovered, artifactRootPath),
+      boundLedgerPath: validateBindingSet(
+        sortedStrategies,
+        discovered,
+        artifactRootPath,
+        enforceStrategyIdentity,
+      ),
       freshInitialization: false,
     };
   }
-  if (!allowCreate) {
+  if (operation === "replay") {
     throw new Error("Pre-forward runtime binding is missing; recovery requires an explicit audited process.");
   }
 
   const createdBindings = new Map<string, PreForwardRuntimeBinding>();
-  for (const portfolioId of uniquePortfolioIds) {
-    const expected = buildBinding(portfolioId, artifactRootPath, configuredLedgerPath);
+  for (const strategy of sortedStrategies) {
+    const expected = buildBinding(
+      strategy.portfolioId,
+      strategy.strategy,
+      artifactRootPath,
+      configuredLedgerPath,
+    );
     const result = await createBinding(bindingRoot, expected);
-    createdBindings.set(portfolioId, result.binding);
+    createdBindings.set(strategy.portfolioId, result.binding);
     if (!result.created) {
-      for (const remainingPortfolioId of uniquePortfolioIds.slice(createdBindings.size)) {
-        const binding = await readOptionalBinding(bindingRoot, remainingPortfolioId);
-        if (binding !== undefined) createdBindings.set(remainingPortfolioId, binding);
+      for (const remainingStrategy of sortedStrategies.slice(createdBindings.size)) {
+        const binding = await readOptionalBinding(bindingRoot, remainingStrategy.portfolioId);
+        if (binding !== undefined) createdBindings.set(remainingStrategy.portfolioId, binding);
       }
       return {
         bindings: createdBindings,
-        boundLedgerPath: validateBindingSet(uniquePortfolioIds, createdBindings, artifactRootPath),
+        boundLedgerPath: validateBindingSet(
+          sortedStrategies,
+          createdBindings,
+          artifactRootPath,
+          enforceStrategyIdentity,
+        ),
         freshInitialization: false,
       };
     }
   }
   return {
     bindings: createdBindings,
-    boundLedgerPath: validateBindingSet(uniquePortfolioIds, createdBindings, artifactRootPath),
+    boundLedgerPath: validateBindingSet(
+      sortedStrategies,
+      createdBindings,
+      artifactRootPath,
+      enforceStrategyIdentity,
+    ),
     freshInitialization: true,
   };
 }

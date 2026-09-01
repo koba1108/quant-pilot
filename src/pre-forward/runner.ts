@@ -306,10 +306,10 @@ async function loadRuntime(configPath: string, options: RunPreForwardOptions): P
   const configuredLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
   const bindingResolution = await resolvePreForwardRuntimeBindings(
     cwd,
-    config.strategies.map((strategy) => strategy.portfolioId),
+    config.strategies,
     artifactRoot,
     configuredLedgerPath,
-    options.replayDecisionArtifactId === undefined,
+    options.replayDecisionArtifactId === undefined ? "execute" : "replay",
   );
   if (bindingResolution.freshInitialization) {
     const ledger = await PreForwardLedger.open(configuredLedgerPath);
@@ -520,7 +520,9 @@ async function replayOne(
   }
   const retainedLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, runtime.cwd);
   const binding = runtime.bindingByPortfolio.get(artifact.payload.portfolioId);
-  if (binding === undefined || retainedLedgerPath !== binding.ledgerPath) {
+  if (binding === undefined
+    || binding.strategy !== artifact.payload.strategy.name
+    || retainedLedgerPath !== binding.ledgerPath) {
     throw new Error(
       `Retained Decision Package ledger for ${artifact.payload.portfolioId} `
         + "does not match its fixed runtime binding.",

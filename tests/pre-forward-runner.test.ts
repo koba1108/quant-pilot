@@ -266,7 +266,7 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
       () => runPreForward(configPath, "2025-02-03T00:00:00Z", { cwd: root }),
       /ledger relocation.*explicit audited migration/,
     );
-    const reassociatedConfigValue = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    const reassociatedConfigValue = structuredClone(revisedConfigValue);
     const reassociatedStrategies = reassociatedConfigValue.strategies as MutableConfig[];
     const firstPortfolioId = reassociatedStrategies[0]!.portfolioId;
     reassociatedStrategies[0]!.portfolioId = reassociatedStrategies[1]!.portfolioId;
@@ -274,7 +274,7 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
     await writeFile(configPath, `${JSON.stringify(reassociatedConfigValue, null, 2)}\n`, "utf8");
     await assert.rejects(
       () => runPreForward(configPath, "2025-02-03T00:00:00Z", { cwd: root }),
-      /ledger relocation.*explicit audited migration/,
+      /strategy reassignment.*explicit audited amendment/,
     );
     const replayed = await runPreForward(configPath, fixtureAsOf, {
       cwd: root,
@@ -287,7 +287,7 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
 
     const relocatedArtifactRoot = join(root, "data/generated/pre-forward/relocated-artifacts");
     const doublyRelocatedLedgerPath = join(root, "doubly-relocated-ledger.sqlite");
-    const doublyRelocatedConfigValue = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    const doublyRelocatedConfigValue = structuredClone(revisedConfigValue);
     doublyRelocatedConfigValue.artifactRoot = { kind: "absolute", path: relocatedArtifactRoot };
     doublyRelocatedConfigValue.ledgerPath = { kind: "absolute", path: doublyRelocatedLedgerPath };
     await writeFile(configPath, `${JSON.stringify(doublyRelocatedConfigValue, null, 2)}\n`, "utf8");
@@ -450,6 +450,19 @@ test("runtime binding pins the ledger before a decision and missing binding evid
     );
 
     await writeFile(configPath, `${JSON.stringify(originalConfig, null, 2)}\n`, "utf8");
+    const reassignedConfig = structuredClone(originalConfig);
+    const reassignedStrategies = reassignedConfig.strategies as MutableConfig[];
+    const firstPortfolioId = reassignedStrategies[0]!.portfolioId;
+    reassignedStrategies[0]!.portfolioId = reassignedStrategies[1]!.portfolioId;
+    reassignedStrategies[1]!.portfolioId = firstPortfolioId;
+    await writeFile(configPath, `${JSON.stringify(reassignedConfig, null, 2)}\n`, "utf8");
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, { cwd: root }),
+      /strategy reassignment.*explicit audited amendment/,
+    );
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 0, entries: 0 });
+
+    await writeFile(configPath, `${JSON.stringify(originalConfig, null, 2)}\n`, "utf8");
     const bindingRoot = join(root, "data/generated/pre-forward/runtime-bindings");
     const bindingDirectories = (await readdir(bindingRoot, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
@@ -515,15 +528,12 @@ test("D-009 cost-benefit gate keeps marginal synthetic trades in cash", async ()
     reassignedStrategies[1]!.portfolioId = firstPortfolioId;
     await writeFile(configPath, `${JSON.stringify(reassignedConfig, null, 2)}\n`, "utf8");
 
-    const reassignedReport = await runPreForward(configPath, fixtureAsOf, { cwd: root });
-    const decisionByPortfolio = new Map(
-      report.results.map((result) => [result.portfolioId, result.decisionArtifactId]),
-    );
-    assert.ok(reassignedReport.results.every((result) => (
-      result.idempotent
-        && !result.stateTransitionApplied
-        && result.decisionArtifactId === decisionByPortfolio.get(result.portfolioId)
-    )));
+    for (const asOf of [fixtureAsOf, "2025-02-03T00:00:00Z"]) {
+      await assert.rejects(
+        () => runPreForward(configPath, asOf, { cwd: root }),
+        /strategy reassignment.*explicit audited amendment/,
+      );
+    }
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
   });
 });
