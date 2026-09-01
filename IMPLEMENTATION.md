@@ -6,7 +6,7 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 
 ## Implemented baseline and current branch
 
-PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにproduction provider候補をfail-closed評価し、credentialed sampleをimmutable artifactへ保存してoffline replayする経路までマージ済みである。現在のdelivery milestoneはM2 Manual Pre-Forward vertical sliceである。
+PR #12までのM0/M1基盤とM2 Manual Pre-Forward software vertical sliceは`main`に含まれる。O-001を確定せずにproduction provider候補をfail-closed評価し、credentialed sampleをimmutable artifactへ保存してoffline replayする経路、Decision Package、append-only virtual ledgerまでマージ済みである。現在のdelivery milestoneはM2 real-data evidence gateである。
 
 ### Strategy
 
@@ -34,7 +34,7 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 - `src/data/artifact-store.ts`: immutable content-addressed filesystem artifact store
 - `src/data/provider-sample-artifacts.ts`: raw-to-daily lineage and field-specific observation artifacts
 - `src/data/credentialed-sample-config.ts`: strict fixture/live schema and G1/G2 authorization records
-- `src/data/credentialed-sample-runner.ts`: fixture/live capture, reconciliation, fail-closed audit, offline replay CLI, and validated full-lineage retention into a caller-pinned artifact store
+- `src/data/credentialed-sample-runner.ts`: fixture/live capture, reconciliation, fail-closed audit, offline replay CLI, validated full-lineage retention into a caller-pinned artifact store, and an explicit rate-paced J-Quants-only Pre-Forward primary purpose that cannot weaken the original comparison contract
 - `src/data/provider-evaluation.ts`: O-001 capability, evidence, source-bundle, license, cost-approval, and integrity evaluator
 - `src/data/provider-evaluation-runner.ts`: deterministic provider-evaluation CLI
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
@@ -172,7 +172,7 @@ Merged PR #11 M1 credentialed-sample verification:
 - authorized live capture after G1/G2 approval: five J-Quants successes with 15 bars, five EODHD HTTP 404 failures, 10 raw artifacts, five daily artifacts, 60 observations, and one `captureStatus=partial` audit
 - live offline replay is canonical-equal and returns the expected nonzero status; artifacts stay outside Git with owner-only permissions, and a local scan found no credential bytes
 
-Active M2 manual Pre-Forward branch verification:
+Merged PR #12 M2 manual Pre-Forward verification:
 
 - `bun test`: 226 pass / 0 fail
 - Bun 1.2.14 direct aggregate `bun test`: 226 pass / 0 fail; all 25 files register through `bun:test`
@@ -213,7 +213,7 @@ Active M2 manual Pre-Forward branch verification:
 ## Next blocks
 
 1. Follow `docs/handoff/EXECUTION_ROADMAP.md`; do not begin work outside its active milestone
-2. M2: review and merge the manual Pre-Forward software vertical slice; do not call the synthetic success an M2 real-data completion
-3. M2 evidence gate: after separate scope approval, retain enough licensed J-Quants history plus strict Point-in-Time Universe and versioned execution assumptions for one real virtual-money cycle
+2. M2 current data gate: the authorized five-instrument J-Quants primary capture retained 1,550 bars, canonical replay, and idempotent blocked Trend/Rotation Pre-Forward decisions with no cash movement; the current subscription ends at 2026-06-09 and is 84 days stale on 2026-09-01, so obtain a current-enough entitlement or separately approve another fresh source
+3. M2 evidence gate: only after fresh observations exist, bind strict Point-in-Time Universe and versioned execution/expected-benefit evidence for one real virtual-money cycle
 4. Connect retained distribution and Corporate Action events before advancing a held portfolio to a later `asOf`; until then the runner must continue to block rather than assume no event or misvalue split-adjusted units
 5. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates

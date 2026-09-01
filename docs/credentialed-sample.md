@@ -96,6 +96,8 @@ bun run credentialed-sample --config=<approved-live-config> \
 
 All gates and required environment variables are checked before directory creation or network access. These flags are safety interlocks, not proof that a plan entitlement, price, or license term is acceptable. The user must approve those facts first.
 
+For the M2 evidence gate, a live config may explicitly set `purpose=pre_forward_primary`. That purpose permits exactly one `jquants_v2` provider and does not contact EODHD. Omitting `purpose` preserves the original M1 contract, which still requires exactly J-Quants plus EODHD and cannot be weakened into a single-source comparison. A provider may also declare an explicit `requestIntervalMs`; the live transport spaces every request, including pagination, by that interval. The value is retained in the sample-definition fingerprint and is used only for provider rate-limit compliance, not as evidence of data quality.
+
 Additional exit gates are available for automation:
 
 - `--require-live-evidence` returns nonzero for fixture output.
@@ -113,6 +115,18 @@ With the four approved gates, the same five mappings were captured for `2026-04-
 - one `captureStatus=partial` audit with `research_only`, `productionSelection=not_selected`, `failClosed=true`, and `canEnableEtfRealistic=false`.
 
 Offline replay reproduced the retained audit canonically without provider access. The artifact directory was `0700`, all 76 artifact files were `0600`, and a local credential-byte scan found no key in retained JSON or decoded raw bodies. The live config, raw bodies, and normalized vendor data remain outside Git.
+
+## M2 primary-history checkpoint
+
+After separate authorization for the same five instruments and a maximum 18-month read-only request, `purpose=pre_forward_primary` captured only J-Quants. The account rejected an end date after `2026-06-09` and reported a permitted subscription window of `2024-06-09..2026-06-09`; the runner retained that HTTP 400 response as evidence rather than silently shortening the request. Re-running with the permitted `2025-03-01..2026-06-09` range and an explicit 13-second request interval produced a complete primary audit:
+
+- five J-Quants daily-bar artifacts, one per approved sample code;
+- 310 bars per instrument and 1,550 bars total, covering actual trading dates `2025-03-03..2026-06-09`;
+- no provider failure and no EODHD request;
+- audit artifact `sha256:295c62cda5f1b7b6679894e27545e7ff8541301f02dcfb5aa6d1adb1a8141717` in the owner-only Git-ignored local store;
+- canonical offline replay, `0700` root / `0600` files, and no credential bytes in retained JSON or decoded response bodies.
+
+This closes the history-length sub-check only. At the `2026-09-01` checkpoint the latest bar is 84 calendar days old, while the M2 operating config permits at most three days. The data therefore remains too stale for a current Pre-Forward decision. The runner must not backdate retrieval-time availability or relax the freshness gate to make the cycle pass. A fresher entitlement or another separately approved current-data source is required before strict Universe, execution, and expected-benefit evidence can complete the first real cycle.
 
 Local replay checkpoint (not committed as data): audit `sha256:084d2ac0fdd9a57b6d792506a05b9441e01879a70d6ed9c17af044e6a036db1e` under `data/generated/provider-samples/live-v1-artifacts`, using the ignored `data/generated/provider-samples/live-v1.config.json`.
 

@@ -25,6 +25,8 @@ Implementation note (2026-08-29): `src/data/provider-evaluation.ts` and `researc
 
 Implementation note (M1 evidence checkpoint): `credentialed-sample-report-v2` retains successful and failed provider responses in one immutable audit and reproduces it offline. The local live result is `captureStatus=partial`, `research_only`, and fail-closed because EODHD supplied no comparable JPX values. Raw artifacts remain owner-only and outside Git; no O-001 selection was added. See `docs/credentialed-sample.md`.
 
+Implementation note (M2 primary-history checkpoint, 2026-09-01): an explicitly scoped J-Quants-only `pre_forward_primary` capture retained 310 bars for each of five ETFs over `2025-03-03..2026-06-09` and replays canonically without contacting EODHD. The provider reported the current subscription window as ending `2026-06-09`, leaving the latest bar 84 days old on the checkpoint date and outside the three-day M2 freshness gate. This proves sufficient history length but not current operating data, does not select J-Quants for O-001, and does not authorize backdated availability or a relaxed freshness policy.
+
 ## O-003 — Exact ETF eligibility thresholds
 
 Need evidence-backed thresholds for core and theme ETFs, including:

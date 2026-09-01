@@ -137,6 +137,46 @@ test("requires supported providers and a complete per-provider symbol mapping", 
   assert.throws(() => validateCredentialedSampleConfig(oneProvider), /exactly the J-Quants and EODHD/);
 });
 
+test("permits an explicit live J-Quants-only Pre-Forward primary capture", () => {
+  const config = baseConfig("live");
+  config.purpose = "pre_forward_primary";
+  (config.providers as unknown[]).splice(1);
+  (config.providers as Record<string, unknown>[])[0]!.requestIntervalMs = 13_000;
+  for (const instrument of config.instruments as Record<string, unknown>[]) {
+    (instrument.mappings as unknown[]).splice(1);
+  }
+  const parsed = validateCredentialedSampleConfig(config);
+  assert.equal(parsed.purpose, "pre_forward_primary");
+  assert.deepEqual(parsed.providers.map((provider) => provider.providerId), ["jquants_v2"]);
+  assert.equal(parsed.providers[0]!.requestIntervalMs, 13_000);
+
+  const comparison = structuredClone(config);
+  delete comparison.purpose;
+  assert.throws(() => validateCredentialedSampleConfig(comparison), /exactly the J-Quants and EODHD/);
+
+  const wrongProvider = structuredClone(config);
+  (wrongProvider.providers as Record<string, unknown>[])[0] = {
+    providerId: "eodhd_eod",
+    source: "eodhd",
+    independenceGroup: "eodhd",
+    credentialEnvVar: "EODHD_API_TOKEN",
+  };
+  for (const instrument of wrongProvider.instruments as Record<string, unknown>[]) {
+    instrument.mappings = [{ providerId: "eodhd_eod", providerSymbol: "1308.TSE" }];
+  }
+  assert.throws(() => validateCredentialedSampleConfig(wrongProvider), /exactly J-Quants/);
+
+  const fixture = baseConfig();
+  fixture.purpose = "pre_forward_primary";
+  assert.throws(() => validateCredentialedSampleConfig(fixture), /supported only in live mode/);
+
+  for (const requestIntervalMs of [-1, 1.5, 60_001, "13000"]) {
+    const invalid = structuredClone(config);
+    (invalid.providers as Record<string, unknown>[])[0]!.requestIntervalMs = requestIntervalMs;
+    assert.throws(() => validateCredentialedSampleConfig(invalid), /requestIntervalMs/);
+  }
+});
+
 test("rejects a provider symbol reused for two stable instruments", () => {
   const config = baseConfig("live");
   const instruments = config.instruments as Record<string, unknown>[];
@@ -167,6 +207,10 @@ test("binds fixture files to fixture mode only", () => {
   const traversal = baseConfig();
   (traversal.providers as Record<string, unknown>[])[0]!.fixtureFile = "../secret.json";
   assert.throws(() => validateCredentialedSampleConfig(traversal), /traversal-free/);
+
+  const pacedFixture = baseConfig();
+  (pacedFixture.providers as Record<string, unknown>[])[0]!.requestIntervalMs = 1;
+  assert.throws(() => validateCredentialedSampleConfig(pacedFixture), /fixture mode must not configure.*requestIntervalMs/);
 });
 
 test("validates ISO dates and rejects look-alike or reversed ranges", () => {

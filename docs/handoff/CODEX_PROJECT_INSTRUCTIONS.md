@@ -16,7 +16,7 @@ Codexは、過去の候補・提案・途中案ではなく、リポジトリ内
 - Runtime: TypeScript + Bun
 - Node.js requirement: repositoryで指定された最新バージョン
 - Python dependency: 禁止。ユーザーの明示的な方針変更がある場合のみ再検討
-- Current state: PR #11は `main` へマージ済み（merge commit `60aa5266100945583f9dc1b4eff4d9bd70a76b52`）。現在のdelivery milestoneはM2 Manual Pre-Forward
+- Current state: PR #12は `main` へマージ済み（merge commit `8ab2865`）。現在のdelivery milestoneはM2 Manual Pre-Forwardのreal-data evidence gate
 - Important caveat: 合成backtestとcredentialed sampleは引き続きresearch-onlyであり、実運用可能な `etf_realistic` 証拠でも正式Forward Testでもない
 
 ## 3. 最初に読むファイル
@@ -112,7 +112,7 @@ AIはハード制約を上書きできません。数値不足を推測で埋め
 
 ## 7. 現在の実装状態
 
-PR #11までに以下が `main` に入りました。
+PR #12までに以下が `main` に入りました。
 
 - `MarketDataProvider` abstraction
 - CSV provider
@@ -130,7 +130,9 @@ PR #11までに以下が `main` に入りました。
 
 Stooqは研究用OHLCVの接続確認に使うだけで、最終的なTotal Returnや実弾判断の根拠にはしません。
 
-現在のM2 branchでは、明示的な`asOf`、実生成時刻を持つimmutable Decision Package、append-only virtual ledger、月1回の通常run、D-009期待便益/cost/safety-margin gate、保有評価前のCorporate Action／分配coverage gate、duplicate-safe replayを持つ手動Pre-Forward経路を実装しています。合成fixtureの期待便益・安全余裕・complete-no-event coverageを承認済みO-005/O-006値や実データ証跡として扱ったり、合成成功をM2の実データexit criterion達成と表現したりしてはいけません。保持済みJ-Quants sampleは3日分のため明示的にblockedとなります。
+PR #12で、明示的な`asOf`、実生成時刻を持つimmutable Decision Package、append-only virtual ledger、月1回の通常run、D-009期待便益/cost/safety-margin gate、保有評価前のCorporate Action／分配coverage gate、duplicate-safe replayを持つ手動Pre-Forward経路が `main` に入りました。合成fixtureの期待便益・安全余裕・complete-no-event coverageを承認済みO-005/O-006値や実データ証跡として扱ったり、合成成功をM2の実データexit criterion達成と表現したりしてはいけません。
+
+2026-09-01のreal-data evidence checkpointでは、明示的なJ-Quants-only Pre-Forward primary captureが同じ5銘柄について各310本、合計1,550本を保持し、offline replayを完了しました。実際のPre-Forward CLIも全310本を読み、Trend/Rotation双方について同じDecision IDを再実行・明示replayできましたが、現在の契約が返す最終日は2026-06-09で、checkpoint時点では84日古く、3日freshness gateを満たしません。order、cash movement、state transitionはありません。取得時刻を遡及させたりfreshnessを緩めたりせず、current-enough entitlementまたは別sourceの明示承認まで実データcycleをblockedのままにしてください。
 
 ## 8. Codex移行後の最初の作業
 
@@ -186,7 +188,7 @@ bun run backtest --config=<rotation用fixture設定>
 - `IMPLEMENTATION.md`
 - 必要なら `README.md`
 
-PR #11はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
+PR #12はすでにマージ済みです。以後の作業では、現在の作業ブランチや未完了実装を完了済みと表現しないでください。
 
 ## 9. 検証後の実装順序
 

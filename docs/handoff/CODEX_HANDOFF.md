@@ -5,13 +5,13 @@
 - Repository: `koba1108/quant-pilot`
 - Local path: `/Users/ykoba/IdeaProjects/quant-pilot`
 - Default branch: `main`
-- Current default branch state: PR #11 (`fix: retain partial credentialed provider evidence`) merged into `main` at `60aa5266100945583f9dc1b4eff4d9bd70a76b52`
-- Active implementation branch: `ykoba/pre-forward-manual-cycle`
-- Active PR: #12 (`feat: add manual pre-forward virtual cycle`)
-- Current delivery milestone: M2 — Manual Pre-Forward vertical slice
+- Current default branch state: PR #12 (`feat: add manual pre-forward virtual cycle`) merged into `main` at `8ab2865`
+- Active implementation branch: `ykoba/pre-forward-real-data-cycle`
+- Active PR: not opened
+- Current delivery milestone: M2 — real-data evidence gate
 - Current roadmap: `docs/handoff/EXECUTION_ROADMAP.md`
 - Formal Forward-Test clock: not started
-- Handoff date: 2026-08-31
+- Handoff date: 2026-09-01
 - Primary migration instructions: `docs/handoff/CODEX_PROJECT_INSTRUCTIONS.md`
 
 ## Mission
@@ -48,7 +48,7 @@ Decision Package / Monthly Report
 
 ## Merged foundation
 
-`main` through PR #11 contains deterministic TypeScript implementations for:
+`main` through PR #12 contains deterministic TypeScript implementations for:
 
 - Strategy A/B ranking, inverse-volatility allocation, costs, the three-holding limit, and the -30% hard stop
 - commit-safe Trend/Rotation CLI fixtures and Point-in-Time lifecycle validation
@@ -59,12 +59,13 @@ Decision Package / Monthly Report
 - provider-neutral normalized runner integration and exact-date JPY conversion
 - fail-closed provider evaluation and a mocked J-Quants v2 daily-price adapter contract
 - fixture-tested credentialed-sample capture, immutable artifacts, reconciliation, offline replay, and durable partial-provider failures for J-Quants/EODHD contracts
+- manual Pre-Forward Decision Packages, append-only virtual ledger, idempotent execution, offline replay, and fail-closed hard-risk/event-coverage boundaries
 
-PR #11 was merged on 2026-08-31. The current branch consumes retained M1 observations in a manual virtual operating cycle without weakening missing-data gates.
+PR #12 was merged on 2026-09-01. The current branch advances only the real-data evidence gate without weakening missing-data gates.
 
 ## Current post-merge work
 
-The active work advances M2 of `EXECUTION_ROADMAP.md`: a manual, replayable, idempotent Pre-Forward virtual cycle.
+The merged M2 software path is a manual, replayable, idempotent Pre-Forward virtual cycle. The active work tests whether the current licensed observations can satisfy its real-data gate.
 
 1. adds a dedicated explicit-`asOf` `pre-forward` CLI for versioned Trend and Rotation configurations;
 2. produces immutable Decision Packages and append-only hash-chained Bun SQLite portfolio state;
@@ -73,7 +74,7 @@ The active work advances M2 of `EXECUTION_ROADMAP.md`: a manual, replayable, ide
 5. atomically binds each portfolio to physical artifact-root and ledger paths before its first Decision Package, treats a missing/incomplete binding as an audited-recovery condition, indexes from every committed ledger run back to its exact pinned Decision artifact through a read-only/non-creating connection, blocks when either side is missing, rejects a cutoff older than any committed run even when that run was blocked without a state transition, ignores immutable packages orphaned by a losing or interrupted append only when the ledger proves they were never committed, rejects artifact-store or future-cycle ledger relocation without an explicit audited migration, preserves exact content-addressed configuration and Universe snapshots for replay, and keeps listing-date, intraday bar availability, stale-data, missing-history, aggregate execution costs, distribution/Corporate Action, chronology, market-timezone/absolute-timestamp checks, loaded-input/config integrity, and ledger mismatches explicit;
 6. completes a synthetic fixture cycle while the retained three-day J-Quants audit correctly remains blocked with no state transition.
 
-The M2 real-data exit criterion is not met. A longer licensed retained sample, strict Point-in-Time Universe, approved execution assumptions, and distribution/Corporate Action input remain required. Strategy C, formal operational scheduling, a dashboard, a production provider selection, and real brokerage/order behavior remain outside M2.
+The M2 real-data exit criterion is not met. The active branch added an explicit J-Quants-only primary capture that does not weaken the original two-source M1 comparison contract and spaces requests under the observed rate limit. It retained 310 bars per approved code, 1,550 total, with canonical replay. The actual Pre-Forward CLI consumed all 310 bars per instrument, then blocked both strategies with no order, cash movement, or state transition; repeat and explicit replay were idempotent. The current subscription ends at `2026-06-09`; on `2026-09-01` that is 84 days old and fails the three-day freshness gate. A current-enough entitlement/source, strict Point-in-Time Universe, approved execution/expected-benefit evidence, and later distribution/Corporate Action input remain required. Strategy C, formal operational scheduling, a dashboard, production provider selection, and real brokerage/order behavior remain outside M2.
 
 ## Important data boundaries
 
@@ -98,14 +99,17 @@ The M2 real-data exit criterion is not met. A longer licensed retained sample, s
 - final all-CLI audit: pass
 - normalized Trend and Rotation repeated outputs: byte-for-byte identical
 - merged M1 path: `bun test` 198 pass / 0 fail; TypeScript passes; fixture replay is byte-for-byte identical; live partial replay is canonical-equal; production and partial-result gates fail closed as expected
-- active M2 branch: direct aggregate `bun test` executes all 25 files and passes 226 tests / 0 fail on both Bun 1.3.14 and Bun 1.2.14 after standardizing registration on `bun:test`; TypeScript passes; synthetic Trend/Rotation execute through D-009 benefit gates; duplicate invocation, equivalent-instant ISO offsets, alternate invocation directories, and explicit replay are non-mutating even after later config, complete current portfolio-ID replacement before/after new enrollment, ledger-path and nested sample-config changes, original M1 artifact-directory removal, and Universe master revisions; repository-scoped paths derive from the physical config's nearest Git root rather than `cwd`; the complete credentialed raw-response/daily-bar/observation/audit lineage is validated and pinned before historical use; atomically renamed v3 runtime bindings plus independently retained and globally scanned `.quant-pilot/` enrollment-set manifests pin complete strategy/path sets only after both stores validate, while an owner-only SQLite transaction serializes publishers and explicit replay resolves the complete retained portfolio set rather than current replacement IDs; interruption before publication resumes only without committed runs, malformed first-run stores leave no enrollment, and durable manifests block reset after generated bindings disappear or one enrolled portfolio is moved into a changed set; an uncommitted valid Decision artifact is ignored only when its retained ledger proves another exact artifact was committed, while a missing binding, ledger, or committed Decision Package blocks without recreation or another transition; blocked committed runs prevent backdated cycles at both runner and transactional append boundaries; artifact-store relocation, strategy reassignment, partial portfolio-set overlap, genuinely different Tokyo-market-month intramonth reruns, aggregate costs at or above 100%, held valuation/liquidation after `lastEligibleDate`, and incomplete exact-date held-price histories reject; strict SQLite shutdown, daily-close High-Water Mark reconstruction, prior-cutoff Asia-Tokyo coverage normalization, held-unit event coverage, chronology/absolute-timestamp/listing/intraday/input-integrity regressions pass; retained J-Quants input blocks with no cash movement
+- merged PR #12 M2 path: direct aggregate `bun test` executes all 25 files and passes 226 tests / 0 fail on both Bun 1.3.14 and Bun 1.2.14 after standardizing registration on `bun:test`; TypeScript passes; synthetic Trend/Rotation execute through D-009 benefit gates; duplicate invocation, equivalent-instant ISO offsets, alternate invocation directories, and explicit replay are non-mutating even after later config, complete current portfolio-ID replacement before/after new enrollment, ledger-path and nested sample-config changes, original M1 artifact-directory removal, and Universe master revisions; repository-scoped paths derive from the physical config's nearest Git root rather than `cwd`; the complete credentialed raw-response/daily-bar/observation/audit lineage is validated and pinned before historical use; atomically renamed v3 runtime bindings plus independently retained and globally scanned `.quant-pilot/` enrollment-set manifests pin complete strategy/path sets only after both stores validate, while an owner-only SQLite transaction serializes publishers and explicit replay resolves the complete retained portfolio set rather than current replacement IDs; interruption before publication resumes only without committed runs, malformed first-run stores leave no enrollment, and durable manifests block reset after generated bindings disappear or one enrolled portfolio is moved into a changed set; an uncommitted valid Decision artifact is ignored only when its retained ledger proves another exact artifact was committed, while a missing binding, ledger, or committed Decision Package blocks without recreation or another transition; blocked committed runs prevent backdated cycles at both runner and transactional append boundaries; artifact-store relocation, strategy reassignment, partial portfolio-set overlap, genuinely different Tokyo-market-month intramonth reruns, aggregate costs at or above 100%, held valuation/liquidation after `lastEligibleDate`, and incomplete exact-date held-price histories reject; strict SQLite shutdown, daily-close High-Water Mark reconstruction, prior-cutoff Asia-Tokyo coverage normalization, held-unit event coverage, chronology/absolute-timestamp/listing/intraday/input-integrity regressions pass; retained J-Quants input blocks with no cash movement
+- active evidence branch: J-Quants-only primary capture 1,550 bars / five instruments; no EODHD request; complete offline replay; owner-only artifacts; current-data freshness remains blocked
+- active real-data CLI: Trend/Rotation each consumed 310 usable bars per instrument, then blocked at `asOf=2026-09-01T10:22:00Z` on 84-day-old data plus missing Universe/execution/benefit evidence; repeat and explicit replay returned the same Decision IDs with no order, cash movement, or state transition
+- active branch verification: Node `v26.7.0`, Bun `1.3.14`, `bun test` 228 pass / 0 fail, TypeScript pass, legacy/primary offline replay pass at their expected exit statuses, and `git diff --check` pass
 
 See `CURRENT_STATUS.md` for commands, outputs, and current limitations.
 
 ## Next implementation sequence
 
-1. M2 NOW: review and merge the manual Pre-Forward software vertical slice without calling the synthetic run real-data completion.
-2. M2 EVIDENCE GATE: separately authorize enough licensed retained history and bind strict Universe/execution evidence for one real virtual-money cycle.
+1. M2 NOW: decide whether to obtain a current-enough J-Quants entitlement or separately authorize another fresh source; do not relax the three-day gate or backdate retrieval.
+2. M2 EVIDENCE GATE: after fresh retained observations exist, bind strict Universe and versioned execution/expected-benefit evidence for one real virtual-money cycle.
 3. M2 FOLLOW-ON: connect retained distribution and Corporate Action events before advancing a held portfolio to another cutoff.
 4. M3 LATER: approved scheduling, recovery, notifications, and minimal reporting.
 5. M4 GATE: freeze provider, Universe, strategies, persistence, and success thresholds before formal Forward Test.

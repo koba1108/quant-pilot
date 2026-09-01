@@ -103,6 +103,8 @@ export interface CredentialedSampleAuditPayload {
   runnerVersion: typeof CREDENTIALED_SAMPLE_RUNNER_VERSION;
   sampleDefinitionFingerprint: string;
   mode: "fixture" | "live";
+  /** Absent for legacy two-source M1 comparison artifacts. */
+  purpose?: "pre_forward_primary";
   evidenceTier: "fixture_contract" | "credentialed_sample_unverified";
   disposition: "research_only";
   productionSelection: "not_selected";
@@ -149,6 +151,8 @@ export interface CredentialedSampleRunOptions {
   env?: Readonly<Record<string, string | undefined>>;
   fetchImpl?: typeof fetch;
   clock?: () => string;
+  monotonicNow?: () => number;
+  wait?: (milliseconds: number) => Promise<void>;
   liveAuthorization?: Partial<CredentialedSampleRuntimeAuthorization>;
 }
 
@@ -179,6 +183,27 @@ function providerArtifactContract(
       sourceVersion: EODHD_EOD_SOURCE_VERSION,
       adapterVersion: EODHD_EOD_ADAPTER_VERSION,
     };
+}
+
+function rateLimitedFetch(
+  fetchImpl: typeof fetch,
+  requestIntervalMs: number | undefined,
+  options: Pick<CredentialedSampleRunOptions, "monotonicNow" | "wait">,
+): typeof fetch {
+  if (requestIntervalMs === undefined || requestIntervalMs === 0) return fetchImpl;
+  const monotonicNow = options.monotonicNow ?? (() => performance.now());
+  const wait = options.wait ?? ((milliseconds: number) => (
+    new Promise<void>((resolveWait) => setTimeout(resolveWait, milliseconds))
+  ));
+  let previousStartedAt: number | undefined;
+  return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    if (previousStartedAt !== undefined) {
+      const remaining = requestIntervalMs - (monotonicNow() - previousStartedAt);
+      if (remaining > 0) await wait(remaining);
+    }
+    previousStartedAt = monotonicNow();
+    return fetchImpl(input, init);
+  }) as typeof fetch;
 }
 
 const SAFE_REPOSITORY_ROOTS = ["data/raw/", "data/cache/", "data/generated/", "reports/generated/"];
@@ -254,12 +279,14 @@ function normalizedSampleDefinition(config: CredentialedSampleConfig): unknown {
   return {
     schemaVersion: config.schemaVersion,
     mode: config.mode,
+    ...(config.purpose === undefined ? {} : { purpose: config.purpose }),
     range: config.range,
     providers: config.providers.map((provider) => ({
       providerId: provider.providerId,
       source: provider.source,
       independenceGroup: provider.independenceGroup,
       credentialEnvVar: provider.credentialEnvVar,
+      ...(provider.requestIntervalMs === undefined ? {} : { requestIntervalMs: provider.requestIntervalMs }),
     })).sort((left, right) => compareText(left.providerId, right.providerId)),
     instruments: config.instruments.map((instrument) => ({
       stableId: instrument.stableId,
@@ -333,6 +360,7 @@ async function buildProviderRuntime(
     }
     credential = value;
     fetchImpl = options.fetchImpl ?? fetch;
+    fetchImpl = rateLimitedFetch(fetchImpl, providerConfig.requestIntervalMs, options);
     clock = options.clock ?? (() => new Date().toISOString());
   }
   if (providerConfig.providerId === "jquants_v2") {
@@ -397,6 +425,7 @@ function reportWithoutFingerprint(
     runnerVersion: CREDENTIALED_SAMPLE_RUNNER_VERSION,
     sampleDefinitionFingerprint: sampleDefinitionFingerprint(config),
     mode: config.mode,
+    ...(config.purpose === undefined ? {} : { purpose: config.purpose }),
     evidenceTier: config.mode === "fixture" ? "fixture_contract" : "credentialed_sample_unverified",
     disposition: "research_only",
     productionSelection: "not_selected",
@@ -431,6 +460,9 @@ function reportWithoutFingerprint(
     missingCapabilities: [...MISSING_CAPABILITIES],
     limitations: [
       ...(config.mode === "fixture" ? ["Committed fixtures validate the capture contract; no provider credential was used."] : []),
+      ...(config.purpose === "pre_forward_primary"
+        ? ["This primary-only Pre-Forward capture supplies no independent cross-source value comparison."]
+        : []),
       ...BASE_LIMITATIONS,
     ],
   };
@@ -506,10 +538,20 @@ export function assertCredentialedSampleAuditPayload(payload: CredentialedSample
     || (payload.mode === "live" && authorizationValues.some((value) => value !== true))) {
     throw new Error("Credentialed-sample report authorization record does not match its execution mode.");
   }
-  if (!Array.isArray(payload.providers) || payload.providers.length !== 2) {
-    throw new Error("Credentialed-sample report must contain the two comparison providers.");
+  if (payload.purpose !== undefined && payload.purpose !== "pre_forward_primary") {
+    throw new Error("Credentialed-sample report purpose is unsupported.");
   }
-  const expectedProviderIds = ["eodhd_eod", "jquants_v2"];
+  if (payload.purpose === "pre_forward_primary" && payload.mode !== "live") {
+    throw new Error("Credentialed-sample report purpose=pre_forward_primary is supported only in live mode.");
+  }
+  const expectedProviderIds = payload.purpose === "pre_forward_primary"
+    ? ["jquants_v2"]
+    : ["eodhd_eod", "jquants_v2"];
+  if (!Array.isArray(payload.providers) || payload.providers.length !== expectedProviderIds.length) {
+    throw new Error(payload.purpose === "pre_forward_primary"
+      ? "Pre-Forward primary report must contain exactly J-Quants."
+      : "Credentialed-sample report must contain the two comparison providers.");
+  }
   const providerIds = payload.providers.map((provider) => provider.providerId);
   if (canonicalJson(providerIds) !== canonicalJson(expectedProviderIds)) {
     throw new Error("Credentialed-sample report provider identities must be complete and sorted.");
@@ -617,6 +659,9 @@ export function assertCredentialedSampleAuditPayload(payload: CredentialedSample
   }
   const expectedLimitations = [
     ...(payload.mode === "fixture" ? ["Committed fixtures validate the capture contract; no provider credential was used."] : []),
+    ...(payload.purpose === "pre_forward_primary"
+      ? ["This primary-only Pre-Forward capture supplies no independent cross-source value comparison."]
+      : []),
     ...BASE_LIMITATIONS,
   ];
   if (canonicalJson(payload.limitations) !== canonicalJson(expectedLimitations)) {
