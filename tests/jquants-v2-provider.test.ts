@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { JQuantsV2ResearchProvider } from "../src/data/jquants-v2.ts";
 

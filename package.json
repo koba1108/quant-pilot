@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "test:node": "node --experimental-strip-types --test tests/*.test.ts",
     "backtest": "bun run src/backtest/runner.ts",
     "data-quality": "bun run src/data/data-quality-runner.ts",
     "provider-evaluation": "bun run src/data/provider-evaluation-runner.ts",

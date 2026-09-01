@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { rankTrend, validateTrendParameters } from "../src/strategies/trend.ts";
 import { rankRotation, validateRotationParameters } from "../src/strategies/rotation.ts";

@@ -174,7 +174,7 @@ Merged PR #11 M1 credentialed-sample verification:
 Active M2 manual Pre-Forward branch verification:
 
 - `bun test`: 220 pass / 0 fail
-- Bun 1.2.14 per-file compatibility sweep: 220 pass / 0 fail
+- Bun 1.2.14 direct aggregate `bun test`: 220 pass / 0 fail; all 25 files register through `bun:test`
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
@@ -202,6 +202,7 @@ Active M2 manual Pre-Forward branch verification:
 - retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
 - ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
 - SQLite statements are explicitly finalized and append uses explicit `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` boundaries, so strict ledger shutdown succeeds on both Bun 1.2.14 and the local Bun 1.3.14 runtime
+- test-runner regression: every test file registers with `bun:test`, so the required aggregate `bun test` gate executes the same 220 tests on Bun 1.2.14 and Bun 1.3.14 instead of silently skipping `node:test` registrations
 - hard-stop integration tests reconstruct an intervening daily-close High-Water Mark and liquidate a held asset at -30% only when explicit complete synthetic no-event coverage proves the stored unit basis, the holding remains Point-in-Time Universe eligible at the cutoff, and every held asset has an exact price on each evaluated date; otherwise they fail closed without a valuation or order, including after `lastEligibleDate` or when a daily row is missing
 - every output remains `pre_forward_dry_run`, `research_only`, and `formalForwardClockStarted=false`
 

@@ -14,6 +14,8 @@ bun install
 bun test
 ```
 
+テスト登録は`bun:test`へ統一しており、標準ゲートは直接実行する`bun test`である。
+
 ## Codex Project / Handoff
 
 Codex Projectへ移行する場合は、最初に次を読んでください。

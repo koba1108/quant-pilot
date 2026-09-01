@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import {
   CREDENTIALED_SAMPLE_CONFIG_SCHEMA_VERSION,

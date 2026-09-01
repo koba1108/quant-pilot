@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EodhdEodResearchProvider } from "../src/data/eodhd-eod.ts";
