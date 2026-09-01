@@ -189,7 +189,6 @@ function validateBindingSet(
   strategies: readonly Pick<PreForwardStrategyConfig, "portfolioId" | "strategy">[],
   bindings: ReadonlyMap<string, PreForwardRuntimeBinding>,
   artifactRootPath: string,
-  enforceStrategyIdentity: boolean,
 ): string {
   const ledgerPaths = new Set<string>();
   for (const strategy of strategies) {
@@ -197,7 +196,7 @@ function validateBindingSet(
     if (binding === undefined) {
       throw new Error("Pre-forward runtime bindings are incomplete; recovery requires an explicit audited process.");
     }
-    if (enforceStrategyIdentity && binding.strategy !== strategy.strategy) {
+    if (binding.strategy !== strategy.strategy) {
       throw new Error(
         `Pre-forward strategy reassignment for ${strategy.portfolioId} requires an explicit audited amendment.`,
       );
@@ -222,7 +221,6 @@ export async function resolvePreForwardRuntimeBindings(
   configuredLedgerPath: string,
   operation: "execute" | "replay",
 ): Promise<PreForwardRuntimeBindingResolution> {
-  const enforceStrategyIdentity = operation === "execute";
   const sortedStrategies = [...strategies].sort((left, right) => (
     compareText(left.portfolioId, right.portfolioId)
   ));
@@ -248,7 +246,6 @@ export async function resolvePreForwardRuntimeBindings(
         sortedStrategies,
         discovered,
         artifactRootPath,
-        enforceStrategyIdentity,
       ),
     };
   }
@@ -280,7 +277,6 @@ export async function resolvePreForwardRuntimeBindings(
           sortedStrategies,
           createdBindings,
           artifactRootPath,
-          enforceStrategyIdentity,
         ),
       };
     }
@@ -291,7 +287,6 @@ export async function resolvePreForwardRuntimeBindings(
       sortedStrategies,
       createdBindings,
       artifactRootPath,
-      enforceStrategyIdentity,
     ),
   };
 }

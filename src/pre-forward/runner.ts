@@ -114,6 +114,15 @@ interface LoadedRuntime {
   bindingByPortfolio: ReadonlyMap<string, PreForwardRuntimeBinding>;
 }
 
+interface LoadedRuntimeBase {
+  cwd: string;
+  config: PreForwardConfig;
+  configFingerprint: string;
+  store: FileArtifactStore;
+  artifactRootPath: string;
+  configuredLedgerPath: string;
+}
+
 async function resolveConfigPath(path: string, cwd: string): Promise<string> {
   if (!isAbsolute(path)) return resolveRepositoryInputFile(path, cwd);
   const physical = await realpath(path);
@@ -299,28 +308,50 @@ async function loadCurrentUniverseMaster(
     : loadUniverseMaster(await resolveRepositoryInputFile(config.universe.masterPath, cwd));
 }
 
-async function loadRuntime(configPath: string, options: RunPreForwardOptions): Promise<LoadedRuntime> {
+async function loadRuntimeBase(configPath: string, options: RunPreForwardOptions): Promise<LoadedRuntimeBase> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const config = await loadPreForwardConfig(configPath, cwd);
   const artifactRoot = await resolvePreForwardArtifactRoot(config.artifactRoot, cwd);
   const configuredLedgerPath = await resolvePreForwardLedgerPath(config.ledgerPath, cwd);
-  const bindingResolution = await resolvePreForwardRuntimeBindings(
-    cwd,
-    config.strategies,
-    artifactRoot,
-    configuredLedgerPath,
-    options.replayDecisionArtifactId === undefined ? "execute" : "replay",
-  );
-  const store = new FileArtifactStore(artifactRoot);
   return {
     cwd,
     config,
     configFingerprint: sha256Canonical(config),
-    store,
+    store: new FileArtifactStore(artifactRoot),
+    artifactRootPath: artifactRoot,
     configuredLedgerPath,
+  };
+}
+
+async function bindRuntime(
+  base: LoadedRuntimeBase,
+  strategies: readonly Pick<PreForwardStrategyConfig, "portfolioId" | "strategy">[],
+  operation: "execute" | "replay",
+): Promise<LoadedRuntime> {
+  const bindingResolution = await resolvePreForwardRuntimeBindings(
+    base.cwd,
+    strategies,
+    base.artifactRootPath,
+    base.configuredLedgerPath,
+    operation,
+  );
+  return {
+    cwd: base.cwd,
+    config: base.config,
+    configFingerprint: base.configFingerprint,
+    store: base.store,
+    configuredLedgerPath: base.configuredLedgerPath,
     boundLedgerPath: bindingResolution.boundLedgerPath,
     bindingByPortfolio: bindingResolution.bindings,
   };
+}
+
+async function loadExecutionRuntime(
+  configPath: string,
+  options: RunPreForwardOptions,
+): Promise<LoadedRuntime> {
+  const base = await loadRuntimeBase(configPath, options);
+  return bindRuntime(base, base.config.strategies, "execute");
 }
 
 function strategyResult(
@@ -539,13 +570,20 @@ export async function runPreForward(
   options: RunPreForwardOptions = {},
 ): Promise<PreForwardRunReport> {
   if (!isIsoDateTime(asOf)) throw new Error("--as-of must be an ISO timestamp with timezone.");
-  const runtime = await loadRuntime(configPath, options);
-  const asOfDate = preForwardMarketDate(asOf);
   if (options.replayDecisionArtifactId !== undefined) {
-    const artifact = await runtime.store.read<PreForwardDecisionPackage>(options.replayDecisionArtifactId);
+    const base = await loadRuntimeBase(configPath, options);
+    const artifact = await base.store.read<PreForwardDecisionPackage>(options.replayDecisionArtifactId);
+    if (artifact.provenance.artifactKind !== "decision_package") {
+      throw new Error("Pre-forward replay artifact must use artifactKind=decision_package.");
+    }
+    assertPreForwardDecisionPackage(artifact.payload);
+    const retainedConfig = await loadRetainedConfig(base.store, artifact.payload);
+    const runtime = await bindRuntime(base, retainedConfig.strategies, "replay");
     return buildReport(asOf, "replay", [await replayOne(runtime, artifact, asOf)]);
   }
 
+  const runtime = await loadExecutionRuntime(configPath, options);
+  const asOfDate = preForwardMarketDate(asOf);
   const retainedIndex = await indexRetainedDecisions(
     runtime.store,
     runtime.cwd,

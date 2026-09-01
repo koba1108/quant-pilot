@@ -64,7 +64,7 @@ PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにprod
 - `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage/Point-in-Time-Universe-gated held valuation, exact-date daily-close High-Water Mark reconstruction without prior-price filling, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
 - `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index, append-only hash-chained portfolio transitions, committed-run enumeration, and read-only/non-creating historical verification plus non-creating append reopen
 - `src/pre-forward/runtime-binding.ts`: `pre-forward-runtime-binding-v3` owner-only enrollment directories that validate/initialize the ledger before publishing a binding, pin strategy identity plus both physical artifact-root and ledger paths before the first decision, and fail closed on reassignment or missing/incomplete/legacy evidence
-- `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, stable runtime binding plus ledger-to-artifact committed-history reconciliation before portfolio advancement, missing-ledger/package fail-closed recovery boundaries, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading from a complete raw-to-audit lineage pinned on the first decision
+- `src/pre-forward/runner.ts`: explicit-`asOf` execute/replay CLI, retained-portfolio-first replay binding, stable runtime binding plus ledger-to-artifact committed-history reconciliation before portfolio advancement, missing-ledger/package fail-closed recovery boundaries, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading from a complete raw-to-audit lineage pinned on the first decision
 - `src/pre-forward/fixture-seeder.ts`: deterministic content-addressed fixture artifacts
 - `tests/fixtures/pre-forward/config.json`: committed synthetic acceptance config; runtime outputs remain under ignored `data/generated/`
 
@@ -173,8 +173,8 @@ Merged PR #11 M1 credentialed-sample verification:
 
 Active M2 manual Pre-Forward branch verification:
 
-- `bun test`: 219 pass / 0 fail
-- Bun 1.2.14 per-file compatibility sweep: 219 pass / 0 fail
+- `bun test`: 220 pass / 0 fail
+- Bun 1.2.14 per-file compatibility sweep: 220 pass / 0 fail
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
@@ -188,6 +188,7 @@ Active M2 manual Pre-Forward branch verification:
 - aggregate-cost regression: per-instrument one-way cost at or above 100% is rejected at config validation
 - config replay regression: a later valid execution-policy, strategy-config, and validity-window revision cannot change or invalidate ordinary reuse or explicit replay of the historical cycle
 - runtime relocation regression: a later current-config ledger path cannot redirect replay or ordinary duplicate detection, a future cycle rejects ledger relocation, and moving both artifact/ledger roots cannot hide history without an explicit audited migration
+- portfolio-ID replacement replay regression: explicit replay resolves the complete retained portfolio binding set before and after a new experiment's replacement IDs are enrolled, without creating a transition or binding during the replay itself
 - missing-ledger regression: after retained decisions exist, deleting their ledger blocks same-cutoff execution, a future cycle, and explicit replay without recreating an empty SQLite database or resetting portfolio state
 - committed-artifact regression: deleting a Decision Package named by a committed ledger run blocks the next cycle without appending another transition
 - pre-decision binding regressions: the physical ledger is pinned before input loading or Decision Package creation, an alternate first-cycle ledger cannot be opened, and a missing v2 binding record is not recreated inside its persistent enrollment directory

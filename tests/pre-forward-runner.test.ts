@@ -353,6 +353,61 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
   });
 });
 
+test("explicit replay resolves the retained portfolio binding after current portfolio IDs are replaced", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const first = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    const retainedDecisionArtifactId = first.results[0]!.decisionArtifactId;
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+
+    const replacementConfig = JSON.parse(await readFile(configPath, "utf8")) as MutableConfig;
+    for (const strategy of replacementConfig.strategies as MutableConfig[]) {
+      strategy.portfolioId += "-new-experiment";
+      strategy.strategyConfigVersion += "-new-experiment";
+    }
+    await writeFile(configPath, `${JSON.stringify(replacementConfig, null, 2)}\n`, "utf8");
+
+    const bindingRoot = join(root, "data/generated/pre-forward/runtime-bindings");
+    const replayedBeforeEnrollment = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      replayDecisionArtifactId: retainedDecisionArtifactId,
+    });
+    assert.equal(replayedBeforeEnrollment.results[0]!.decisionArtifactId, retainedDecisionArtifactId);
+    assert.equal(replayedBeforeEnrollment.results[0]!.stateTransitionApplied, false);
+    assert.equal((await readdir(bindingRoot)).length, 2);
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+
+    const replacementRun = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.ok(replacementRun.results.every((result) => result.stateTransitionApplied));
+    assert.equal((await readdir(bindingRoot)).length, 4);
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 4, entries: 4 });
+
+    const replayedAfterEnrollment = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      replayDecisionArtifactId: retainedDecisionArtifactId,
+    });
+    assert.equal(replayedAfterEnrollment.results[0]!.decisionArtifactId, retainedDecisionArtifactId);
+    assert.equal(replayedAfterEnrollment.results[0]!.stateTransitionApplied, false);
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 4, entries: 4 });
+  });
+});
+
 test("retained decisions fail closed without recreating a missing ledger", async () => {
   await withTemporaryRuntime(async (value, root) => {
     value.universe.masterPath = "universe-master.csv";
