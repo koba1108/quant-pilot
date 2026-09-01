@@ -30,6 +30,7 @@ temp/
 .cache/
 
 # Runtime / generated data
+.quant-pilot/
 data/raw/
 data/cache/
 data/generated/

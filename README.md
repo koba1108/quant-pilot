@@ -14,6 +14,8 @@ bun install
 bun test
 ```
 
+テスト登録は`bun:test`へ統一しており、標準ゲートは直接実行する`bun test`である。
+
 ## Codex Project / Handoff
 
 Codex Projectへ移行する場合は、最初に次を読んでください。
@@ -27,7 +29,7 @@ Codex Projectへ移行する場合は、最初に次を読んでください。
 
 引き継ぎ資料には、ChatGPTで行った大量の質問そのものではなく、最終的に承認された決定、現在の実装状態、未確定事項、実行手順を整理しています。
 
-PR #9（production market-data readiness評価とJ-Quants v2 research adapter）まで `main` へマージ済みです。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md`、Forward Testまでの一本道と脱線防止ルールは `docs/handoff/EXECUTION_ROADMAP.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合と人間によるprovider承認まで実行できません。
+PR #11（credentialed providerの部分失敗を保持するcapture/audit/replay）まで `main` へマージ済みです。現在はM2 Manual Pre-Forwardの実行経路を実装中です。現在の実装・検証状況は `docs/handoff/CURRENT_STATUS.md`、Forward Testまでの一本道と脱線防止ルールは `docs/handoff/EXECUTION_ROADMAP.md` を参照してください。O-001/O-003/O-004 などの未決事項は確定せず、`etf_realistic` は必要なデータ層の統合と人間によるprovider承認まで実行できません。
 
 ## Backtest quick start
 
@@ -154,6 +156,30 @@ bun run credentialed-sample \
 
 fixtureは常に`research_only`、`failClosed=true`、`canEnableEtfRealistic=false`である。G1/G2承認後のlive auditも、EODHD 5件の404を`providerFailures`として保存した`captureStatus=partial`であり、終了コード1のままfail closedする。live artifactはGit管理外の`data/generated/`へowner-onlyで保存し、vendor response本文やキーはコミットしない。仕様と残る証拠ギャップは [`docs/credentialed-sample.md`](./docs/credentialed-sample.md) を参照する。
 
+## Manual Pre-Forward dry run
+
+M2の手動運用経路は、保持済みartifactからTrendとRotationを実行し、仮想注文・約定・ポジション・現金・コストをimmutable Decision Packageとappend-only SQLite ledgerへ保存する。同じportfolio/月の同一cutoff再実行は同じDecision Packageを検証して返し、注文や現金移動を重複させない。別cutoffによる月中再判定は、承認済みtrigger/audit modeが未実装のため拒否する。
+
+合成fixtureで経路全体を検証する場合:
+
+```bash
+bun run pre-forward:seed-fixture --config=tests/fixtures/pre-forward/config.json
+bun run pre-forward \
+  --config=tests/fixtures/pre-forward/config.json \
+  --as-of=2025-01-07T00:00:00Z
+```
+
+同じコマンドをもう一度実行すると`idempotent=true`、`stateTransitionApplied=false`になる。Decision Package IDを指定したoffline replayも可能である。
+
+```bash
+bun run pre-forward \
+  --config=tests/fixtures/pre-forward/config.json \
+  --as-of=2025-01-07T00:00:00Z \
+  --replay-decision=sha256:<decision-package-id>
+```
+
+成功するfixtureは合成データであり、投資成績やM2の実データexit criterionを証明しない。D-009の売買gateを検証するため、fixtureは合成の期待便益1,000 bpsと安全余裕25 bpsを明示しているが、これはO-005/O-006の採用値ではない。通常注文は期待便益が片道執行コスト＋安全余裕を厳密に上回る場合だけ生成し、保有銘柄の通常入替はO-006承認までblocked、-30%強制清算だけはD-010として優先する。ただし保有unitをsplit後価格で誤評価しないよう、強制清算にも対象期間のCorporate Action／分配coverageを要求する。fixtureだけは明示的な「完全・イベントなし」合成証跡を持ち、実データで証跡がなければ評価も注文も行わない。既存のJ-Quants live auditは3日分しかないため、履歴・Universe・執行前提不足を明示して終了コード1、現金維持、state transitionなしになる。全出力は`pre_forward_dry_run` / `research_only` / `formalForwardClockStarted=false`で、実注文や正式Forward Testではない。仕様と現状の境界は [`docs/pre-forward.md`](./docs/pre-forward.md) を参照する。
+
 ## Strategy A/B robustness grid
 
 Strategy weights、コスト、最大保有数、volatility windowを全組合せで実行し、全cellと安定性rangeを出力する。最良cellを自動採用しない。未実装の月中・25日・hysteresis等は、既存結果で代用せず明示的な `unsupported` cellになる。出力スキーマは `robustness-grid-v2`。
@@ -176,6 +202,7 @@ Point-in-Time制約として、設定された上場日前・上場廃止日後�
 - `src/strategies/` — Strategy A Trend / Strategy B Rotation
 - `src/portfolio/` — allocation / risk / costs
 - `src/backtest/` — frame builder / simulator / metrics / CLI runner
+- `src/pre-forward/` — manual virtual cycle / Decision Package / append-only ledger / replay CLI
 - `src/ai/` — Strategy C AI investment committee
 - `docs/handoff/` — Codex Project向け引き継ぎ資料
 - `investment_policy.md` — 投資方針とガードレール

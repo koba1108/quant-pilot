@@ -1,8 +1,9 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   evaluateUniverseMembership,
+  evaluateUniverseMembershipAtCutoff,
   getUniverseInstrumentDefinition,
   parseUniverseMasterCsv,
   resolveUniverseSnapshot,
@@ -32,6 +33,34 @@ test("strict universe master resolves lifecycle, status, and late-known revision
   assert.equal(afterCorrection.reason, "past_last_eligible_date");
   assert.equal(afterCorrection.observationId, "univ-revised-v2");
   assert.equal(afterCorrection.provenance?.recordId, "record-revised-v2");
+});
+
+test("universe eligibility separates the effective market date from the metadata information cutoff", async () => {
+  const master = parseUniverseMasterCsv(await readFile(fixturePath, "utf8"));
+  const policy = {
+    allowedStatuses: new Set(["test_candidate"]),
+    supportedCurrencies: new Set(["JPY"]),
+  };
+  const beforeRevisionAvailable = evaluateUniverseMembershipAtCutoff(
+    master,
+    "REVISED",
+    "2025-01-16",
+    "2025-01-19T23:59:59Z",
+    policy,
+  );
+  assert.equal(beforeRevisionAvailable.eligible, true);
+  assert.equal(beforeRevisionAvailable.observationId, "univ-revised-v1");
+
+  const afterRevisionAvailable = evaluateUniverseMembershipAtCutoff(
+    master,
+    "REVISED",
+    "2025-01-16",
+    "2025-01-20T01:00:00Z",
+    policy,
+  );
+  assert.equal(afterRevisionAvailable.eligible, false);
+  assert.equal(afterRevisionAvailable.reason, "past_last_eligible_date");
+  assert.equal(afterRevisionAvailable.observationId, "univ-revised-v2");
 });
 
 test("universe snapshot and instrument definitions are deterministic", async () => {

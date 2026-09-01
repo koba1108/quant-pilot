@@ -6,7 +6,7 @@ Codex Project移行後の統合指示は `docs/handoff/CODEX_PROJECT_INSTRUCTION
 
 ## Implemented baseline and current branch
 
-PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction provider候補をfail-closed評価する契約、公式URL/evaluation snapshot、J-Quants v2 read-only research adapterまでマージ済みである。現在のdelivery milestoneはM1 Credentialed data sliceである。
+PR #11までのM0/M1基盤は`main`に含まれる。O-001を確定せずにproduction provider候補をfail-closed評価し、credentialed sampleをimmutable artifactへ保存してoffline replayする経路までマージ済みである。現在のdelivery milestoneはM2 Manual Pre-Forward vertical sliceである。
 
 ### Strategy
 
@@ -34,7 +34,7 @@ PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction
 - `src/data/artifact-store.ts`: immutable content-addressed filesystem artifact store
 - `src/data/provider-sample-artifacts.ts`: raw-to-daily lineage and field-specific observation artifacts
 - `src/data/credentialed-sample-config.ts`: strict fixture/live schema and G1/G2 authorization records
-- `src/data/credentialed-sample-runner.ts`: fixture/live capture, reconciliation, fail-closed audit, and offline replay CLI
+- `src/data/credentialed-sample-runner.ts`: fixture/live capture, reconciliation, fail-closed audit, offline replay CLI, and validated full-lineage retention into a caller-pinned artifact store
 - `src/data/provider-evaluation.ts`: O-001 capability, evidence, source-bundle, license, cost-approval, and integrity evaluator
 - `src/data/provider-evaluation-runner.ts`: deterministic provider-evaluation CLI
 - `src/data/return-normalization.ts`: explicit Price Return / Total Return normalization, event coverage, provenance, and Point-in-Time validation
@@ -45,6 +45,7 @@ PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction
 - `docs/fx-normalization.md`: JPY FX calculation, audit contract, official evidence, and limitations
 - `docs/provider-evaluation.md`: official-source provider comparison, production gate, adapter boundary, and credentialed-sample plan
 - `docs/credentialed-sample.md`: M1 executable contract, live gates, replay behavior, and remaining evidence gaps
+- `docs/pre-forward.md`: M2 manual virtual-cycle contract, replay/idempotency behavior, and real-data gate
 
 ### Backtest
 
@@ -53,6 +54,20 @@ PR #9までの基盤は`main`に含まれる。O-001を確定せずにproduction
 - `src/backtest/frame-builder.ts`: daily bars to monthly signals, actual trading-date cutoffs, pinned normalized prefixes, realized-return month labels, and next-month returns
 - `src/backtest/runner.ts`: config-driven Strategy A/B CLI with explicit `price_return` / `total_return` opt-in and exact-date JPY conversion
 - `backtest.config.example.json`: runnable configuration example
+
+### Manual Pre-Forward
+
+- `src/pre-forward/config.ts`: strict `pre-forward-config-v2`, version validity, JPY-only M2 capability, positive D-009 safety margin, explicit synthetic benefit evidence, and approved risk constraints
+- `src/pre-forward/market-input.ts`: retained synthetic/credentialed daily-bar input classification without Total Return relabeling; synthetic v3 artifacts explicitly bind complete no-event coverage through the decision cutoff
+- `src/pre-forward/config-snapshot.ts`: exact validated config retention and content-addressed replay binding
+- `src/pre-forward/credentialed-config-snapshot.ts`: exact nested M1 credentialed-sample config retention for path-independent replay
+- `src/pre-forward/runtime-paths.ts`: repository-root discovery from the physical config location and nearest Git boundary, so invocation-directory changes cannot redirect repository-scoped runtime evidence
+- `src/pre-forward/decision.ts`: Strategy A/B snapshots, per-order expected-benefit-versus-cost audit, chronology/event-coverage/Point-in-Time-Universe-gated held valuation, exact-date daily-close High-Water Mark reconstruction without prior-price filling, virtual orders/executions, costs, positions/cash, distribution-state handling, maximum three holdings, and -30% hard stop
+- `src/pre-forward/ledger.ts`: owner-only Bun SQLite run index, append-only hash-chained portfolio transitions, committed-run enumeration, latest-committed-cutoff chronology enforcement including blocked runs, and read-only/non-creating historical verification plus non-creating append reopen
+- `src/pre-forward/runtime-binding.ts`: atomically renamed `pre-forward-runtime-binding-v3` owner-only binding directories plus independently retained `.quant-pilot/` `pre-forward-runtime-enrollment-set-v1` manifests; every manifest is validated and scanned for requested portfolio overlap under an owner-only SQLite initialization lock before a complete set is atomically published, interrupted pre-publication setup can resume only without committed runs, and published evidence fails closed when generated bindings disappear, the configured set changes around an enrolled member, or records conflict
+- `src/pre-forward/runner.ts`: canonical-instant explicit-`asOf` execute/replay CLI anchored to the config-derived repository root, retained-portfolio-first replay binding, stable runtime binding plus ledger-to-artifact committed-history reconciliation before portfolio advancement, pre-build backdate rejection against every committed run, missing-ledger/package fail-closed recovery boundaries, one normal run per portfolio/Asia-Tokyo market month, actual package-creation provenance, and fail-closed credentialed-audit loading from a complete raw-to-audit lineage pinned on the first decision
+- `src/pre-forward/fixture-seeder.ts`: deterministic content-addressed fixture artifacts
+- `tests/fixtures/pre-forward/config.json`: committed synthetic acceptance config; runtime outputs remain under ignored `data/generated/`
 
 ### AI
 
@@ -145,7 +160,7 @@ PR #9 provider-evaluation verification now present on `main`:
 - J-Quants adapter tests cover official-host credential confinement, pagination, header authentication, semantic dates, four/five-character code normalization, no-trade null-row exclusion, strict rows, range matching, missing optional values, repeated pages, duplicate dates, malformed JSON, and HTTP failures
 - real J-Quants/EODHD credentials were used only for the authorized bounded capture and are not committed; raw responses were persisted only in the owner-only Git-ignored local artifact store
 
-Active M1 credentialed-sample branch verification:
+Merged PR #11 M1 credentialed-sample verification:
 
 - `bun test`: 198 pass / 0 fail
 - `bunx tsc --noEmit`: success
@@ -157,9 +172,48 @@ Active M1 credentialed-sample branch verification:
 - authorized live capture after G1/G2 approval: five J-Quants successes with 15 bars, five EODHD HTTP 404 failures, 10 raw artifacts, five daily artifacts, 60 observations, and one `captureStatus=partial` audit
 - live offline replay is canonical-equal and returns the expected nonzero status; artifacts stay outside Git with owner-only permissions, and a local scan found no credential bytes
 
+Active M2 manual Pre-Forward branch verification:
+
+- `bun test`: 226 pass / 0 fail
+- Bun 1.2.14 direct aggregate `bun test`: 226 pass / 0 fail; all 25 files register through `bun:test`
+- `bunx tsc --noEmit`: success
+- fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
+- repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
+- explicit Decision Package replay: retained config, strategy, inputs, Universe, canonical decision/artifact, and the ledger path from the retained config reproduce without another state transition
+- D-009 regression: marginal synthetic expected benefit produces no order; each executed ordinary order records a strict benefit-above-cost-plus-positive-margin pass
+- cutoff-identity regression: an equivalent ISO offset for the same instant is idempotent in execute and replay, while a different cutoff in an already recorded Asia-Tokyo market calendar month is rejected even when its ISO offset displays a different month
+- provenance regression: market `asOf` remains distinct from actual Decision Package `createdAt`, and replay preserves both timestamps
+- Point-in-Time artifact regression: a daily-bars artifact cannot claim observation/availability before one of its contained trading dates, including timestamps whose UTC offset masks an earlier instant
+- lifecycle/availability regressions: signal history excludes pre-listing rows, and a same-day close is unavailable before the conservative `07:00:00Z` floor
+- execution-boundary regressions: stale validated-config fingerprints, unbound strategy overrides, and loaded-input mutation are rejected before a Decision Package is built
+- aggregate-cost regression: per-instrument one-way cost at or above 100% is rejected at config validation
+- config replay regression: a later valid execution-policy, strategy-config, and validity-window revision cannot change or invalidate ordinary reuse or explicit replay of the historical cycle
+- runtime relocation regression: a later current-config ledger path cannot redirect replay or ordinary duplicate detection, a future cycle rejects ledger relocation, and moving both artifact/ledger roots cannot hide history without an explicit audited migration
+- portfolio-ID replacement replay regression: explicit replay resolves the complete retained portfolio binding set before and after a new experiment's replacement IDs are enrolled, without creating a transition or binding during the replay itself
+- missing-ledger regression: after retained decisions exist, deleting their ledger blocks same-cutoff execution, a future cycle, and explicit replay without recreating an empty SQLite database or resetting portfolio state
+- committed-artifact regression: deleting a Decision Package named by a committed ledger run blocks the next cycle without appending another transition
+- pre-decision binding regressions: the physical ledger is pinned before input loading or Decision Package creation, an alternate first-cycle ledger cannot be opened, interrupted partial binding creation safely completes before atomic set-manifest publication when no run exists, a missing binding record is not recreated after publication, and the independent manifest blocks a reset after `data/generated/` is removed
+- enrollment-overlap regression: changing `{A,B}` to `{A,C}` after generated-state removal cannot bypass A's durable enrollment; all manifests are scanned before any replacement binding or ledger is created
+- repository-root regression: invoking the same absolute config from a nested working directory cannot redirect binding/enrollment evidence or create a replacement ledger; the retained Decision IDs remain idempotent
+- commit-reconciliation regression: a valid Decision Package left before a losing or interrupted ledger append is ignored unless its exact artifact ID is committed and verified in the retained ledger, so it cannot poison later duplicate detection
+- credentialed-lineage replay regression: after the first decision copies and validates the complete raw-response, normalized daily-bar, observation, and audit lineage into the pinned Pre-Forward store, removing the original M1 artifact directory and invalidating the nested sample-config file cannot alter normal duplicate invocation or explicit historical replay
+- Universe replay regression: each decision retains the exact content-addressed master snapshot, so a later valid future-dated revision cannot change or invalidate the historical replay
+- held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
+- committed-run chronology regression: a later blocked Decision Package prevents a backdated cycle both before Decision construction and inside the transactional ledger append boundary
+- cutoff-coverage regression: event coverage ending at the latest bar cannot authorize held-unit valuation when the decision cutoff is later
+- held-period High-Water Mark regressions: an intervening daily-close peak remains authoritative at the next cutoff, while a missing exact-date close for any held asset blocks instead of filling a prior value
+- prior-cutoff coverage regression: an offset-formatted `lastAsOf` uses its normalized Asia-Tokyo market date consistently during construction and Decision Package validation
+- retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
+- ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
+- SQLite statements are explicitly finalized and append uses explicit `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` boundaries, so strict ledger shutdown succeeds on both Bun 1.2.14 and the local Bun 1.3.14 runtime
+- test-runner regression: every test file registers with `bun:test`, so the required aggregate `bun test` gate executes the same 226 tests on Bun 1.2.14 and Bun 1.3.14 instead of silently skipping `node:test` registrations
+- hard-stop integration tests reconstruct an intervening daily-close High-Water Mark and liquidate a held asset at -30% only when explicit complete synthetic no-event coverage proves the stored unit basis, the holding remains Point-in-Time Universe eligible at the cutoff, and every held asset has an exact price on each evaluated date; otherwise they fail closed without a valuation or order, including after `lastEligibleDate` or when a daily row is missing
+- every output remains `pre_forward_dry_run`, `research_only`, and `formalForwardClockStarted=false`
+
 ## Next blocks
 
 1. Follow `docs/handoff/EXECUTION_ROADMAP.md`; do not begin work outside its active milestone
-2. M1: merge the partial-failure audit/replay fix; do not treat the EODHD result as permanent global non-coverage or as a JPX comparator
-3. M2: deliver the manual Pre-Forward vertical slice with an idempotent virtual ledger and replayable Decision Package, preserving incomplete-history and incomplete-data blocks
-4. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates
+2. M2: review and merge the manual Pre-Forward software vertical slice; do not call the synthetic success an M2 real-data completion
+3. M2 evidence gate: after separate scope approval, retain enough licensed J-Quants history plus strict Point-in-Time Universe and versioned execution assumptions for one real virtual-money cycle
+4. Connect retained distribution and Corporate Action events before advancing a held portfolio to a later `asOf`; until then the runner must continue to block rather than assume no event or misvalue split-adjusted units
+5. Keep formal Forward Test, unattended scheduling, Strategy C, and real-money work behind their documented gates

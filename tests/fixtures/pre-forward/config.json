@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "pre-forward-config-v2",
+  "mode": "pre_forward_dry_run",
+  "artifactRoot": {
+    "kind": "relative",
+    "path": "data/generated/pre-forward/fixture-v15/artifacts"
+  },
+  "ledgerPath": {
+    "kind": "relative",
+    "path": "data/generated/pre-forward/fixture-v15/ledger.sqlite"
+  },
+  "input": {
+    "kind": "daily_bars_manifest",
+    "evidenceTier": "synthetic_fixture",
+    "dailyBarsArtifactIds": [
+      "sha256:599ece50ad4a275753b38be4f50eff7ba6d9cfe529f74943ba1c6e32014ef583",
+      "sha256:693fefb753a77084cef0b3c68602f976fa3b8b17de525f265a8bf1b1c4df3be8",
+      "sha256:9ae3ca6ab8888db6d721b62b76021a06d03665fe109b1b53fccc4e6d53844655",
+      "sha256:beb3fda80c24fa81545de518e8486695bfc6fdd3a226ab42cbbd579ceafc29c6"
+    ]
+  },
+  "universe": {
+    "masterPath": "tests/fixtures/universe/universe-master-v1.csv",
+    "allowedStatuses": ["test_candidate"],
+    "supportedCurrencies": ["JPY"]
+  },
+  "signal": {
+    "minHistoryBars": 253,
+    "volatilityWindowDays": 63,
+    "maxDataAgeDays": 3,
+    "priceField": "adjustedClose"
+  },
+  "execution": {
+    "policyVersion": "pre-forward-close-proxy-fixture-v1",
+    "benefitGate": {
+      "policyVersion": "d009-synthetic-initial-allocation-v1",
+      "safetyMarginBps": 25
+    },
+    "priceSource": "latest_unadjusted_close_proxy",
+    "commissionBps": 1,
+    "slippageBps": 5,
+    "fallbackHalfSpreadBps": 15,
+    "fxConversionBps": 0,
+    "instruments": [
+      {
+        "code": "ALPHA",
+        "tradingUnit": 10,
+        "spreadBps": 20,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-alpha-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      },
+      {
+        "code": "BETA",
+        "tradingUnit": 10,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-beta-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      },
+      {
+        "code": "DELTA",
+        "tradingUnit": 10,
+        "spreadBps": 25,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-delta-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      },
+      {
+        "code": "GAMMA",
+        "tradingUnit": 10,
+        "spreadBps": 30,
+        "expectedBenefit": {
+          "basis": "synthetic_fixture_assumption",
+          "evidenceId": "synthetic-benefit-gamma-v1",
+          "availableAt": "2025-01-06T16:00:00Z",
+          "grossExpectedBenefitBps": 1000
+        }
+      }
+    ]
+  },
+  "portfolio": {
+    "initialCashJpy": 1000000,
+    "drawdownLimit": -0.3
+  },
+  "strategies": [
+    {
+      "strategy": "trend",
+      "portfolioId": "pre-forward-trend-fixture-v15",
+      "strategyVersion": "trend-v1",
+      "strategyConfigVersion": "pre-forward-trend-defaults-v1",
+      "validFrom": "2025-01-01",
+      "validThrough": "2025-12-31",
+      "maxAssets": 3,
+      "parameters": {
+        "r3mWeight": 0.2,
+        "r6mWeight": 0.3,
+        "r12mWeight": 0.5,
+        "requirePositiveR12m": true
+      }
+    },
+    {
+      "strategy": "rotation",
+      "portfolioId": "pre-forward-rotation-fixture-v15",
+      "strategyVersion": "rotation-v1",
+      "strategyConfigVersion": "pre-forward-rotation-defaults-v1",
+      "validFrom": "2025-01-01",
+      "validThrough": "2025-12-31",
+      "maxAssets": 3,
+      "parameters": {
+        "r6mWeight": 0.4,
+        "r12mWeight": 0.4,
+        "volatilityPenalty": 0.2,
+        "requirePositiveR12m": true
+      }
+    }
+  ]
+}

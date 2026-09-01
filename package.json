@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "test:node": "node --experimental-strip-types --test tests/*.test.ts",
     "backtest": "bun run src/backtest/runner.ts",
     "data-quality": "bun run src/data/data-quality-runner.ts",
     "provider-evaluation": "bun run src/data/provider-evaluation-runner.ts",
     "credentialed-sample": "bun run src/data/credentialed-sample-runner.ts",
-    "robustness": "bun run src/backtest/robustness-grid.ts"
+    "robustness": "bun run src/backtest/robustness-grid.ts",
+    "pre-forward": "bun run src/pre-forward/runner.ts",
+    "pre-forward:seed-fixture": "bun run src/pre-forward/fixture-seeder.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

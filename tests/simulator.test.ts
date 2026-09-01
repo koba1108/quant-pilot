@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { runMonthlyStrategy, type MonthlyFrame } from "../src/backtest/simulator.ts";
 import type { AssetSnapshot } from "../src/strategies/types.ts";

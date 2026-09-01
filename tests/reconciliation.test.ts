@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { buildVersionedDataArtifact, sha256Canonical } from "../src/data/provenance.ts";
 import {

@@ -152,6 +152,11 @@ export interface CredentialedSampleRunOptions {
   liveAuthorization?: Partial<CredentialedSampleRuntimeAuthorization>;
 }
 
+export interface CredentialedSampleReplayOptions {
+  cwd?: string;
+  artifactStore?: FileArtifactStore;
+}
+
 interface ProviderRuntime {
   provider: CapturingMarketDataProvider;
   assertConsumed?: () => void;
@@ -767,8 +772,21 @@ export async function replayCredentialedSample(
 ): Promise<VersionedDataArtifact<CredentialedSampleAuditPayload>> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const config = await loadCredentialedSampleConfig(resolve(cwd, configPath));
-  const artifactRoot = await resolveArtifactRoot(config, cwd);
-  const store = new FileArtifactStore(artifactRoot);
+  return replayCredentialedSampleFromConfig(config, auditArtifactId, { cwd });
+}
+
+export async function replayCredentialedSampleFromConfig(
+  configInput: CredentialedSampleConfig,
+  auditArtifactId: string,
+  options: CredentialedSampleReplayOptions = {},
+): Promise<VersionedDataArtifact<CredentialedSampleAuditPayload>> {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const config = validateCredentialedSampleConfig(configInput);
+  if (canonicalJson(config) !== canonicalJson(configInput)) {
+    throw new Error("Credentialed-sample config changed after validation.");
+  }
+  const store = options.artifactStore
+    ?? new FileArtifactStore(await resolveArtifactRoot(config, cwd));
   const auditArtifact = await store.read<CredentialedSampleAuditPayload>(auditArtifactId);
   if (auditArtifact.provenance.artifactKind !== "provider_capability_evidence") {
     throw new Error("Replay artifact must use artifactKind=provider_capability_evidence.");
@@ -961,6 +979,43 @@ export async function replayCredentialedSample(
     throw new Error("Replayed credentialed-sample audit artifact is not deterministic.");
   }
   return auditArtifact;
+}
+
+/**
+ * Validate a complete credentialed audit in its configured source store, then
+ * copy every content-addressed child before publishing the audit into a pinned
+ * destination store. Historical consumers can subsequently replay only from
+ * that destination without reopening the mutable source path.
+ */
+export async function retainCredentialedSampleLineageFromConfig(
+  configInput: CredentialedSampleConfig,
+  auditArtifactId: string,
+  destinationStore: FileArtifactStore,
+  options: Pick<CredentialedSampleReplayOptions, "cwd"> = {},
+): Promise<VersionedDataArtifact<CredentialedSampleAuditPayload>> {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const config = validateCredentialedSampleConfig(configInput);
+  if (canonicalJson(config) !== canonicalJson(configInput)) {
+    throw new Error("Credentialed-sample config changed after validation.");
+  }
+  const sourceStore = new FileArtifactStore(await resolveArtifactRoot(config, cwd));
+  const auditArtifact = await replayCredentialedSampleFromConfig(config, auditArtifactId, {
+    cwd,
+    artifactStore: sourceStore,
+  });
+  const childArtifactIds = [...new Set([
+    ...auditArtifact.payload.artifacts.rawResponseIds,
+    ...auditArtifact.payload.artifacts.dailyBarsIds,
+    ...auditArtifact.payload.artifacts.observationIds,
+  ])].sort(compareText);
+  for (const artifactId of childArtifactIds) {
+    await destinationStore.put(await sourceStore.read<unknown>(artifactId));
+  }
+  await destinationStore.put(auditArtifact);
+  return replayCredentialedSampleFromConfig(config, auditArtifactId, {
+    cwd,
+    artifactStore: destinationStore,
+  });
 }
 
 export function credentialedSampleExitCode(

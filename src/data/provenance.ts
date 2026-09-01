@@ -14,7 +14,9 @@ export type DataArtifactKind =
   | "reconciliation_observation"
   | "exchange_calendar"
   | "provider_document"
-  | "provider_capability_evidence";
+  | "provider_capability_evidence"
+  | "configuration"
+  | "decision_package";
 
 const DATA_ARTIFACT_KINDS: readonly DataArtifactKind[] = [
   "provider_raw_response",
@@ -29,6 +31,8 @@ const DATA_ARTIFACT_KINDS: readonly DataArtifactKind[] = [
   "exchange_calendar",
   "provider_document",
   "provider_capability_evidence",
+  "configuration",
+  "decision_package",
 ];
 
 export interface SourceProvenance {
