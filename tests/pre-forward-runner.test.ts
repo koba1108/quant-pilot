@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { FileArtifactStore } from "../src/data/artifact-store.ts";
@@ -38,6 +38,7 @@ import {
   preForwardExitCode,
   runPreForward,
 } from "../src/pre-forward/runner.ts";
+import { PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION } from "../src/pre-forward/runtime-binding.ts";
 import { buildPreForwardUniverseSnapshotArtifact } from "../src/pre-forward/universe-snapshot.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -192,8 +193,9 @@ test("manual pre-forward fixture executes Trend/Rotation, persists decisions, re
       result.idempotent && !result.stateTransitionApplied
     )));
     assert.equal(
-      (await readdir(enrollmentRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
-      2,
+      (await readdir(enrollmentRoot, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".enrollment-set.json")).length,
+      1,
     );
     assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
 
@@ -590,6 +592,67 @@ test("an invalid first-run artifact root cannot persist runtime bindings", async
   });
 });
 
+test("interrupted binding initialization resumes before atomic enrollment publication", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, artifactRoot, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const config = validatePreForwardConfig(JSON.parse(await readFile(configPath, "utf8")) as unknown);
+    const interruptedStrategy = [...config.strategies]
+      .sort((left, right) => left.portfolioId.localeCompare(right.portfolioId))[0]!;
+    const ledger = await PreForwardLedger.open(ledgerPath);
+    ledger.close();
+    const bindingBody = {
+      schemaVersion: PRE_FORWARD_RUNTIME_BINDING_SCHEMA_VERSION,
+      mode: config.mode,
+      portfolioId: interruptedStrategy.portfolioId,
+      strategy: interruptedStrategy.strategy,
+      artifactRootPath: await realpath(artifactRoot),
+      ledgerPath: await realpath(ledgerPath),
+    };
+    const binding = { ...bindingBody, bindingFingerprint: sha256Canonical(bindingBody) };
+    const bindingKey = sha256Canonical({
+      mode: config.mode,
+      portfolioId: interruptedStrategy.portfolioId,
+    }).slice("sha256:".length);
+    const bindingRoot = join(root, "data/generated/pre-forward/runtime-bindings");
+    const interruptedBindingDirectory = join(bindingRoot, bindingKey);
+    await mkdir(interruptedBindingDirectory, { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(interruptedBindingDirectory, "runtime.binding.json"),
+      `${JSON.stringify(binding)}\n`,
+      { mode: 0o600 },
+    );
+    const enrollmentRoot = join(root, ".quant-pilot/pre-forward/runtime-enrollments");
+    await mkdir(enrollmentRoot, { recursive: true, mode: 0o700 });
+
+    const report = await runPreForward(configPath, fixtureAsOf, {
+      cwd: root,
+      clock: () => fixtureCreatedAt,
+    });
+    assert.equal(report.status, "executed");
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 2 });
+    assert.equal(
+      (await readdir(bindingRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
+      2,
+    );
+    const enrollmentEntries = await readdir(enrollmentRoot, { withFileTypes: true });
+    assert.equal(
+      enrollmentEntries.filter((entry) => entry.isFile() && entry.name.endsWith(".enrollment-set.json")).length,
+      1,
+    );
+    assert.ok(enrollmentEntries.every((entry) => !entry.name.startsWith(".enrollment-tmp-")));
+  });
+});
+
 test("durable enrollment evidence blocks a reset after generated runtime state is removed", async () => {
   await withTemporaryRuntime(async (value, root) => {
     value.universe.masterPath = "universe-master.csv";
@@ -611,8 +674,9 @@ test("durable enrollment evidence blocks a reset after generated runtime state i
 
     const enrollmentRoot = join(root, ".quant-pilot/pre-forward/runtime-enrollments");
     assert.equal(
-      (await readdir(enrollmentRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
-      2,
+      (await readdir(enrollmentRoot, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".enrollment-set.json")).length,
+      1,
     );
     await rm(join(root, "data/generated"), { recursive: true, force: true });
 
@@ -637,8 +701,9 @@ test("durable enrollment evidence blocks a reset after generated runtime state i
       (error: NodeJS.ErrnoException) => error.code === "ENOENT",
     );
     assert.equal(
-      (await readdir(enrollmentRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).length,
-      2,
+      (await readdir(enrollmentRoot, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".enrollment-set.json")).length,
+      1,
     );
   });
 });
