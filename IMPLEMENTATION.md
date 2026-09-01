@@ -173,8 +173,8 @@ Merged PR #11 M1 credentialed-sample verification:
 
 Active M2 manual Pre-Forward branch verification:
 
-- `bun test`: 218 pass / 0 fail
-- Bun 1.2.14 per-file compatibility sweep: 218 pass / 0 fail
+- `bun test`: 219 pass / 0 fail
+- Bun 1.2.14 per-file compatibility sweep: 219 pass / 0 fail
 - `bunx tsc --noEmit`: success
 - fixture seed and first run: Trend/Rotation both execute from JPY 1,000,000, each creates three virtual holdings, three orders, JPY 1,845 modeled cost, and JPY 1,057 ending cash
 - repeated invocation: same Decision Package IDs, `idempotent=true`, no state transition, no duplicate order or cash movement
@@ -197,6 +197,7 @@ Active M2 manual Pre-Forward branch verification:
 - held-valuation regression: missing split/distribution coverage blocks valuation and liquidation; a stopped portfolio cannot bypass chronology
 - cutoff-coverage regression: event coverage ending at the latest bar cannot authorize held-unit valuation when the decision cutoff is later
 - held-period High-Water Mark regressions: an intervening daily-close peak remains authoritative at the next cutoff, while a missing exact-date close for any held asset blocks instead of filling a prior value
+- prior-cutoff coverage regression: an offset-formatted `lastAsOf` uses its normalized Asia-Tokyo market date consistently during construction and Decision Package validation
 - retained J-Quants live-audit replay: expected exit code 1; both strategies remain fully in cash with no transition and explicit insufficient-history, stale-data, missing-Universe, and missing-execution-assumption blockers
 - ledger database and artifact root use owner-only permissions on POSIX; SQLite update/delete triggers and hash-chain verification enforce append-only behavior
 - SQLite statements are explicitly finalized and append uses explicit `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` boundaries, so strict ledger shutdown succeeds on both Bun 1.2.14 and the local Bun 1.3.14 runtime

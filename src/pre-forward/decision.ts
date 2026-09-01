@@ -1438,7 +1438,7 @@ export function assertPreForwardDecisionPackage(payload: PreForwardDecisionPacka
         && coverage?.basis === "synthetic_complete_no_events_v1"
         && coverage.corporateActions === "complete"
         && coverage.distributions === "complete"
-        && coverage.startDate <= payload.portfolio.beforeState.lastAsOf!.slice(0, 10)
+        && coverage.startDate <= preForwardMarketDate(payload.portfolio.beforeState.lastAsOf!)
         && coverage.endDate >= payload.asOfDate
         && Date.parse(coverage.availableAt) <= Date.parse(payload.asOf);
     });

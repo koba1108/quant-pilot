@@ -1004,6 +1004,58 @@ test("daily high-water-mark reconstruction does not fill a missing held-asset pr
   });
 });
 
+test("held-event coverage validates the prior cutoff on its Asia-Tokyo market date", async () => {
+  await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
+    await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot);
+    const asOf = "2025-02-01T00:00:00Z";
+    const createdAt = "2025-02-01T00:05:00Z";
+    const { integrityFingerprint: _integrityFingerprint, ...inputBody } = fixture.input;
+    const input = sealLoadedPreForwardInput({
+      ...inputBody,
+      series: fixture.input.series.map((series) => (
+        series.code === "ALPHA"
+          ? {
+            ...series,
+            bars: series.bars.filter((bar) => bar.tradingDate >= "2025-01-01"),
+            returnEventCoverage: {
+              ...series.returnEventCoverage!,
+              startDate: "2025-01-01",
+              endDate: "2025-02-01",
+            },
+          }
+          : series
+      )),
+    });
+    const beforeState = buildVirtualPortfolioState({
+      portfolioId: fixture.config.strategies[0].portfolioId,
+      cashJpy: 0,
+      positions: [{ code: "ALPHA", units: 1_000, averageCostJpy: 100 }],
+      distributionReceivables: [],
+      highWaterMarkJpy: 1_000_000,
+      stopped: false,
+      lastAsOf: "2024-12-31T15:30:00Z",
+    });
+    const payload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config, createdAt),
+      strategy: fixture.config.strategies[0],
+      asOf,
+      createdAt,
+      input,
+      universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(fixture.universeMaster, createdAt),
+      beforeState,
+    });
+
+    assert.equal(payload.status, "blocked");
+    assert.equal(payload.risk.valuationEventCoverage, "complete_synthetic_no_events");
+    assert.ok(!payload.blockedReasons.includes("portfolio:distribution_event_coverage_missing_for_held_interval"));
+    assert.ok(!payload.blockedReasons.includes("portfolio:corporate_action_unit_coverage_missing_for_held_interval"));
+  });
+});
+
 test("held-unit valuation fails closed when event coverage does not reach the decision cutoff", async () => {
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });
