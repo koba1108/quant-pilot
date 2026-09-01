@@ -1083,6 +1083,71 @@ test("incomplete retained input is blocked explicitly and never moves virtual ca
   });
 });
 
+test("a committed blocked cycle prevents backdated execution at runner and ledger boundaries", async () => {
+  await withTemporaryRuntime(async (value, root) => {
+    value.universe.masterPath = "universe-master.csv";
+    await writeFile(
+      join(root, value.universe.masterPath),
+      await readFile(join(repositoryRoot, "tests/fixtures/universe/universe-master-v1.csv"), "utf8"),
+      "utf8",
+    );
+  }, async ({ root, configPath, artifactRoot, ledgerPath }) => {
+    await seedPreForwardFixture(configPath, {
+      cwd: root,
+      csvRoot: join(repositoryRoot, "tests/fixtures/market-data"),
+    });
+    const futureAsOf = "2025-02-07T00:00:00Z";
+    const future = await runPreForward(configPath, futureAsOf, {
+      cwd: root,
+      clock: () => "2025-02-07T00:05:00Z",
+    });
+    assert.equal(future.status, "blocked");
+    assert.ok(future.results.every((result) => result.status === "blocked"));
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
+
+    const fixture = await loadSyntheticDecisionFixture(configPath, artifactRoot, root);
+    const strategy = fixture.config.strategies[0];
+    const backdatedPayload = buildPreForwardDecisionPackage({
+      config: fixture.config,
+      configFingerprint: sha256Canonical(fixture.config),
+      configSnapshotArtifactId: configSnapshotArtifactId(fixture.config),
+      strategy,
+      asOf: fixtureAsOf,
+      createdAt: fixtureCreatedAt,
+      input: fixture.input,
+      universeMaster: fixture.universeMaster,
+      universeSnapshotArtifactId: universeSnapshotArtifactId(fixture.universeMaster),
+      beforeState: buildVirtualPortfolioState({
+        portfolioId: strategy.portfolioId,
+        cashJpy: 1_000_000,
+        positions: [],
+        distributionReceivables: [],
+        highWaterMarkJpy: 1_000_000,
+        stopped: false,
+      }),
+    });
+    const backdatedArtifact = buildPreForwardDecisionArtifact(backdatedPayload);
+    const ledger = await PreForwardLedger.openExistingForAppend(ledgerPath);
+    try {
+      assert.throws(
+        () => ledger.appendDecision(backdatedPayload, backdatedArtifact.provenance.artifactId),
+        /must be after latest committed run 2025-02-07T00:00:00Z/,
+      );
+    } finally {
+      ledger.close();
+    }
+
+    await assert.rejects(
+      () => runPreForward(configPath, fixtureAsOf, {
+        cwd: root,
+        clock: () => "2025-02-08T00:00:00Z",
+      }),
+      /must be after latest committed run 2025-02-07T00:00:00Z/,
+    );
+    assert.deepEqual(databaseCounts(ledgerPath), { runs: 2, entries: 0 });
+  });
+});
+
 test("the -30% high-water-mark stop liquidates when complete no-event coverage proves held units", async () => {
   await withTemporaryRuntime(async () => {}, async ({ configPath, artifactRoot }) => {
     await seedPreForwardFixture(configPath, { cwd: repositoryRoot });

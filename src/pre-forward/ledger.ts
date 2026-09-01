@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { chmod, lstat } from "node:fs/promises";
-import { canonicalJson, sha256Canonical } from "../data/provenance.ts";
+import { canonicalJson, isIsoDateTime, sha256Canonical } from "../data/provenance.ts";
 import {
   assertPreForwardDecisionPackage,
   assertVirtualPortfolioState,
@@ -63,6 +63,7 @@ export interface PreForwardLedgerSnapshot {
 export interface PreForwardExistingRun {
   runKey: string;
   portfolioId: string;
+  asOf: string;
   decisionArtifactId: string;
   packageFingerprint: string;
   inputFingerprint: string;
@@ -71,6 +72,25 @@ export interface PreForwardExistingRun {
   ledgerHeadAfter?: string;
   beforeStateFingerprint: string;
   afterStateFingerprint: string;
+}
+
+function existingRunFromRow(row: RunRow): PreForwardExistingRun {
+  if (!isIsoDateTime(row.as_of)) {
+    throw new Error(`Pre-forward ledger run has an invalid cutoff: ${row.run_key}.`);
+  }
+  return {
+    runKey: row.run_key,
+    portfolioId: row.portfolio_id,
+    asOf: row.as_of,
+    decisionArtifactId: row.decision_artifact_id,
+    packageFingerprint: row.package_fingerprint,
+    inputFingerprint: row.input_fingerprint,
+    status: row.status,
+    ledgerHeadBefore: optionalHash(row.ledger_head_before),
+    ledgerHeadAfter: optionalHash(row.ledger_head_after),
+    beforeStateFingerprint: row.before_state_fingerprint,
+    afterStateFingerprint: row.after_state_fingerprint,
+  };
 }
 
 export interface PreForwardLedgerAppendResult {
@@ -347,18 +367,7 @@ export class PreForwardLedger implements Disposable {
       statement.finalize();
     }
     if (row === null) return undefined;
-    return {
-      runKey: row.run_key,
-      portfolioId: row.portfolio_id,
-      decisionArtifactId: row.decision_artifact_id,
-      packageFingerprint: row.package_fingerprint,
-      inputFingerprint: row.input_fingerprint,
-      status: row.status,
-      ledgerHeadBefore: optionalHash(row.ledger_head_before),
-      ledgerHeadAfter: optionalHash(row.ledger_head_after),
-      beforeStateFingerprint: row.before_state_fingerprint,
-      afterStateFingerprint: row.after_state_fingerprint,
-    };
+    return existingRunFromRow(row);
   }
 
   listExistingRuns(portfolioId: string): readonly PreForwardExistingRun[] {
@@ -371,18 +380,17 @@ export class PreForwardLedger implements Disposable {
     } finally {
       statement.finalize();
     }
-    return rows.map((row) => ({
-      runKey: row.run_key,
-      portfolioId: row.portfolio_id,
-      decisionArtifactId: row.decision_artifact_id,
-      packageFingerprint: row.package_fingerprint,
-      inputFingerprint: row.input_fingerprint,
-      status: row.status,
-      ledgerHeadBefore: optionalHash(row.ledger_head_before),
-      ledgerHeadAfter: optionalHash(row.ledger_head_after),
-      beforeStateFingerprint: row.before_state_fingerprint,
-      afterStateFingerprint: row.after_state_fingerprint,
-    }));
+    return rows.map(existingRunFromRow);
+  }
+
+  getLatestCommittedRun(portfolioId: string): PreForwardExistingRun | undefined {
+    return this.listExistingRuns(portfolioId).reduce<PreForwardExistingRun | undefined>(
+      (latest, candidate) => latest === undefined
+        || Date.parse(candidate.asOf) > Date.parse(latest.asOf)
+        ? candidate
+        : latest,
+      undefined,
+    );
   }
 
   readPortfolioSnapshot(portfolioId: string, initialCashJpy = 1_000_000): PreForwardLedgerSnapshot {
@@ -460,6 +468,14 @@ export class PreForwardLedger implements Disposable {
         };
         this.database.run("COMMIT");
         return result;
+      }
+      const latestCommittedRun = this.getLatestCommittedRun(packagePayload.portfolioId);
+      if (latestCommittedRun !== undefined
+        && Date.parse(packagePayload.asOf) <= Date.parse(latestCommittedRun.asOf)) {
+        throw new Error(
+          `Pre-forward cutoff ${packagePayload.asOf} must be after latest committed run `
+            + `${latestCommittedRun.asOf} for ${packagePayload.portfolioId}.`,
+        );
       }
       const current = this.readPortfolioSnapshot(packagePayload.portfolioId);
       if (current.headHash !== packagePayload.ledger.expectedHeadBefore

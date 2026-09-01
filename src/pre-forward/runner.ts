@@ -455,6 +455,7 @@ async function loadRetainedUniverseMaster(
 
 interface RetainedDecisionIndex {
   byRunKey: Map<string, VersionedDataArtifact<PreForwardDecisionPackage>>;
+  latestCommittedAsOfByPortfolio: Map<string, string>;
 }
 
 async function indexRetainedDecisions(
@@ -464,6 +465,7 @@ async function indexRetainedDecisions(
   boundLedgerPath: string,
 ): Promise<RetainedDecisionIndex> {
   const byRunKey = new Map<string, VersionedDataArtifact<PreForwardDecisionPackage>>();
+  const latestCommittedAsOfByPortfolio = new Map<string, string>();
   const ledger = await PreForwardLedger.openExisting(boundLedgerPath);
   try {
     for (const strategyIdentity of strategies) {
@@ -504,12 +506,33 @@ async function indexRetainedDecisions(
           throw new Error(`Retained ledger contains duplicate Decision Packages for run ${decisionArtifact.payload.runKey}.`);
         }
         byRunKey.set(decisionArtifact.payload.runKey, decisionArtifact);
+        const latestAsOf = latestCommittedAsOfByPortfolio.get(decisionArtifact.payload.portfolioId);
+        if (latestAsOf === undefined
+          || Date.parse(decisionArtifact.payload.asOf) > Date.parse(latestAsOf)) {
+          latestCommittedAsOfByPortfolio.set(
+            decisionArtifact.payload.portfolioId,
+            decisionArtifact.payload.asOf,
+          );
+        }
       }
     }
   } finally {
     ledger.close();
   }
-  return { byRunKey };
+  return { byRunKey, latestCommittedAsOfByPortfolio };
+}
+
+function assertCutoffAfterLatestCommittedRun(
+  portfolioId: string,
+  asOf: string,
+  latestCommittedAsOf: string | undefined,
+): void {
+  if (latestCommittedAsOf !== undefined && Date.parse(asOf) <= Date.parse(latestCommittedAsOf)) {
+    throw new Error(
+      `Pre-forward cutoff ${asOf} must be after latest committed run `
+        + `${latestCommittedAsOf} for ${portfolioId}.`,
+    );
+  }
 }
 
 async function replayOne(
@@ -597,6 +620,15 @@ export async function runPreForward(
     runtime.config.strategies,
     runtime.boundLedgerPath,
   );
+  for (const strategy of runtime.config.strategies) {
+    const runKey = buildPreForwardRunKey(strategy.portfolioId, canonicalAsOf);
+    if (retainedIndex.byRunKey.has(runKey)) continue;
+    assertCutoffAfterLatestCommittedRun(
+      strategy.portfolioId,
+      canonicalAsOf,
+      retainedIndex.latestCommittedAsOfByPortfolio.get(strategy.portfolioId),
+    );
+  }
   let ledger: PreForwardLedger | undefined;
   try {
     let createdAt: string | undefined;
@@ -628,6 +660,8 @@ export async function runPreForward(
         results.push(await replayOne(runtime, artifact, canonicalAsOf));
         continue;
       }
+      const latestCommittedRun = ledger.getLatestCommittedRun(strategy.portfolioId);
+      assertCutoffAfterLatestCommittedRun(strategy.portfolioId, canonicalAsOf, latestCommittedRun?.asOf);
       const opening = ledger.readPortfolioSnapshot(strategy.portfolioId, runtime.config.portfolio.initialCashJpy);
       createdAt ??= options.clock?.() ?? new Date().toISOString();
       input ??= await loadNewRuntimeInput(runtime.config, runtime.store, runtime.cwd, createdAt);
